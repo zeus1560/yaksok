@@ -57,7 +57,8 @@
 | 403 | FORBIDDEN | 세션은 유효하나 해당 약속의 참여자가 아니거나 방장 권한 부족 |
 | 403 | INVALID_ORIGIN | 상태 변경 요청에 `Origin` 헤더가 없거나 서비스 도메인(`NEXT_PUBLIC_BASE_URL`의 origin)과 다름 (7절 CSRF) |
 | 404 | LINK_NOT_FOUND / PROMISE_NOT_FOUND | 존재하지 않는 토큰·약속 |
-| 409 | PROMISE_STATE | 취소된 약속에 대한 요청 |
+| 409 | PROMISE_CANCELLED | 취소된 약속에 대한 요청 (STATE API 명세 기준으로 통일, 2026-11-04) |
+| 409 | INVALID_PROMISE_STATE | 이 API에서 허용하지 않는 약속 상태 |
 | 422 | VALIDATION_FAILED | 형식은 맞지만 값이 규칙 위반 (닉네임 길이, PIN 형식 등) |
 | 500 | INTERNAL_ERROR | 서버 오류. 비밀값은 로그·응답에 남기지 않는다 |
 
@@ -115,7 +116,11 @@ MEMBER-API-01 응답에 본인 정보를 담지 않는 이유가 이것이다.
 | 탈퇴·내보내기 | 해당 참여자의 모든 세션 expires_at을 현재 시각으로 변경해 즉시 만료한다(행은 삭제하지 않음). 이후 그 쿠키는 401 | MEMBER-10-03 |
 | draft 탈퇴, 10분 만료 | 세션 행 물리 삭제(약속과 함꼐 삭제됨) | ERD 10절 |
 
-**만료 후 재로그인:** 마감 후 7일이 지나면 세션이 만료되고, **PIN 재인증도 거절한다**(MEMBER-API-04에서 410). 7일은 "로그인 유지 기간"이 아니라 "본인 입력에 접근할 수 있는 기간"으로 해석한다. 이 해석은 **[제안]** 이며 MEMBER-06-03 본문에 명시돼 있지 않다 — 확정 필요.
+| 재인증(MEMBER-API-04)으로 발급 | draft면 발급 시각 + 24시간. 그 외에는 `linkExpiryBase + 7일`(MEMBER-API-01 링크 만료와 같은 기준 시각). 쿠키 Max-Age는 `expires_at`까지 남은 초(내림) | **확정 (2026-11-04)** |
+
+**만료 후 재로그인:** 로그인 가능 기간 = 링크 유효 기간(`linkExpiryBase + 7일`)이다. 이 기간이 지나면 **PIN 재인증도 거절한다**(MEMBER-API-04에서 410 `ACCESS_PERIOD_EXPIRED`). 7일은 "로그인 유지 기간"이 아니라 "본인 입력에 접근할 수 있는 기간"으로 해석한다. **확정 (2026-11-04, DECISION_CONFLICTS R-11).** 확정된 약속은 `confirmed_start_at` 기준이라 마감 + 7일이 지나도 로그인할 수 있다.
+
+**미결 (DECISION_CONFLICTS R-11):** 확정 시 기존 세션을 `confirmed_start_at + 7일`로 갱신하는 규칙(STATE 확정 API 담당)과, 조기 마감 시 세션 기준(실제 마감 처리 시각)과 링크 기준(`voting_deadline_at`)의 차이가 남아 있다.
 
 ## 6. 중복 요청·응답 유실
 

@@ -438,9 +438,9 @@ Response Body
 - 도메인: MEMBER
 - 관련 규칙: MEMBER-04-01, MEMBER-04-02, MEMBER-06-01, MEMBER-06-03, MEMBER-06-04(미정), MEMBER-06-02(미정)
 - 권한: 누구나 (닉네임·PIN을 아는 사람)
-- 허용 상태: draft / collecting / closed / confirmed — 조회는 마감 후에도 가능해야 하므로 로그인 자체는 막지 않는다 (STATE-06-02: 조회 가능, 수정 불가). cancelled는 409
+- 허용 상태: draft(생성 후 10분 이내) / collecting / closed / confirmed — 조회는 마감 후에도 가능해야 하므로 로그인 자체는 막지 않는다 (STATE-06-02: 조회 가능, 수정 불가). cancelled는 409 `PROMISE_CANCELLED`, 10분 지난 draft는 404
 - 상태 전환: 없음
-- 동시성: 약속 잠금 불필요 (읽기 + 세션 생성만)
+- 동시성: 약속 잠금 불필요 (읽기 + 세션 생성만). 판정 시각은 DB `clock_timestamp()`
 - TBD: **MEMBER-06-04 (PIN 반복 실패 제한 정책)**, **MEMBER-06-02 (PIN 분실 복구)** — 둘 다 본문 미작성이라 아래 제한값은 제안안
 
 ### 1. 기본 정보
@@ -480,7 +480,7 @@ Response Body
 | role | string | host \| member |
 | status | string | active \| cancelled |
 | promiseStatus | string | 로그인 직후 클라이언트가 화면을 고를 수 있도록 함께 반환 |
-| sessionExpiresAt | string (ISO 8601) | 세션 만료 시각. 마감 + 7일 (MEMBER-06-03) |
+| sessionExpiresAt | string (ISO 8601) | 세션 만료 시각. draft면 발급 시각 + 24시간, 그 외에는 링크 만료 기준 시각 + 7일 (MEMBER-06-03, MEMBER-API-00 5.2) |
 
 응답 헤더: `Set-Cookie: ys_session_{promiseId}=...`
 
@@ -501,34 +501,54 @@ Response Body
 
 | HTTP 상태 | code | 발생 원인 | message 예시 |
 | --- | --- | --- | --- |
+| 400 | INVALID_REQUEST | JSON 파싱 실패, 필드 누락·문자열 아님 | 요청 형식이 올바르지 않습니다. |
 | 401 | INVALID_CREDENTIALS | 닉네임 없음 또는 PIN 불일치 (구분 없음) | 닉네임 또는 PIN이 올바르지 않습니다. |
-| 403 | PARTICIPANT_CANCELLED | 탈퇴했거나 내보내진 참여자 | 참여가 종료된 계정입니다. |
-| 404 | PROMISE_NOT_FOUND | 존재하지 않는 promiseId | 약속을 찾을 수 없습니다. |
-| 409 | INVALID_PROMISE_STATE | cancelled 약속 (STATE-10-01) | 취소된 약속입니다. |
+| 403 | INVALID_ORIGIN | `Origin` 헤더 없음 또는 서비스 도메인과 다름 (MEMBER-API-00 7절) | 허용되지 않은 요청 출처입니다. |
+| 403 | PARTICIPANT_CANCELLED | 탈퇴했거나 내보내진 참여자 (PIN 인증 성공 후 판정) | 참여가 종료된 계정입니다. |
+| 404 | PROMISE_NOT_FOUND | promiseId가 UUID 형식이 아님, 존재하지 않는 약속, 생성 후 10분 지난 draft | 약속을 찾을 수 없습니다. |
+| 409 | PROMISE_CANCELLED | cancelled 약속 (STATE-10-01) | 취소된 약속입니다. |
+| 410 | ACCESS_PERIOD_EXPIRED | 링크 만료 기준 시각 + 7일 ≤ 판정 시각 (draft 제외) | 접근 기간이 지난 약속입니다. |
+| 422 | VALIDATION_FAILED | 닉네임(등록과 같은 규칙: trim → NFC, 2~12자, 이모지 불가)·PIN(숫자 4자리) 형식 위반 | 닉네임은 2자 이상 12자 이하여야 합니다. |
+
+429는 반환하지 않는다 (아래 보안 정보, 2026-10-12 결정).
 
 ### 처리 순서 / 비고
 
 #### 처리 순서
 
-1. 입력 검증.
-2. `participants`에서 `(promise_id, normalized_nickname)`로 조회.
-3. 행이 없거나 PIN 해시 불일치면 **둘 다 동일하게 401 INVALID_CREDENTIALS**. 어느 쪽이 틀렸는지 구분해 알려주지 않는다 (ERD 9).
-4. 비교 실패·성공 모두 응답 시간을 비슷하게 유지한다(더미 해시 비교).
-5. `status = cancelled`이면 403 `PARTICIPANT_CANCELLED`.
-6. 새 세션 행을 생성하고 쿠키를 발급한다. 기존 기기의 세션은 그대로 둔다 (MEMBER-04-02).
+1. `Origin` 검증 → 실패 시 403 `INVALID_ORIGIN`.
+2. 본문 파싱·필드 확인 → 400. 닉네임은 `normalizeNickname`(trim → NFC)을 거쳐 등록과 같은 규칙으로 검증하고, PIN 형식과 함께 위반 시 422.
+3. promiseId가 UUID 형식이 아니거나 약속이 없으면 404 `PROMISE_NOT_FOUND`.
+4. **약속 상태 판정 (PIN 검증보다 먼저, 약속 잠금 없음, 판정 시각은 DB `clock_timestamp()`).**
+   - cancelled → 409 `PROMISE_CANCELLED`
+   - draft이고 `created_at + 10분 ≤ 판정 시각` → 404 `PROMISE_NOT_FOUND`. 삭제는 하지 않는다 (삭제는 MEMBER-API-02 몫)
+   - draft가 아니면 `linkExpiryBase + 7일 ≤ 판정 시각` → 410 `ACCESS_PERIOD_EXPIRED` (아래 "로그인 가능 기간")
+5. `participants`에서 `(promise_id, normalized_nickname)`로 조회.
+6. 행이 없거나 PIN 해시 불일치면 **둘 다 동일하게 401 INVALID_CREDENTIALS**. 어느 쪽이 틀렸는지 구분해 알려주지 않는다 (ERD 9). 행이 없을 때도 같은 scrypt 매개변수의 더미 해시와 비교해 응답 시간을 비슷하게 유지한다. 실패 반환 지점은 한 곳이다.
+7. `status = cancelled`이면 403 `PARTICIPANT_CANCELLED`.
+8. 새 세션 행을 생성하고 쿠키를 발급한다. 기존 기기의 세션은 그대로 둔다 (MEMBER-04-02). 판정 직후 약속이 삭제되어 세션 저장이 외래 키 오류(P2003)로 실패하면 404 `PROMISE_NOT_FOUND`.
 
-#### 마감 + 7일이 지난 뒤의 로그인
+#### 세션 만료
 
-closed·confirmed에서도 로그인을 허용하지만, 세션 만료는 `voting_deadline_at + 7일`로 발급된다(MEMBER-06-03). **그 시각이 이미 지났다면 로그인 성공 즉시 만료된 세션을 발급하게 된다.** 그래서 판정 시각이 `voting_deadline_at + 7일` 이후면 인증 자체를 **410 `ACCESS_PERIOD_EXPIRED`** 로 거절한다.
+| 약속 상태 | `expires_at` | 쿠키 Max-Age |
+| --- | --- | --- |
+| draft (10분 이내) | 발급 시각(판정 시각) + 24시간 | 86400 |
+| collecting·closed·confirmed | `linkExpiryBase + 7일` | `expires_at`까지 남은 초(내림) |
 
-이는 7일을 "로그인 유지 기간"이 아니라 "본인 입력에 접근할 수 있는 기간"으로 해석한 결과다. **[제안 — MEMBER-06-03 본문에 명시 없음, 확정 필요]** 조기 마감일 때의 기준 시각과 마감 연장·단축 시 갱신 규칙은 MEMBER-API-00 5.2를 따른다.
+쿠키 속성은 MEMBER-API-02와 같은 모듈(`sessionCookie`)로 만든다.
+
+#### 로그인 가능 기간 = 링크 유효 기간
+
+closed·confirmed에서도 로그인을 허용하지만, 세션 만료가 이미 지난 시각으로 발급되면 로그인 성공 즉시 만료된 세션이 된다. 그래서 **로그인 가능 기간을 링크 유효 기간과 같게 둔다**: 판정 시각이 `linkExpiryBase + 7일` 이후면 인증 자체를 **410 `ACCESS_PERIOD_EXPIRED`** 로 거절한다. 기준 시각은 MEMBER-API-01과 같은 함수(`linkExpiryBase`)로 고른다 — confirmed는 `confirmed_start_at`, 그 외는 `voting_deadline_at`(재조율 중이면 새 마감). 따라서 확정된 약속은 마감 + 7일이 지나도 `confirmed_start_at + 7일` 전이면 로그인할 수 있다.
+
+이는 7일을 "로그인 유지 기간"이 아니라 "본인 입력에 접근할 수 있는 기간"으로 해석한 결과다. **확정 (2026-11-04, DECISION_CONFLICTS R-11).** 확정 시 기존 세션 갱신과 조기 마감 기준 차이는 미결로 남아 있다 (R-11).
 
 #### 보안 정보
 
 - **4자리 PIN은 1만 가지뿐이다.** 해시는 원문 저장을 피하는 수단이지 짧은 PIN을 강하게 만드는 수단이 아니다. **시도 제한이 없으면 사실상 무방비 상태**다 (ERD 9).
 - **2026-10-12 결정: MVP에서는 시도 제한을 구현하지 않는다.** 따라서 이 API는 429를 반환하지 않는다.
 - **남아 있는 위험:** 제한이 없으면 공격자가 한 닉네임에 대해 0000~9999를 순차 시도해 **평균 5천회 안에 로그인할 수 있다.** 성공하면 타인의 가능 시간을 수정하거나, 그 사람이 방장이면 약속 확정·취소까지 가능하다. 링크가 단추방에 공개된다는 점을 감안하면 실제 공격 난이도는 낮다.
-- **배포 전 재검토 항목으로 남긴다.** 나중에 넣는다면 서버 코드 변경 없이 미들웨어만 추가하면 되도록, 이 엔드포인트의 실패 응답 경로를 한 곳으로 모아둔다. 제한을 도입할 때의 제안값은 참여자 5회/15분, IP 1분 10회이다 (MEMBER-06-04 미정).
+- **공개 배포 전 필수 재검토 항목으로 남긴다** (DECISION_CONFLICTS R-11). 나중에 넣는다면 서버 코드 변경 없이 미들웨어만 추가하면 되도록, 이 엔드포인트의 실패 응답 경로를 한 곳으로 모아둔다. 제한을 도입할 때의 제안값은 참여자 5회/15분, IP 1분 10회이다 (MEMBER-06-04 미정).
 - 실패 메시지는 항상 동일하게 유지해 닉네임 존재 여부가 드러나지 않게 한다.
 - PIN·세션 토큰은 로그에 남기지 않는다.
 - **PIN 분실 복구 수단은 없다(MEMBER-06-02 미정).** 닉네임만으로 초기화해주거나 방장 권한을 넘겨주는 우회로를 만들어서는 안 된다 (ERD 9).
