@@ -189,7 +189,7 @@ WHERE role = 'host';
 - status·role 값은 CHECK 또는 ENUM으로 허용 목록에 제한한다.
 - `role='host'`인 참여자는 반드시 `status='active'`여야 한다.
 - 설정된 `participant_limit`은 방장을 포함해 2 이상 30 이하이다.
-- `date_range_start ≤ date_range_end`이며 양끝을 포함한 범위는 최대 90일이다.
+- `date_range_start ≤ date_range_end`이며 `date_range_end`는 한국 시간 오늘부터 3개월 이내(달력의 월 단위로 계산)이다. 오늘 기준 조건이므로 CHECK가 아니라 서버에서 검증한다.
 - `daily_start_minute`은 0 이상 1410 이하, `daily_end_minute`은 30 이상 1440 이하이다.
 - 두 분 값은 30의 배수이며 `daily_start_minute < daily_end_minute`여야 한다.
 - `daily_end_minute=1440`은 해당 날짜의 24:00 종료 경계이며 다음 날까지 이어지는 선택 범위를 뜻하지 않는다.
@@ -484,7 +484,6 @@ MVP에서는 취소·탈퇴 데이터를 자동 삭제하지 않는다. `cancell
 
 | 항목 | 이 문서(ERD) | 비즈니스 규칙 | 조치 |
 | --- | --- | --- | --- |
-| 날짜 범위 최대 | 4.2절 "최대 90일" | STATE-03-01 "오늘부터 3개월" | 팀 확정 필요. 비즈니스 규칙 우선 원칙상 3개월 |
 | 정원 최소·최대 | 3.2/4.2절 "2 이상 30 이하" | MEMBER-07-01 ❗미결 | ERD가 선반영. 규칙 확정 필요 |
 | 기록 보관 기간 | 10절 "MVP에서는 자동 삭제하지 않음" | STATE-11-02 ❗미결 | 규칙 확정 필요 |
 | 지난 슬롯 처리 | 5.2절 | TIME API 문서에 "ERD 5.2절 첫 문장 수정 필요"로 기록됨 | ERD 수정 대상 |

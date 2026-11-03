@@ -115,7 +115,7 @@ Response Body (아직 아무도 등록하지 않음)
 | HTTP 상태 | code | 발생 원인 | message 예시 |
 | --- | --- | --- | --- |
 | 404 | LINK_NOT_FOUND | 존재하지 않는 초대 토큰 | 유효하지 않은 링크입니다. |
-| 410 | LINK_EXPIRED | 링크 발급 후 3개월 경과 (MEMBER-01-02) | 만료된 링크입니다. |
+| 410 | LINK_EXPIRED | 기준 시각 + 7일 경과 (MEMBER-01-02) | 만료된 링크입니다. |
 
 챗봇을 채팅방에서 제거해도 이 API는 계속 동작한다 (MEMBER-01-03). 챗봇 재추가는 **새 링크**를 발급하며 기존 링크도 그대로 유효하다 (MEMBER-01-04).
 
@@ -141,14 +141,15 @@ Response Body (아직 아무도 등록하지 않음)
 #### 처리 순서
 
 1. `inviteToken`으로 `promise_links` 조회. 없으면 404.
-2. `created_at + 3개월 < 판정 시각`이면 410 (MEMBER-01-02).
-3. 연결된 `promises` 행 조회. 없으면 unclaimed + register_host 반환.
-4. 상태가 draft이고 `created_at + 10분 ≤ 판정 시각`이면 **초안 만료 처리**로 진입한다.
+2. 연결된 `promises` 행 조회.
+3. 만료 판정: 기준 시각 + 7일 ≤ 판정 시각이면 410 (MEMBER-01-02). 기준 시각은 confirmed면 `confirmed_start_at`, 그 외 약속은 `voting_deadline_at`(재조율 시 새 마감 시각), 약속이 없거나 `voting_deadline_at`이 없는 draft면 링크 `created_at`.
+4. 약속이 없으면 unclaimed + register_host 반환.
+5. 상태가 draft이고 `created_at + 10분 ≤ 판정 시각`이면 **초안 만료 처리**로 진입한다.
    - 링크 행 → 약속 행 순서로 `FOR UPDATE` 잠금 (MEMBER-API-00 4.1).
    - **잠금 후 status와 created_at을 다시 읽는다.** 이 사이에 방장이 설정을 완료했다면 `status = 'collecting'`이므로 **삭제하지 않고** 그대로 collecting을 반환한다 (STATE-02-02).
    - 여전히 draft이고 10분이 지났으면 약속·방장 참여 기록을 삭제하고 unclaimed + register_host로 응답한다.
-5. 그 외에는 상태에 맞는 `nextAction`만 반환한다.
-6. 정원이 찼어도 `nextAction`은 join으로 둔다. 정원 정보를 공개하지 않으므로 거절은 MEMBER-API-03이 시도 시점에 판정한다.
+6. 그 외에는 상태에 맞는 `nextAction`만 반환한다.
+7. 정원이 찼어도 `nextAction`은 join으로 둔다. 정원 정보를 공개하지 않으므로 거절은 MEMBER-API-03이 시도 시점에 판정한다.
 
 #### 보안 정보
 
@@ -257,7 +258,7 @@ Response Body
 | --- | --- | --- | --- |
 | 404 | LINK_NOT_FOUND | 존재하지 않는 토큰 | 유효하지 않은 링크입니다. |
 | 409 | HOST_ALREADY_REGISTERED | 이미 다른 사람이 선점 (MEMBER-02-01) | 이미 다른 분이 약속을 만들었습니다. 본인이 등록했다면 로그인해 주세요. |
-| 410 | LINK_EXPIRED | 링크 3개월 경과 | 만료된 링크입니다. |
+| 410 | LINK_EXPIRED | 기준 시각 + 7일 경과 (MEMBER-01-02) | 만료된 링크입니다. |
 | 422 | VALIDATION_FAILED | 닉네임 길이 위반, PIN 형식 위반 | 닉네임은 2자 이상 12자 이하여야 합니다. |
 
 409를 받은 클라이언트는 **본인이 앞서 성공했는지 먼저 확인**해야 한다. 응답이 유실된 뒤 재시도한 경우에도 똑같은 409가 나기 때문이다 (MEMBER-API-00 6장).
@@ -273,7 +274,7 @@ Response Body
 #### 처리 순서 (단일 트랜잭션)
 
 1. 입력 검증. 실패 시 422.
-2. `SELECT ... FROM promise_links WHERE invite_token = $1 FOR UPDATE`. 없으면 404, 3개월 경과면 410. 판정 시각은 잠금 후 `clock_timestamp()`로 읽는다. 연결된 약속이 있으면 **그 `promises` 행도 `FOR UPDATE`로 잠그고 status·created_at을 다시 읽는다** (MEMBER-API-00 4.1·4.2). 잠금 대기 중에 방장이 설정을 끝냈다면 재조회에서 status가 draft가 아니므로 만료 삭제하지 않는다 (STATE-02-02).
+2. `SELECT ... FROM promise_links WHERE invite_token = $1 FOR UPDATE`. 없으면 404. 판정 시각은 잠금 후 `clock_timestamp()`로 읽는다. 연결된 약속이 있으면 **그 `promises` 행도 `FOR UPDATE`로 잠그고 status·created_at을 다시 읽는다** (MEMBER-API-00 4.1·4.2). 잠금 후 읽은 값으로 MEMBER-01-02 기준 시각 + 7일이 지났으면 410 (기준 시각 선택은 MEMBER-API-01 처리 순서 3번과 같다). 잠금 대기 중에 방장이 설정을 끝냈다면 재조회에서 status가 draft가 아니므로 만료 삭제하지 않는다 (STATE-02-02).
 3. 연결된 `promises` 행 확인.
    - 있고 draft이며 10분 경과 → 세션 → 방장 참여자 → promise 순서로 삭제 후 계속 진행
    - 있고 그 외 → **409 HOST_ALREADY_REGISTERED**
