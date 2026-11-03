@@ -106,6 +106,7 @@
 | A-05 | `SLOT_LIMIT_EXCEEDED`(422)가 미결 목록에선 미체크 제안인데 TIME-API-01 처리 순서·코드 예제에는 확정 로직으로 들어가 있음 |
 | A-06 | TIME-API-02의 `serverTime` 필드가 응답 표에는 `[제안]`인데 예시 JSON·코드 예제에는 필수처럼 포함됨 |
 | A-07 | TIME API 미결 중 담당 지정된 것: `effectiveStatus` 공통 규칙(연성), STATE 범위 변경 API 버전 +1(혜승), STATE-10-01 문구 수정(혜승), MEMBER 탈퇴·내보내기 API(연성) |
+| A-09 | **Origin 검증 실패 응답 코드가 API별로 비어 있다.** 2026-11-03 결정: 공통 에러 코드 403 `INVALID_ORIGIN`을 신설하고 MEMBER-API-09에 먼저 반영했다. `Origin`을 필수로 두는 MEMBER-API-02·03·04·07(및 STATE API의 허용 Origin 검증)도 **같은 코드로 맞출 것** — 각 API 구현 시 에러 표에 추가한다. 미리보기 배포(Preview) 도메인 허용 방식은 미정 |
 
 ---
 

@@ -55,6 +55,7 @@
 | 400 | INVALID_REQUEST | JSON 파싱 실패, 필수 필드 누락 |
 | 401 | UNAUTHENTICATED | 세션 쿠키 없음·만료됨. 탈퇴·내보내기로 세션이 즉시 만료된 경우, 또는 참여자가 cancelled인 경우도 포함 |
 | 403 | FORBIDDEN | 세션은 유효하나 해당 약속의 참여자가 아니거나 방장 권한 부족 |
+| 403 | INVALID_ORIGIN | 상태 변경 요청에 `Origin` 헤더가 없거나 서비스 도메인(`NEXT_PUBLIC_BASE_URL`의 origin)과 다름 (7절 CSRF) |
 | 404 | LINK_NOT_FOUND / PROMISE_NOT_FOUND | 존재하지 않는 토큰·약속 |
 | 409 | PROMISE_STATE | 취소된 약속에 대한 요청 |
 | 422 | VALIDATION_FAILED | 형식은 맞지만 값이 규칙 위반 (닉네임 길이, PIN 형식 등) |
@@ -132,6 +133,6 @@ MVP에서는 `Idempotency-Key` 대신 **재인증으로 복구**한다.
 
 - **PIN:** 숫자 4자리(MEMBER-06-01) = 조합 1만 가지. 해시 저장은 원문 노출만 막을 뿐이므로 시도 제한이 반드시 필요 → **MEMBER-06-04 미정**.
 - **실패 메시지 통일:** 닉네임 없음과 PIN 불일치를 구분하지 않고 동일한 `INVALID_CREDENTIALS`로 응답한다.
-- **CSRF:** `SameSite=Lax` + 상태 변경 요청에 `Origin` 헤더 검증.
+- **CSRF:** `SameSite=Lax` + 상태 변경 요청에 `Origin` 헤더 검증. 실패하면 403 `INVALID_ORIGIN`.
 - 전 구간 HTTPS. PIN·세션 토큰은 어떤 로그에도 기록하지 않는다.
 - PIN 분실 시 복구 수단을 제공하지 않는다. 분실한 참여자는 새 닉네임으로 재참여해야 하며 기존 입력은 이어받지 못한다.
