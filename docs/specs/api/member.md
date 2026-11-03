@@ -24,8 +24,8 @@
 - 관련 US: 링크로 약속에 진입한다
 - 권한: **누구나** (링크만 가진 비참여자 포함, 인증 불필요)
 - 허용 상태: 링크만 존재 / draft / collecting / closed / confirmed / cancelled — 전부
-- 상태 전환: 없음. 단 **초안 만료(STATE-02-02) 검사를 이 요청에서 수행**한다
-- 동시성: 만료 검사·삭제가 필요한 경우에만 링크 행 → 약속 행 순서로 잠근다 (MEMBER-API-00 4.1)
+- 상태 전환: 없음. **초안 만료(STATE-02-02)는 계산만 하고 DB를 변경하지 않는다**
+- 동시성: 잠금 없음 (읽기 전용). 만료 draft의 실제 삭제는 MEMBER-API-02가 잠금 후 수행한다 (MEMBER-API-00 4.1)
 
 ### 1. 기본 정보
 
@@ -71,6 +71,7 @@
 | promiseId | string 또는 null | 약속 UUID. unclaimed이면 null. **이 값으로 `/me`를 호출해 본인 여부를 판정한다** |
 | nextAction | string | 아래 「화면 분기」 표 참조 |
 | pollAfterMs | number 또는 null | draft일 때 재조회 권장 간격(ms). 그 외 null (MEMBER-03-02) |
+| draftExpired | boolean | GET 기준 draft 만료 여부. true이면 10분이 지난 draft를 unclaimed로 계산한 응답이다. GET은 DB를 변경하지 않음 (STATE-02-02) |
 
 **의도적으로 응답에 넣지 않는 값:** 약속 설정 일체(날짜·시간 범위, 소요 시간, 마감, 정원), 현재 참여 인원, 확정 시각, 참여자 명단, 본인 정보.
 
@@ -82,7 +83,8 @@ Response Body (draft — 설정 중)
   "promiseStatus": "draft",
   "promiseId": "7c1b2f40-8f6a-4c21-9d55-0d3b1a7e9c42",
   "nextAction": "wait_setup",
-  "pollAfterMs": 3000
+  "pollAfterMs": 3000,
+  "draftExpired": false
 }
 ```
 
@@ -94,7 +96,8 @@ Response Body (collecting)
   "promiseStatus": "collecting",
   "promiseId": "7c1b2f40-8f6a-4c21-9d55-0d3b1a7e9c42",
   "nextAction": "join",
-  "pollAfterMs": null
+  "pollAfterMs": null,
+  "draftExpired": false
 }
 ```
 
@@ -106,7 +109,21 @@ Response Body (아직 아무도 등록하지 않음)
   "promiseStatus": "unclaimed",
   "promiseId": null,
   "nextAction": "register_host",
-  "pollAfterMs": null
+  "pollAfterMs": null,
+  "draftExpired": false
+}
+```
+
+Response Body (10분이 지난 draft — DB에는 draft가 남아 있지만 unclaimed로 계산)
+
+```json
+{
+  "inviteToken": "k3Zq8vTb1mRa",
+  "promiseStatus": "unclaimed",
+  "promiseId": null,
+  "nextAction": "register_host",
+  "pollAfterMs": null,
+  "draftExpired": true
 }
 ```
 
@@ -115,7 +132,7 @@ Response Body (아직 아무도 등록하지 않음)
 | HTTP 상태 | code | 발생 원인 | message 예시 |
 | --- | --- | --- | --- |
 | 404 | LINK_NOT_FOUND | 존재하지 않는 초대 토큰 | 유효하지 않은 링크입니다. |
-| 410 | LINK_EXPIRED | 링크 발급 후 3개월 경과 (MEMBER-01-02) | 만료된 링크입니다. |
+| 410 | LINK_EXPIRED | 기준 시각 + 7일 경과 (MEMBER-01-02) | 만료된 링크입니다. |
 
 챗봇을 채팅방에서 제거해도 이 API는 계속 동작한다 (MEMBER-01-03). 챗봇 재추가는 **새 링크**를 발급하며 기존 링크도 그대로 유효하다 (MEMBER-01-04).
 
@@ -141,14 +158,14 @@ Response Body (아직 아무도 등록하지 않음)
 #### 처리 순서
 
 1. `inviteToken`으로 `promise_links` 조회. 없으면 404.
-2. `created_at + 3개월 < 판정 시각`이면 410 (MEMBER-01-02).
-3. 연결된 `promises` 행 조회. 없으면 unclaimed + register_host 반환.
-4. 상태가 draft이고 `created_at + 10분 ≤ 판정 시각`이면 **초안 만료 처리**로 진입한다.
-   - 링크 행 → 약속 행 순서로 `FOR UPDATE` 잠금 (MEMBER-API-00 4.1).
-   - **잠금 후 status와 created_at을 다시 읽는다.** 이 사이에 방장이 설정을 완료했다면 `status = 'collecting'`이므로 **삭제하지 않고** 그대로 collecting을 반환한다 (STATE-02-02).
-   - 여전히 draft이고 10분이 지났으면 약속·방장 참여 기록을 삭제하고 unclaimed + register_host로 응답한다.
-5. 그 외에는 상태에 맞는 `nextAction`만 반환한다.
-6. 정원이 찼어도 `nextAction`은 join으로 둔다. 정원 정보를 공개하지 않으므로 거절은 MEMBER-API-03이 시도 시점에 판정한다.
+2. 연결된 `promises` 행 조회.
+3. 만료 판정: 기준 시각 + 7일 ≤ 판정 시각이면 410 (MEMBER-01-02). 기준 시각은 confirmed면 `confirmed_start_at`, 그 외 약속은 `voting_deadline_at`(재조율 시 새 마감 시각), 약속이 없거나 `voting_deadline_at`이 없는 draft면 링크 `created_at`.
+4. 약속이 없으면 unclaimed + register_host 반환.
+5. 상태가 draft이고 `created_at + 10분 ≤ 판정 시각`이면 **만료로 계산만 한다.** 잠금·삭제 없이 `promiseStatus=unclaimed`, `promiseId=null`, `nextAction=register_host`, `draftExpired=true`로 응답한다 (STATE-02-02).
+   - DB의 draft·방장 참여 기록은 그대로 남는다. 실제 삭제는 새 방장 등록(MEMBER-API-02)이 링크 → 약속 순서로 잠근 뒤 수행한다.
+   - 그 사이에 방장이 설정을 완료했다면 다음 조회부터 collecting으로 보인다. 설정 완료와 만료 삭제의 경쟁은 MEMBER-API-02의 잠금 후 재조회가 판정한다.
+6. 그 외에는 상태에 맞는 `nextAction`만 반환한다.
+7. 정원이 찼어도 `nextAction`은 join으로 둔다. 정원 정보를 공개하지 않으므로 거절은 MEMBER-API-03이 시도 시점에 판정한다.
 
 #### 보안 정보
 
@@ -257,7 +274,7 @@ Response Body
 | --- | --- | --- | --- |
 | 404 | LINK_NOT_FOUND | 존재하지 않는 토큰 | 유효하지 않은 링크입니다. |
 | 409 | HOST_ALREADY_REGISTERED | 이미 다른 사람이 선점 (MEMBER-02-01) | 이미 다른 분이 약속을 만들었습니다. 본인이 등록했다면 로그인해 주세요. |
-| 410 | LINK_EXPIRED | 링크 3개월 경과 | 만료된 링크입니다. |
+| 410 | LINK_EXPIRED | 기준 시각 + 7일 경과 (MEMBER-01-02) | 만료된 링크입니다. |
 | 422 | VALIDATION_FAILED | 닉네임 길이 위반, PIN 형식 위반 | 닉네임은 2자 이상 12자 이하여야 합니다. |
 
 409를 받은 클라이언트는 **본인이 앞서 성공했는지 먼저 확인**해야 한다. 응답이 유실된 뒤 재시도한 경우에도 똑같은 409가 나기 때문이다 (MEMBER-API-00 6장).
@@ -273,7 +290,7 @@ Response Body
 #### 처리 순서 (단일 트랜잭션)
 
 1. 입력 검증. 실패 시 422.
-2. `SELECT ... FROM promise_links WHERE invite_token = $1 FOR UPDATE`. 없으면 404, 3개월 경과면 410. 판정 시각은 잠금 후 `clock_timestamp()`로 읽는다. 연결된 약속이 있으면 **그 `promises` 행도 `FOR UPDATE`로 잠그고 status·created_at을 다시 읽는다** (MEMBER-API-00 4.1·4.2). 잠금 대기 중에 방장이 설정을 끝냈다면 재조회에서 status가 draft가 아니므로 만료 삭제하지 않는다 (STATE-02-02).
+2. `SELECT ... FROM promise_links WHERE invite_token = $1 FOR UPDATE`. 없으면 404. 판정 시각은 잠금 후 `clock_timestamp()`로 읽는다. 연결된 약속이 있으면 **그 `promises` 행도 `FOR UPDATE`로 잠그고 status·created_at을 다시 읽는다** (MEMBER-API-00 4.1·4.2). 잠금 후 읽은 값으로 MEMBER-01-02 기준 시각 + 7일이 지났으면 410 (기준 시각 선택은 MEMBER-API-01 처리 순서 3번과 같다). 잠금 대기 중에 방장이 설정을 끝냈다면 재조회에서 status가 draft가 아니므로 만료 삭제하지 않는다 (STATE-02-02).
 3. 연결된 `promises` 행 확인.
    - 있고 draft이며 10분 경과 → 세션 → 방장 참여자 → promise 순서로 삭제 후 계속 진행
    - 있고 그 외 → **409 HOST_ALREADY_REGISTERED**
@@ -879,3 +896,92 @@ Response Body (`200 OK`)
 - 내보낸 사람은 닉네임 UNIQUE가 살아 있어 같은 닉네임으로 재참여할 수 없다 (MEMBER-API-03 6번과 동일 메커니즘). 다른 닉네임 재가입은 비회원 구조상 막지 못한다
 - 응답에 다른 참여자의 PIN 해시·세션·슬롯을 포함하지 않는다
 - `Cache-Control: no-store`
+
+---
+
+## MEMBER-API-09 — 초대 링크 발급 (웹)
+
+`POST /api/v1/links`
+
+웹 「새 약속 만들기」에서 초대 링크만 발급한다. 약속과 참여자는 만들지 않는다.
+
+### 0. 규칙 연결
+
+- 도메인: MEMBER
+- 관련 규칙: MEMBER-01-01, MEMBER-02-01, STATE-02-01
+- 관련 US: US-CREAT-04 약속 생성 및 초대 링크 발급
+- 권한: **누구나** (인증 불필요)
+- 허용 상태: 해당 없음 (약속이 생기기 전 단계)
+- 상태 전환: 없음. 링크만 생성되고 약속은 MEMBER-API-02 성공 시 생성된다 (STATE-02-01)
+- 동시성: 잠금 없음. `invite_token` UNIQUE 제약으로 중복을 막는다
+
+### 1. 기본 정보
+
+- **목적:** 웹에서 새 약속 링크를 발급하고 발급자를 방장 등록 화면으로 보낸다.
+- **HTTP Method:** POST
+- **Endpoint:** `/api/v1/links`
+- **Authentication Required:** 아니요
+- **Content Type:** `application/json` (응답)
+
+**링크만 발급한다.** 발급자는 응답의 `inviteUrl`(`/p/{inviteToken}`)로 곧바로 이동한다. 이동한 화면에서 MEMBER-API-01이 `unclaimed` + `register_host`를 돌려주면 MEMBER-API-02로 방장 등록을 한다. 링크를 발급한 사람이라도 다른 사람이 먼저 등록을 완료하면 그 사람이 방장이다 (MEMBER-02-01).
+
+**챗봇 발급은 이 API를 호출하지 않는다.** 챗봇 스킬 서버 라우트가 같은 내부 발급 함수를 `source='kakao'`로 호출한다. 이 API는 항상 `source='web'`으로 저장한다.
+
+### 요청
+
+헤더
+
+| Name | Value | 필수 |
+| --- | --- | --- |
+| Origin | 서비스 도메인 | O |
+
+Request Body: 없음. 본문을 보내도 무시한다. `source` 등 어떤 필드도 반영하지 않는다.
+
+### 응답
+
+#### Status Code: 201 Created
+
+| 이름 | 타입 | 설명 |
+| --- | --- | --- |
+| inviteToken | string | 발급된 초대 토큰 |
+| inviteUrl | string | 서버가 `NEXT_PUBLIC_BASE_URL + "/p/" + inviteToken`으로 조립한 초대 주소 |
+| nextAction | string | 항상 `register_host` |
+
+`promiseId`는 넣지 않는다. 아직 약속이 없기 때문이다.
+
+Response Body
+
+```json
+{
+  "inviteToken": "k3Zq8vTb1mRa",
+  "inviteUrl": "http://localhost:3000/p/k3Zq8vTb1mRa",
+  "nextAction": "register_host"
+}
+```
+
+### 에러
+
+| HTTP 상태 | code | 발생 원인 | message 예시 |
+| --- | --- | --- | --- |
+| 500 | INTERNAL_ERROR | 토큰 중복으로 재시도까지 실패, 그 밖의 서버 오류 | 처리 중 오류가 발생했습니다. |
+
+### 처리 순서 / 비고
+
+#### 처리 순서
+
+1. 암호학적 난수로 `inviteToken`을 생성한다.
+2. `promise_links`에 `(invite_token, source='web')`을 삽입한다.
+3. `invite_token` UNIQUE 위반이면 새 토큰으로 1회 재시도한다. 다시 실패하면 500 `INTERNAL_ERROR`.
+4. 201로 응답한다.
+
+잠금은 사용하지 않는다.
+
+#### 내부 발급 함수
+
+- 웹 라우트(이 API)와 챗봇 스킬 서버 라우트가 같은 내부 발급 함수를 쓴다. 웹은 `source='web'`, 챗봇은 `source='kakao'`를 서버 코드에서 고정값으로 넘긴다.
+- `source`는 클라이언트 입력을 받지 않는다. 발급 출처 지표를 위조할 수 없게 하기 위해서다.
+
+#### 보안 정보
+
+- 토큰 기준은 MEMBER-API-01과 같다. 충분한 길이의 암호학적 난수를 사용한다.
+- IP 기준 레이트 리밋을 둔다. **[제안]** 인증 없는 쓰기 API이므로 공개 배포 전 도입 여부를 다시 판단한다.

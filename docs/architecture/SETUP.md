@@ -22,7 +22,7 @@
 #### 🪟 Windows
 
 ```powershell
-winget install OpenJS.NodeJS.LTS
+winget install OpenJS.NodeJS.LTS --version 24.22.2
 winget install Git.Git
 winget install Microsoft.VisualStudioCode
 ```
@@ -218,25 +218,27 @@ if (process.env.NODE_ENV !== "production") {
 
 ### 4-1. 브랜치와 PR
 
-`main`에 직접 push하지 않습니다. 기능 하나당 브랜치 하나를 만들고 PR로 합칩니다.
+`main`에서 직접 작업하거나 push하지 않습니다. 브랜치 이름은 `<이름>/<타입>-<설명>` 형식이고(예: `ahn/feat-약속생성-api`), **기능 하나당 브랜치 하나**를 만들어 PR로 합칩니다.
 
 ```bash
 git checkout main
 git pull
-git checkout -b feat/약속생성-api
+git checkout -b ahn/feat-약속생성-api
 # 작업...
 git add -A
 git commit -m "feat: 약속 생성 API 추가"
-git push -u origin feat/약속생성-api
+git push -u origin ahn/feat-약속생성-api
 ```
 
 push하면 터미널에 PR 생성 링크가 나옵니다. PR을 만들면 CI가 자동으로 돌아가고, **초록 체크를 확인한 뒤 `Squash and merge`** 합니다.
 
 | 브랜치 이름 | 용도 |
 | --- | --- |
-| `feat/약속생성-api` | 기능 추가 |
-| `fix/투표-중복-버그` | 버그 수정 |
-| `chore/` · `docs/` | 설정·의존성·문서 |
+| `<이름>/feat-약속생성-api` | 기능 추가 |
+| `<이름>/fix-투표-중복-버그` | 버그 수정 |
+| `<이름>/chore-...` · `<이름>/docs-...` | 설정·의존성·문서 |
+
+> ⚠️ 이름만으로 된 단독 브랜치(예: `ahn`)가 있으면 Git 규칙상 `ahn/...` 브랜치를 만들 수 없습니다. 단독 브랜치는 병합 후 지우고 시작하세요.
 
 > 🚧 **현재 브랜치 보호 규칙은 실제로 강제되지 않습니다.** GitHub 룰셋은 비공개 저장소에서 Pro 이상이 필요한데 지금은 무료 플랜입니다. 규칙은 만들어뒀지만 적용은 안 되는 상태이므로, **당분간은 서로 약속으로 지킵니다.** 자세한 내용과 해결 방안은 「아직 남은 일」에 있습니다.
 

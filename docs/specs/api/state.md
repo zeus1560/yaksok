@@ -106,7 +106,7 @@ participants.status의 active·cancelled는 약속 상태 enum과 다른 값이�
 - DB `status=collecting`이고 현재 시각이 `voting_deadline_at` 이상이면 `closed`
 - 그 외에는 DB status와 동일
 - GET 요청은 effectiveStatus만 계산하고 DB status를 변경하지 않음
-- 쓰기 요청 또는 마감 스케줄러가 실제 status를 closed로 변경함
+- 쓰기 요청이 실제 status를 closed로 변경함
 - GET 응답의 `promiseStatus`에는 effectiveStatus를 반환함
 
 ### **에러**
@@ -138,7 +138,7 @@ draft는 `promises.created_at+10분`에 만료된다. GET 요청은 만료 여�
 6. 쓰기 요청에서 `status=collecting`이고 잠금 후 `clock_timestamp() >= voting_deadline_at`이면 `promises.status=closed`로 변경한다.
 7. 상태 변경 후 해당 API의 허용 상태를 검사하고 요청을 계속 처리하거나 거절한다.
 8. 인증 자체가 실패한 요청은 약속의 DB 상태를 변경하지 않는다.
-9. 전원 제출은 자동 마감 조건이 아니다. 응답자가 0명 또는 1명이어도 마감 시각에 도달하면 GET에서는 `effectiveStatus=closed`, 쓰기 요청 또는 스케줄러에서는 실제 DB 상태를 `closed`로 처리한다.
+9. 전원 제출은 자동 마감 조건이 아니다. 응답자가 0명 또는 1명이어도 마감 시각에 도달하면 GET에서는 `effectiveStatus=closed`, 쓰기 요청에서는 실제 DB 상태를 `closed`로 처리한다.
 
 조회와 확정 사이에 시간이 지나거나 참여 데이터가 변경될 수 있으므로 확정 요청에서는 후보를 다시 계산·검증한다. 모든 슬롯·참여 변경 경로는 동일한 약속 잠금 규칙을 따라야 한다.
 
@@ -387,12 +387,12 @@ if (!response.ok) {
 | 이름 | 명세 |
 | --- | --- |
 | `participantLimit` | integer, 필수. 방장 포함 2~30명이며 현재 active 인원 이상 |
-| `dateRange.startDate`, `dateRange.endDate` | YYYY-MM-DD, 필수. 양끝 포함, 최대 90일이므로 `endDate ≤ startDate + 89일` |
+| `dateRange.startDate`, `dateRange.endDate` | YYYY-MM-DD, 필수. 양끝 포함. `endDate`는 한국 시간 오늘부터 3개월 이내(달력의 월 단위로 계산) |
 | `dailyTimeRange.startTime`, `dailyTimeRange.endTime` | HH:mm, 필수. 시작은 00:00~23:30, 종료는 00:30~24:00의 30분 경계이며 시작 분 값은 종료 분 값보다 작아야 함 |
 | `durationMinutes` | integer, 필수. 30 이상·30분 배수이며 하루 시간 범위 이하 |
 | `votingDeadlineAt` | 오프셋 포함 ISO 8601, 필수. 잠금 후 DB 시각보다 미래이고 마지막 후보 날짜 00:00(Asia/Seoul)보다 이전 |
 
-- `dateRangeLimitMonths`는 받지 않는다. 90일은 서버 공통 제한값이다.
+- `dateRangeLimitMonths`는 받지 않는다. 3개월은 서버 공통 제한값이다.
 
 ```json
 {
@@ -441,7 +441,7 @@ if (!response.ok) {
 #### **처리 순서**
 
 1. promiseId 형식과 약속 존재 여부를 확인한다. 약속이 cancelled이면 세션 인증보다 우선하여 `409 PROMISE_CANCELLED`를 반환한다. 그다음 세션 소속을 확인하고 promise_link와 promises 행을 정해진 순서로 잠근 뒤 취소 상태·최신 active host·draft 상태를 다시 확인한다. 잠금 후 현재 시각이 created_at+10분 이상이면 세션·방장 참여자·promise를 명시적으로 삭제하고 `410 DRAFT_EXPIRED`를 반환한다.
-2. 모든 필수 설정을 검증한다. participantLimit은 2~30명, 날짜 범위는 최대 90일이어야 한다. 일일 시작·종료 문자열은 분 값으로 변환하며 종료 24:00은 1440으로 저장한다. 하나라도 실패하면 아무 값도 저장하지 않는다.
+2. 모든 필수 설정을 검증한다. participantLimit은 2~30명, 날짜 범위의 종료일은 한국 시간 오늘부터 3개월 이내(달력의 월 단위로 계산)여야 한다. 일일 시작·종료 문자열은 분 값으로 변환하며 종료 24:00은 1440으로 저장한다. 하나라도 실패하면 아무 값도 저장하지 않는다.
 3. 설정과 `status=collecting`을 함께 저장한다.
 4. `status=active`인 참여자의 현재 유효한 세션만 `votingDeadlineAt + 7일`로 갱신한다. 이미 만료됐거나 cancelled 참여자에게 속한 세션은 다시 활성화하지 않는다. 각 브라우저 쿠키 만료는 다음 응답에서 같은 기준으로 갱신한다.
 5. 이미 collecting인 재요청은 409이며 조회 API로 성공 여부를 확인한다.
@@ -487,7 +487,7 @@ if (!response.ok) {
 | 이름 | 명세 |
 | --- | --- |
 | `participantLimit` | 현재 active 인원 이상이면서 최대 30명. 모집 중에는 증가만 허용 |
-| `dateRange` | 최대 90일 |
+| `dateRange` | 종료일은 한국 시간 오늘부터 3개월 이내(달력의 월 단위로 계산) |
 | `dailyTimeRange` | 시작은 00:00~23:30, 종료는 00:30~24:00의 30분 경계. 서버는 분 값으로 변환하고 시작 분 \< 종료 분을 검증 |
 | `durationMinutes` | 30 이상·30분 배수 |
 | `votingDeadlineAt` | 현재보다 미래이고 기존 마감보다 늦은 값만 허용 |
@@ -870,7 +870,7 @@ if (!response.ok) {
 | --- | --- |
 | `votingDeadlineAt` | 필수. 현재보다 미래이며 적용 후 마지막 후보 날짜 00:00 이전 |
 | `participantLimit` | 선택. 현재 active 인원 이상이면서 2~30명 범위에서 증가·감소 가능 |
-| `dateRange`, `dailyTimeRange`, `durationMinutes` | 선택. 생략 시 유지. 날짜 범위 최대 90일. 일일 시작은 00:00~23:30, 종료는 00:30~24:00의 30분 경계이며 서버는 분 값으로 변환 |
+| `dateRange`, `dailyTimeRange`, `durationMinutes` | 선택. 생략 시 유지. 날짜 범위의 종료일은 한국 시간 오늘부터 3개월 이내(달력의 월 단위로 계산). 일일 시작은 00:00~23:30, 종료는 00:30~24:00의 30분 경계이며 서버는 분 값으로 변환 |
 
 ```json
 {

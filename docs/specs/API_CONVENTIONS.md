@@ -66,7 +66,7 @@
 
 링크 단계와 약속 단계를 섞어 잠그면 초안 만료 처리와 설정 완료가 서로를 덮어쓸 수 있다. 그래서 순서를 하나로 고정한다.
 
-1. 링크를 경로로 받는 요청(MEMBER-API-01, 02)은 **`promise_links` 행을 먼저** `FOR UPDATE`로 잠근다.
+1. 링크를 경로로 받는 쓰기 요청(MEMBER-API-02)은 **`promise_links` 행을 먼저** `FOR UPDATE`로 잠근다. MEMBER-API-01은 GET이므로 잠그지 않고 초안 만료도 계산만 한다 (STATE-02-02).
 2. 연결된 약속이 있으면 이어서 **`promises` 행도** `FOR UPDATE`로 잠근다.
 3. 약속을 경로로 받는 요청(MEMBER-API-03 이하)은 `promises` 행만 잠근다.
    단, `draft`를 물리 삭제할 수 있는 요청(만료 `draft` 정리, `draft` 탈퇴)은
