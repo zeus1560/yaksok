@@ -106,7 +106,7 @@ participants.status의 active·cancelled는 약속 상태 enum과 다른 값이�
 - DB `status=collecting`이고 현재 시각이 `voting_deadline_at` 이상이면 `closed`
 - 그 외에는 DB status와 동일
 - GET 요청은 effectiveStatus만 계산하고 DB status를 변경하지 않음
-- 쓰기 요청 또는 마감 스케줄러가 실제 status를 closed로 변경함
+- 쓰기 요청이 실제 status를 closed로 변경함
 - GET 응답의 `promiseStatus`에는 effectiveStatus를 반환함
 
 ### **에러**
@@ -138,7 +138,7 @@ draft는 `promises.created_at+10분`에 만료된다. GET 요청은 만료 여�
 6. 쓰기 요청에서 `status=collecting`이고 잠금 후 `clock_timestamp() >= voting_deadline_at`이면 `promises.status=closed`로 변경한다.
 7. 상태 변경 후 해당 API의 허용 상태를 검사하고 요청을 계속 처리하거나 거절한다.
 8. 인증 자체가 실패한 요청은 약속의 DB 상태를 변경하지 않는다.
-9. 전원 제출은 자동 마감 조건이 아니다. 응답자가 0명 또는 1명이어도 마감 시각에 도달하면 GET에서는 `effectiveStatus=closed`, 쓰기 요청 또는 스케줄러에서는 실제 DB 상태를 `closed`로 처리한다.
+9. 전원 제출은 자동 마감 조건이 아니다. 응답자가 0명 또는 1명이어도 마감 시각에 도달하면 GET에서는 `effectiveStatus=closed`, 쓰기 요청에서는 실제 DB 상태를 `closed`로 처리한다.
 
 조회와 확정 사이에 시간이 지나거나 참여 데이터가 변경될 수 있으므로 확정 요청에서는 후보를 다시 계산·검증한다. 모든 슬롯·참여 변경 경로는 동일한 약속 잠금 규칙을 따라야 한다.
 
