@@ -880,3 +880,87 @@ Response Body (`200 OK`)
 - 내보낸 사람은 닉네임 UNIQUE가 살아 있어 같은 닉네임으로 재참여할 수 없다 (MEMBER-API-03 6번과 동일 메커니즘). 다른 닉네임 재가입은 비회원 구조상 막지 못한다
 - 응답에 다른 참여자의 PIN 해시·세션·슬롯을 포함하지 않는다
 - `Cache-Control: no-store`
+
+---
+
+## MEMBER-API-09 — 초대 링크 발급 (웹)
+
+`POST /api/v1/links`
+
+웹 「새 약속 만들기」에서 초대 링크만 발급한다. 약속과 참여자는 만들지 않는다.
+
+### 0. 규칙 연결
+
+- 도메인: MEMBER
+- 관련 규칙: MEMBER-01-01, MEMBER-02-01, STATE-02-01
+- 관련 US: US-CREAT-04 약속 생성 및 초대 링크 발급
+- 권한: **누구나** (인증 불필요)
+- 허용 상태: 해당 없음 (약속이 생기기 전 단계)
+- 상태 전환: 없음. 링크만 생성되고 약속은 MEMBER-API-02 성공 시 생성된다 (STATE-02-01)
+- 동시성: 잠금 없음. `invite_token` UNIQUE 제약으로 중복을 막는다
+
+### 1. 기본 정보
+
+- **목적:** 웹에서 새 약속 링크를 발급하고 발급자를 방장 등록 화면으로 보낸다.
+- **HTTP Method:** POST
+- **Endpoint:** `/api/v1/links`
+- **Authentication Required:** 아니요
+- **Content Type:** `application/json` (응답)
+
+**링크만 발급한다.** 발급자는 응답의 `inviteUrl`(`/p/{inviteToken}`)로 곧바로 이동한다. 이동한 화면에서 MEMBER-API-01이 `unclaimed` + `register_host`를 돌려주면 MEMBER-API-02로 방장 등록을 한다. 링크를 발급한 사람이라도 다른 사람이 먼저 등록을 완료하면 그 사람이 방장이다 (MEMBER-02-01).
+
+**챗봇 발급은 이 API를 호출하지 않는다.** 챗봇 스킬 서버 라우트가 같은 내부 발급 함수를 `source='kakao'`로 호출한다. 이 API는 항상 `source='web'`으로 저장한다.
+
+### 요청
+
+- 헤더: 없음
+- Request Body: 없음. 본문을 보내도 무시한다. `source` 등 어떤 필드도 반영하지 않는다.
+
+### 응답
+
+#### Status Code: 201 Created
+
+| 이름 | 타입 | 설명 |
+| --- | --- | --- |
+| inviteToken | string | 발급된 초대 토큰 |
+| inviteUrl | string | 서버가 `APP_BASE_URL + "/p/" + inviteToken`으로 조립한 초대 주소 |
+| nextAction | string | 항상 `register_host` |
+
+`promiseId`는 넣지 않는다. 아직 약속이 없기 때문이다.
+
+Response Body
+
+```json
+{
+  "inviteToken": "k3Zq8vTb1mRa",
+  "inviteUrl": "http://localhost:3000/p/k3Zq8vTb1mRa",
+  "nextAction": "register_host"
+}
+```
+
+### 에러
+
+| HTTP 상태 | code | 발생 원인 | message 예시 |
+| --- | --- | --- | --- |
+| 500 | INTERNAL_ERROR | 토큰 중복으로 재시도까지 실패, 그 밖의 서버 오류 | 처리 중 오류가 발생했습니다. |
+
+### 처리 순서 / 비고
+
+#### 처리 순서
+
+1. 암호학적 난수로 `inviteToken`을 생성한다.
+2. `promise_links`에 `(invite_token, source='web')`을 삽입한다.
+3. `invite_token` UNIQUE 위반이면 새 토큰으로 1회 재시도한다. 다시 실패하면 500 `INTERNAL_ERROR`.
+4. 201로 응답한다.
+
+잠금은 사용하지 않는다.
+
+#### 내부 발급 함수
+
+- 웹 라우트(이 API)와 챗봇 스킬 서버 라우트가 같은 내부 발급 함수를 쓴다. 웹은 `source='web'`, 챗봇은 `source='kakao'`를 서버 코드에서 고정값으로 넘긴다.
+- `source`는 클라이언트 입력을 받지 않는다. 발급 출처 지표를 위조할 수 없게 하기 위해서다.
+
+#### 보안 정보
+
+- 토큰 기준은 MEMBER-API-01과 같다. 충분한 길이의 암호학적 난수를 사용한다.
+- IP 기준 레이트 리밋을 둔다. **[제안]** 인증 없는 쓰기 API이므로 공개 배포 전 도입 여부를 다시 판단한다.

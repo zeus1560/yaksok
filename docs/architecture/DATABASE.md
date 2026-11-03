@@ -37,6 +37,7 @@ erDiagram
     promise_links {
         uuid id PK "링크 내부 ID"
         varchar invite_token UK "초대 URL 토큰"
+        varchar source "발급 출처 web/kakao"
         timestamptz created_at "링크 생성 시각"
     }
     promises {
@@ -92,9 +93,10 @@ erDiagram
 | --- | --- | --- |
 | `id` | 불가 | 링크 행의 내부 UUID. 약속이 이 값을 참조한다. |
 | `invite_token` | 불가 | 초대 URL에 넣는 암호학적 난수 토큰. 내부 UUID 및 로그인 토큰과 별개다. |
+| `source` | 불가 | 발급 출처. `web`(웹 「새 약속 만들기」) 또는 `kakao`(챗봇). 서버가 발급 경로에 따라 정하며 클라이언트 입력을 받지 않는다. |
 | `created_at` | 불가 | 링크 생성 시각. 오래된 미사용 링크 확인·정리 등에 활용한다. |
 
-연결된 `promises` 행이 없으면 아직 선점되지 않은 링크다. 연결된 약속이 있으면 선점 완료이므로 `status`, `claimed_at`을 중복 저장하지 않는다. 링크 미리보기나 단순 GET 요청은 방장 선점·약속 생성을 일으키면 안 된다. 챗봇 삭제는 기존 링크 및 약속 삭제로 연결하지 않는다.
+연결된 `promises` 행이 없으면 아직 선점되지 않은 링크다. 연결된 약속이 있으면 선점 완료이므로 `status`, `claimed_at`을 중복 저장하지 않는다. 링크 미리보기나 단순 GET 요청은 방장 선점·약속 생성을 일으키면 안 된다. 챗봇 삭제는 기존 링크 및 약속 삭제로 연결하지 않는다. 단톡방 식별자는 챗봇 연결 작업 때 추가한다.
 
 ### 3.2 `promises` — 설정·상태·확정 결과
 
@@ -187,6 +189,7 @@ WHERE role = 'host';
 ### 4.2 같은 행에서 검증할 조건
 
 - status·role 값은 CHECK 또는 ENUM으로 허용 목록에 제한한다.
+- `promise_links.source`는 `'web'` 또는 `'kakao'`만 허용한다.
 - `role='host'`인 참여자는 반드시 `status='active'`여야 한다.
 - 설정된 `participant_limit`은 방장을 포함해 2 이상 30 이하이다.
 - `date_range_start ≤ date_range_end`이며 `date_range_end`는 한국 시간 오늘부터 3개월 이내(달력의 월 단위로 계산)이다. 오늘 기준 조건이므로 CHECK가 아니라 서버에서 검증한다.
@@ -200,6 +203,10 @@ WHERE role = 'host';
 - 상태별 필수값은 아래 표대로 검사한다. NULL 허용 컬럼의 단순 비교 CHECK만으로 필수값을 보장할 수 없으므로 IS NOT NULL 조건이 필요하다.
 
 ```sql
+ALTER TABLE promise_links
+ADD CONSTRAINT ck_promise_link_source
+CHECK (source IN ('web', 'kakao'));
+
 ALTER TABLE participants
 ADD CONSTRAINT ck_host_must_be_active
 CHECK (role <> 'host' OR status = 'active');
