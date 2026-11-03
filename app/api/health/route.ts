@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
-  const count = await prisma.user.count();
-  return Response.json({ ok: true, userCount: count });
+  await prisma.$queryRaw`SELECT 1`;
+  return Response.json({ ok: true });
 }

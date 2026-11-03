@@ -26,6 +26,7 @@
 
 - Prisma Client는 항상 `import { prisma } from "@/lib/prisma"`로 가져온다. `new PrismaClient()`를 직접 호출하지 않는다.
 - 생성 코드는 `prisma/generated/`에 있으며 Git에서 제외한다. 스키마 변경 후 `npm run db:generate`를 실행한다.
+- Prisma 모델 `Promise`는 JS 전역 Promise와 이름이 겹친다. 생성된 클라이언트에서 타입으로 가져올 때는 항상 `import type { Promise as PromiseModel } from "@/prisma/generated/client"`처럼 별칭을 쓴다.
 - 스키마 변경은 `npm run db:migrate -- --name <변경명>`으로 기록한다.
 - 부분 UNIQUE 인덱스(`WHERE role='host'` 등)와 CHECK 제약처럼 Prisma 스키마로 표현할 수 없는 제약은 마이그레이션 SQL에 직접 작성한다 (`docs/architecture/DATABASE.md` 4절).
 - 트랜잭션 범위와 잠금 순서는 `docs/architecture/DATABASE.md` 8절을 따른다. 모든 FK는 `ON DELETE RESTRICT`이며 CASCADE를 쓰지 않는다.
