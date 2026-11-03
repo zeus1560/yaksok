@@ -12,7 +12,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## 프로젝트
 
-카카오톡 채팅방에서 봇 호출 → 웹 링크 → 다인원 약속(날짜·시간·장소) 조율.
+카카오톡 채팅방에서 봇 호출 → 웹 링크 → 다인원 약속(날짜·시간) 조율.
 최대한 빠른 MVP 개발과 배포가 목표.
 
 ## 스택 (임의로 바꾸지 말 것)
@@ -53,14 +53,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## 도메인 규칙
 
-- 시각은 UTC로 저장하고 표시할 때 Asia/Seoul로 변환한다.
+- Timestamptz(3) 저장 + 날짜 경계는 항상 Asia/Seoul 명시. daily_start_minute은 분 단위 SMALLINT
 - 카카오 스킬 응답은 5초 안에 끝낸다. 오래 걸리는 작업은 분리한다.
 - 약속 관리자 권한과 참여 링크 권한을 분리한다.
   참여 링크만으로 관리자 권한을 얻을 수 없어야 한다.
 
 ## 현재 상태
 
-- ERD 미확정. `users` 테이블 하나만 있는 연결 확인용 스키마 상태.
+- ERD 확정. (5개 테이블)
 
 ## 커밋
 

@@ -51,4 +51,7 @@ next-env.d.ts
 .agents/
 .claude/
 .windsurf/
-skills.lock.json
+.claude/skills/        # Prisma 자동생성분만 제외
+!.claude/settings.json
+!.claude/rules/
+!.claude/agents/
