@@ -157,9 +157,9 @@ npm run dev
 | 주소 | 기대 결과 |
 | --- | --- |
 | `http://localhost:3000` | Next.js 기본 화면 |
-| `http://localhost:3000/api/health` | `{"ok":true,"userCount":0}` |
+| `http://localhost:3000/api/health` | `{"ok":true}` |
 
-> 🎉 `/api/health`에서 `{"ok":true,"userCount":0}`가 나오면 **Next.js → Prisma → 내 Neon DB까지 전부 연결된 것**입니다. 환경 구축 완료입니다.
+> 🎉 `/api/health`에서 `{"ok":true}`가 나오면 **Next.js → Prisma → 내 Neon DB까지 전부 연결된 것**입니다. 환경 구축 완료입니다.
 >
 > 안 되면 아래 「자주 터지는 오류」를 먼저 보시고, 그래도 안 되면 **30분 이상 혼자 붙잡지 말고** 이슈 DB에 등록하세요.
 
