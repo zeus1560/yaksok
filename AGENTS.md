@@ -28,7 +28,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Prisma 사용 규칙
 
-- Prisma CLI 설정은 `prisma7.config.ts`에서 관리한다.
+- Prisma CLI 설정은 `prisma.config.ts`에서 관리한다.
 - DB 연결 문자열은 환경변수에서 읽는다. 코드에 실제 값을 직접 작성하지 않는다.
 - `schema.prisma`에는 DB URL을 작성하지 않는다.
 - generator provider는 `prisma-client`, output은 `../prisma/generated`.
@@ -65,3 +65,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## 커밋
 
 `feat|fix|chore|docs|refactor|test: 한 줄 요약` (한국어)
+
+## 작업 흐름
+
+작업 전에 다음 문서를 순서대로 읽는다.
+
+1. `docs/README.md`
+2. `context/project-overview.md`
+3. `context/coding-standards.md`
+4. `context/ai-interaction.md`
+5. `context/current-feature.md`
+
+기능 작업은 `/feature` 스킬(`.claude/skills/feature/`)로 진행한다. 스펙은 `context/features/`, 수정 기록은 `context/fixes/`, 조사 요청은 `context/research/`에 둔다.

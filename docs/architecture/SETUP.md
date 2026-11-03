@@ -175,7 +175,7 @@ npm run dev
 | `prisma/schema.prisma` | DB 스키마. 현재는 연결 확인용 `users` 하나뿐 |
 | `prisma/migrations/` | 마이그레이션 기록. **Git으로 공유**되고 각자 DB에 적용합니다 |
 | `prisma/generated/` | 자동 생성 코드. Git에 안 올라가고 `prisma generate`로 만듭니다 |
-| `prisma7.config.ts` | Prisma CLI 설정. DB 주소를 환경변수에서 읽습니다 |
+| `prisma.config.ts` | Prisma CLI 설정. DB 주소를 환경변수에서 읽습니다 |
 | `AGENTS.md` / `CLAUDE.md` | AI 에이전트용 프로젝트 규칙. `CLAUDE.md`는 `@AGENTS.md` 한 줄 |
 | `.github/workflows/ci.yml` | PR마다 타입·린트·빌드를 검사 |
 
