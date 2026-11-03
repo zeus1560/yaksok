@@ -7,5 +7,6 @@ export default defineConfig({
     environment: "node",
     include: ["**/*.test.ts"],
     exclude: ["node_modules/**", ".next/**", "prisma/generated/**"],
+    passWithNoTests: true,
   },
 });

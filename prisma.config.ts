@@ -10,6 +10,6 @@ export default defineConfig({
   },
   datasource: {
     // 마이그레이션은 직접 연결 주소를 우선 사용한다. 없으면 DATABASE_URL을 사용한다.
-    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
+    url: process.env["DIRECT_URL"] || process.env["DATABASE_URL"],
   },
 });
