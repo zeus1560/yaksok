@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { generateSessionToken, hashSessionToken, sessionCookie } from "./session";
+import {
+  generateSessionToken,
+  hashSessionToken,
+  sessionCookie,
+  sessionMaxAgeSeconds,
+} from "./session";
 
 describe("세션 토큰", () => {
   it("32바이트 난수를 base64url 43자로 만든다", () => {
@@ -23,5 +28,18 @@ describe("sessionCookie (API_CONVENTIONS 5절)", () => {
     expect(sessionCookie("p-1", "tok", 86400)).toBe(
       "ys_session_p-1=tok; HttpOnly; Secure; SameSite=Lax; Path=/api/v1/promises/p-1; Max-Age=86400",
     );
+  });
+});
+
+describe("sessionMaxAgeSeconds", () => {
+  const now = new Date("2026-10-05T12:00:00.400+09:00");
+
+  it("expires_at까지 남은 초를 내림한다", () => {
+    expect(sessionMaxAgeSeconds(new Date(now.getTime() + 86400_000), now)).toBe(86400);
+    expect(sessionMaxAgeSeconds(new Date(now.getTime() + 1999), now)).toBe(1);
+  });
+
+  it("이미 지난 만료는 0", () => {
+    expect(sessionMaxAgeSeconds(new Date(now.getTime() - 1000), now)).toBe(0);
   });
 });

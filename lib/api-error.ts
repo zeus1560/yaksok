@@ -5,6 +5,11 @@ export type ApiErrorCode =
   | "LINK_NOT_FOUND"
   | "HOST_ALREADY_REGISTERED"
   | "LINK_EXPIRED"
+  | "INVALID_CREDENTIALS"
+  | "PARTICIPANT_CANCELLED"
+  | "PROMISE_NOT_FOUND"
+  | "PROMISE_CANCELLED"
+  | "ACCESS_PERIOD_EXPIRED"
   | "VALIDATION_FAILED"
   | "INTERNAL_ERROR";
 
@@ -43,6 +48,27 @@ export function hostAlreadyRegistered(): Response {
 
 export function linkExpired(): Response {
   return apiError(410, "LINK_EXPIRED", "만료된 링크입니다.");
+}
+
+// 닉네임 없음과 PIN 불일치를 구분하지 않는다 (API_CONVENTIONS 7절)
+export function invalidCredentials(): Response {
+  return apiError(401, "INVALID_CREDENTIALS", "닉네임 또는 PIN이 올바르지 않습니다.");
+}
+
+export function participantCancelled(): Response {
+  return apiError(403, "PARTICIPANT_CANCELLED", "참여가 종료된 계정입니다.");
+}
+
+export function promiseNotFound(): Response {
+  return apiError(404, "PROMISE_NOT_FOUND", "약속을 찾을 수 없습니다.");
+}
+
+export function promiseCancelled(): Response {
+  return apiError(409, "PROMISE_CANCELLED", "취소된 약속입니다.");
+}
+
+export function accessPeriodExpired(): Response {
+  return apiError(410, "ACCESS_PERIOD_EXPIRED", "접근 기간이 지난 약속입니다.");
 }
 
 export function internalError(): Response {

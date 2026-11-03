@@ -1,4 +1,4 @@
-# 현재 기능: 방장 등록 API (MEMBER-API-02)
+# 현재 기능: 참여자 재인증 API (MEMBER-API-04)
 
 ## 상태
 
@@ -6,32 +6,31 @@
 
 ## 스펙
 
-`context/features/003-host-registration-api.md`
+`context/features/004-participant-login-api.md`
 
 ## 목표
 
-링크를 연 사람이 닉네임·PIN으로 방장이 되어 draft 약속과 세션을 받는다. 동시에 등록해도 방장은 한 명이고, 만료 draft는 잠금 후 정리하고 다시 등록할 수 있다.
+다른 기기에서 닉네임·PIN으로 기존 참여자에게 다시 로그인해 새 세션을 받는다. 약속 상태를 PIN보다 먼저 판정하고, 로그인 가능 기간은 링크 유효 기간과 같다.
 
 ## 수용 기준
 
 - [x] AC-1 Origin 없음·불일치 → 403 `INVALID_ORIGIN`
 - [x] AC-2 JSON·필드 오류 → 400 `INVALID_REQUEST`
-- [x] AC-3 닉네임 trim → NFC, grapheme 2~12자·이모지 거절 → 422
-- [x] AC-4 PIN 형식 → 422
-- [x] AC-5 링크 → 약속 `FOR UPDATE`, 잠금 후 `clock_timestamp()`, `resolveLinkStatus` 재사용
-- [x] AC-6 410 / 404
-- [x] AC-7 만료 draft 세션 → 방장 → promise 삭제 후 등록
-- [x] AC-8 409 (진행 중 draft·그 외·P2002), 병렬 2건 중 1건만 201
-- [x] AC-9 한 트랜잭션 생성, 실패 시 전체 롤백
-- [x] AC-10 scrypt 해시·검증
-- [x] AC-11 세션 토큰·해시·24시간·쿠키 속성
-- [x] AC-12 201 본문 6개 필드, `draftExpiresAt` +09:00
-- [x] AC-13 PIN·세션 토큰 원문 미노출
+- [x] AC-3 닉네임 등록과 같은 규칙(trim → NFC), PIN 형식 → 422
+- [x] AC-4 UUID 형식 오류·없는 약속 → 404 `PROMISE_NOT_FOUND`
+- [x] AC-5 PIN 전 상태 판정: cancelled 409 `PROMISE_CANCELLED`, 10분 지난 draft 404, `linkExpiryBase + 7일` 410
+- [x] AC-6 없는 닉네임·틀린 PIN 같은 401, 더미 해시 비교, 실패 지점 한 곳
+- [x] AC-7 cancelled 참여자 403 `PARTICIPANT_CANCELLED`
+- [x] AC-8 새 세션 행만 생성, draft 24시간·그 외 `linkExpiryBase + 7일`, Max-Age = 남은 초
+- [x] AC-9 세션 저장 P2003 → 404
+- [x] AC-10 200 본문 6개 필드, `sessionExpiresAt` +09:00
+- [x] AC-11 PIN·세션 토큰 원문 미노출, 429 없음
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-방장등록-api` (`main` 228a678에서 생성, MEMBER-API-01 병합 포함)
+- 브랜치: `ahn/feat-로그인-api` (`main` 21aa399에서 생성, MEMBER-API-02 병합 포함)
 - 시작 시 작업 트리: 깨끗함
+- 선행 모듈 확인: `lib/member/pin.ts`(`verifyPin`), `nickname.ts`(`normalizeNickname`), `session.ts`, `link-status.ts`(`linkExpiryBase`) 모두 있음
 
 ## 검증 결과
 
@@ -39,26 +38,25 @@
 
 | 명령 | 결과 |
 | --- | --- |
-| `npm run test` | 통과 — 11 파일, 112 테스트 (이번 기능 62건 추가, NFC 3건 포함) |
+| `npm run test` | 통과 — 13 파일, 157 테스트 (이번 기능 45건 추가: login 22, route 21, session 2) |
 | `npm run lint` | 통과 |
-| `npm run typecheck` | 통과 (테스트의 정규식 `s` 플래그가 ES2017 target에서 실패 → 수정 후 재실행) |
-| `npm run build` | 통과 — `/api/v1/links/[inviteToken]/host` 동적(ƒ) |
-| `npx prettier --check` (변경 파일) | 통과 |
-| dev 서버 + 개발 DB: 병렬 등록 2건 | 1건 201(쿠키 속성 명세대로), 1건 409. 이후 MEMBER-API-01 조회 → draft `wait_setup` |
-| 저장값 확인 | `nickname`·`normalized_nickname` = trim 값, `password_hash` = `scrypt$131072$8$1$…` (N=2^17 시점), 세션 해시 64자, 만료 = 생성 + 24시간 |
-| 만료 draft 재등록 | 20분 이전으로 옮긴 draft → API-01 `draftExpired:true` → 등록 201, 이전 약속·방장·세션 삭제 |
-| 410 / 404 / 403 | 발급 8일 지난 링크 410, 없는 토큰 404, Origin 없음 403 |
-| 실제 DB 롤백 | 세션 해시 UNIQUE 위반 주입 → P2002, 링크에 약속 없음, 참여자 0건 |
-| 정리 | 확인용 링크 4개·약속 2개 삭제, 4개 테이블 스냅샷이 시작 상태와 동일 |
-| scrypt N=2^15 변경 후 재검증 | `npm run test` 109건, lint·typecheck·build 통과. 기본 maxmem(32MiB)은 `ERR_CRYPTO_INVALID_SCRYPT_PARAMS`, 64MiB 지정 시 통과(평균 약 54ms). 개발 DB에 `registerHost`로 실제 저장 → `scrypt$32768$8$1$<salt 22자>$<hash 43자>` 형식 일치, `verifyPin` 맞는 PIN true·다른 PIN false. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일 |
-| NFC 정규화 추가 후 재검증 | `npm run test` 112건, lint·typecheck·build 통과. dev 서버에 조합형 " 가나 "(UTF-8 파일) 등록 → 201, 응답 닉네임 완성형 `가나`(U+AC00 U+B098). DB 직접 조회 스크립트는 출력 없이 끝나 미확인 — 응답 값은 DB에 저장한 값과 같은 변수. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일 |
+| `npm run typecheck` | 통과 |
+| `npm run build` | 통과 — `/api/v1/promises/[promiseId]/auth/session` 동적(ƒ) |
+| `npx prettier --check` (변경 파일) | 코드 파일 통과. Markdown 5개는 main에서도 이미 경고 상태라 재포맷하지 않음 |
+| dev 서버 + 개발 DB: 등록 → 로그인 | 링크 발급 → 조합형 " 혜승 "(U+1112 U+1168 U+1109 U+1173 U+11BC, UTF-8 파일)으로 방장 등록 201 → 쿠키 없이 완성형 "혜승"·같은 PIN으로 로그인 200(본문 6개 필드, 쿠키 속성 명세대로, draft라 Max-Age=86400) |
+| 저장값 확인 | `participants.nickname`·`normalized_nickname` 모두 U+D61C U+C2B9(NFC 완성형) — API-02 때 미확인 항목 확인. 세션 행 2개(해시 64자), 두 번째 만료 = 로그인 시각 + 24시간 |
+| 실패 응답 | 틀린 PIN·없는 닉네임 모두 401 같은 본문(0.34s / 0.41s, 첫 요청은 더미 해시 생성 포함), Origin 없음 403, UUID 형식 오류·없는 UUID 404, 깨진 JSON 400, PIN 2자리 422 |
+| 상태 판정 실제 DB | `created_at`을 10분 전으로 옮긴 draft → 404, 약속 삭제 안 됨(세션 2행 유지). `status=cancelled` → 409 `PROMISE_CANCELLED` |
+| 로그 | dev 로그에 오류·PIN 없음 |
+| 정리 | 확인용 링크·약속·참여자·세션 삭제, 5개 테이블 스냅샷(행 수·md5)이 시작 상태와 동일 |
 
 DB 스키마 변경 없음 → `db:status` 해당 없음. UI 변경 없음 → 브라우저 확인 해당 없음.
 
 ## 메모
 
-- 확인 중 Git Bash에서 curl `-d`로 한글을 보내면 CP949 바이트가 전달되어 닉네임이 U+FFFD로 저장됐다. UTF-8 파일(`--data-binary @file`)로 보내면 정상이다. 서버 문제는 아니지만 잘못된 UTF-8 거절 여부는 미결로 스펙에 남겼다.
+- 문서 수정: API_CONVENTIONS 3절 `PROMISE_STATE` → `PROMISE_CANCELLED`·`INVALID_PROMISE_STATE`, 5.2 재인증 행·로그인 가능 기간 확정. member.md MEMBER-API-04 에러 표·처리 순서·세션 만료. DECISION_CONFLICTS R-11 신설, C-07 진행, C-10·C-11 신규 미결, A-04 해결, A-09에 04 완료, MEMBER-06-04 공개 배포 전 필수 재검토.
 - 스펙과 다르게 판단한 부분·미결은 스펙의 미정 사항에 정리했다.
+- 판단 4건(draft 발급 시각, Max-Age 기준, 쿠키 id, 응답 시간 균등화 범위) 승인. C-07은 "로그인 403 / 세션 API 401 구분" 안으로 기록, 팀 확인 대기.
 
 ## 완료 이력
 
@@ -87,3 +85,11 @@ DB 스키마 변경 없음 → `db:status` 해당 없음. UI 변경 없음 → �
 - 변경: `POST /api/v1/links/[inviteToken]/host`, `registerHost` 트랜잭션(링크 → 약속 `FOR UPDATE`, 잠금 후 `clock_timestamp()`, `resolveLinkStatus` 재사용, 만료 draft 세션 → 방장 → promise 삭제, P2002 → 409), 닉네임 trim → NFC → grapheme 2~12자·이모지 거절(`normalizeNickname` 공개), PIN scrypt N=2^15·r=8·p=1·maxmem 64MiB(`verifyPin` 공개), 세션 32바이트·SHA-256·24시간·쿠키, `+09:00` 시각 표기, 400·409·422 헬퍼. 문서: member.md(400·403 행, 닉네임 규칙, scrypt), API_CONVENTIONS 5.2 확정, DECISION_CONFLICTS R-10 신설·A-09 진행
 - 검증: Vitest 112건, lint·typecheck·build 통과. 개발 DB에서 병렬 등록 2건 중 1건만 201, 만료 draft 재등록, 410·404·403, 실제 롤백, 저장값 `scrypt$32768$8$1$…`, 조합형 닉네임 완성형 응답 확인. 확인용 데이터 삭제
 - 남은 제한: PIN 시도 제한(MEMBER-06-04 ❗미결), 잘못된 UTF-8 본문 거절 여부·`©`·`®`·`™` 거절(MEMBER-05-02 ❗미결), 레이트 리밋 [제안], A-09의 03·04·07
+
+### 2026-11-04 — 참여자 재인증 API (MEMBER-API-04)
+
+- 스펙: `context/features/004-participant-login-api.md`
+- 브랜치: `ahn/feat-로그인-api`
+- 변경: `POST /api/v1/promises/[promiseId]/auth/session`, `lib/member/login.ts`(순수 판정 `resolveLoginAccess` — PIN 전 상태 판정, cancelled 409·10분 지난 draft 404·`linkExpiryBase + 7일` 410 / `loginParticipant` — DB `clock_timestamp()`, 더미 해시 비교, 실패 반환 한 곳, 새 세션 행, P2003 → 404), `sessionMaxAgeSeconds`, 401·403·404·409·410 헬퍼. 문서: API_CONVENTIONS 3절 에러 코드(`PROMISE_CANCELLED`·`INVALID_PROMISE_STATE`)·5.2, member.md MEMBER-API-04, DECISION_CONFLICTS R-11 신설·C-07 안·C-10·C-11 신규·A-04 해결·A-09 04 완료
+- 검증: Vitest 157건(이번 45건), lint·typecheck·build 통과. 개발 DB에서 조합형 닉네임 방장 등록 → 쿠키 없이 로그인 200·세션 2행, 저장 닉네임 NFC(U+D61C U+C2B9) 확인, 401 동일 본문, 403·404·400·422, 10분 지난 draft 404(삭제 없음), cancelled 409. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
+- 남은 제한: PIN 시도 제한 미구현(공개 배포 전 필수 재검토), C-07 팀 확인 대기, C-10(확정 시 세션 갱신)·C-11(조기 마감 기준) 미결, member.md MEMBER-API-06 cancelled 코드 미정리
