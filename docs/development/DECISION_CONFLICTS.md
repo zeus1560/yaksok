@@ -31,6 +31,7 @@
 | R-07 | 날짜 범위 최대 (구 C-01) | 종료일은 **한국 시간 오늘부터 3개월 이내, 달력의 월 단위로 계산.** "90일" 표현은 폐기하고 ERD 4.2·STATE-03-01·STATE-API-02·03·06 반영 |
 | R-08 | 자동 확정 여부 (구 Q32) | **자동 확정 없음. 방장 수동 확정만** (R-02와 동일) |
 | R-09 | 초대 링크 발급 API (구 A-08) | **MEMBER-API-09 `POST /api/v1/links`.** 웹은 링크만 발급하고 발급자를 방장 등록 화면으로 보낸다. 챗봇은 같은 내부 발급 함수를 호출한다. `promise_links.source`(web/kakao)로 출처를 기록한다 |
+| R-10 | 방장 등록 API 세부 결정 (MEMBER-API-02, 2026-11-04) | **닉네임:** trim → **NFC 정규화** → `Intl.Segmenter` grapheme 단위 2~12자, `\p{Extended_Pictographic}` 포함 시 거절(MEMBER-05-01 권장안을 확정). `nickname`·`normalized_nickname` 모두 NFC 값. NFC 근거: MEMBER-API-04 로그인과 MEMBER-API-03 중복 판정이 닉네임 일치에 의존하므로, 입력 기기에 따라 조합형으로 들어온 같은 닉네임이 다른 값으로 저장되면 로그인 실패·중복 판정 오류가 생긴다. 방장 닉네임이 MEMBER-API-02에서 처음 저장되므로 여기서 도입했고, 03·04는 `lib/member/nickname.ts`의 `normalizeNickname`을 재사용한다. NFKC는 원문 보존·대소문자 구분 규칙과 충돌해 쓰지 않는다. **PIN 해시:** 명세의 bcrypt/argon2 대신 Node 내장 `crypto.scrypt`(**N=2^15**, r=8, p=1, maxmem 64MiB 명시, 16바이트 salt, `scrypt$N$r$p$salt$hash`). OWASP 최소값(N=2^17)에서 **의도적으로 낮췄다**: PIN은 1만 조합이라 해시 강도로는 유출 시 대입을 막지 못하고, N=2^17은 요청당 128MiB라 동시 요청 시 배포 인스턴스 메모리 부족과 MEMBER-API-04 로그인 반복을 통한 서비스 거부 위험이 있다. 실제 방어는 시도 제한(MEMBER-06-04 ❗미결)이 맡는다. 매개변수가 저장값에 남아 나중에 바꿔도 기존 해시를 검증할 수 있다. **draft 세션:** 발급 시각 + 24시간을 [제안]에서 확정(API_CONVENTIONS 5.2) |
 
 ---
 
@@ -106,7 +107,7 @@
 | A-05 | `SLOT_LIMIT_EXCEEDED`(422)가 미결 목록에선 미체크 제안인데 TIME-API-01 처리 순서·코드 예제에는 확정 로직으로 들어가 있음 |
 | A-06 | TIME-API-02의 `serverTime` 필드가 응답 표에는 `[제안]`인데 예시 JSON·코드 예제에는 필수처럼 포함됨 |
 | A-07 | TIME API 미결 중 담당 지정된 것: `effectiveStatus` 공통 규칙(연성), STATE 범위 변경 API 버전 +1(혜승), STATE-10-01 문구 수정(혜승), MEMBER 탈퇴·내보내기 API(연성) |
-| A-09 | **Origin 검증 실패 응답 코드가 API별로 비어 있다.** 2026-11-03 결정: 공통 에러 코드 403 `INVALID_ORIGIN`을 신설하고 MEMBER-API-09에 먼저 반영했다. `Origin`을 필수로 두는 MEMBER-API-02·03·04·07(및 STATE API의 허용 Origin 검증)도 **같은 코드로 맞출 것** — 각 API 구현 시 에러 표에 추가한다. 미리보기 배포(Preview) 도메인 허용 방식은 미정 |
+| A-09 | **Origin 검증 실패 응답 코드가 API별로 비어 있다.** 2026-11-03 결정: 공통 에러 코드 403 `INVALID_ORIGIN`을 신설하고 MEMBER-API-09에 먼저 반영했다. `Origin`을 필수로 두는 MEMBER-API-02·03·04·07(및 STATE API의 허용 Origin 검증)도 **같은 코드로 맞출 것** — 각 API 구현 시 에러 표에 추가한다. 미리보기 배포(Preview) 도메인 허용 방식은 미정. **진행:** MEMBER-API-09 ✅, MEMBER-API-02 ✅(2026-11-04) / 남음: 03·04·07, STATE API |
 
 ---
 
