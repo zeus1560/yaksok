@@ -15,6 +15,11 @@ export function generateInviteToken(): string {
   return randomBytes(16).toString("base64url");
 }
 
+// generateInviteToken이 만드는 형식. 형식이 다르면 DB를 조회하지 않고 없는 토큰으로 본다
+export function isInviteTokenFormat(token: string): boolean {
+  return /^[A-Za-z0-9_-]{22}$/.test(token);
+}
+
 export function buildInviteUrl(baseUrl: string, inviteToken: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/p/${inviteToken}`;
 }
