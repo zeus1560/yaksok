@@ -49,9 +49,15 @@ next-env.d.ts
 
 # Prisma가 생성한 AI 에이전트 스킬 문서 (각자 generate 시 재생성됨)
 .agents/
-.claude/
-.windsurf/
-.claude/skills/        # Prisma 자동생성분만 제외
+.claude/*
 !.claude/settings.json
 !.claude/rules/
 !.claude/agents/
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/feature/
+!.claude/skills/cleanup/
+!.claude/skills/research/
+!.claude/skills/list-components/
+skills-lock.json
+.windsurf/
