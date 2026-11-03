@@ -138,8 +138,6 @@ Copy-Item .env.example .env
 
 `.env`를 열어서 `DATABASE_URL`을 **본인 Neon 연결 문자열**로 바꿉니다. 나머지 값은 아직 비워둬도 됩니다.
 
-`APP_BASE_URL`은 서버가 초대 링크 주소(`APP_BASE_URL + "/p/" + inviteToken`)를 만들 때 쓰는 서비스 주소입니다. 로컬은 `http://localhost:3000` 그대로 두고, 배포 환경에서는 실제 도메인을 넣습니다.
-
 > 🔥 `.env`는 `.gitignore`에 들어 있어 Git에 올라가지 않습니다. **절대 이 설정을 풀지 마세요.** 한 번 커밋되면 히스토리에 영원히 남아서 키를 재발급하는 것 말고는 방법이 없습니다.
 
 ### 1-5. DB 준비하고 실행

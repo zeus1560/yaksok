@@ -24,8 +24,8 @@
 - 관련 US: 링크로 약속에 진입한다
 - 권한: **누구나** (링크만 가진 비참여자 포함, 인증 불필요)
 - 허용 상태: 링크만 존재 / draft / collecting / closed / confirmed / cancelled — 전부
-- 상태 전환: 없음. 단 **초안 만료(STATE-02-02) 검사를 이 요청에서 수행**한다
-- 동시성: 만료 검사·삭제가 필요한 경우에만 링크 행 → 약속 행 순서로 잠근다 (MEMBER-API-00 4.1)
+- 상태 전환: 없음. **초안 만료(STATE-02-02)는 계산만 하고 DB를 변경하지 않는다**
+- 동시성: 잠금 없음 (읽기 전용). 만료 draft의 실제 삭제는 MEMBER-API-02가 잠금 후 수행한다 (MEMBER-API-00 4.1)
 
 ### 1. 기본 정보
 
@@ -71,6 +71,7 @@
 | promiseId | string 또는 null | 약속 UUID. unclaimed이면 null. **이 값으로 `/me`를 호출해 본인 여부를 판정한다** |
 | nextAction | string | 아래 「화면 분기」 표 참조 |
 | pollAfterMs | number 또는 null | draft일 때 재조회 권장 간격(ms). 그 외 null (MEMBER-03-02) |
+| draftExpired | boolean | GET 기준 draft 만료 여부. true이면 10분이 지난 draft를 unclaimed로 계산한 응답이다. GET은 DB를 변경하지 않음 (STATE-02-02) |
 
 **의도적으로 응답에 넣지 않는 값:** 약속 설정 일체(날짜·시간 범위, 소요 시간, 마감, 정원), 현재 참여 인원, 확정 시각, 참여자 명단, 본인 정보.
 
@@ -82,7 +83,8 @@ Response Body (draft — 설정 중)
   "promiseStatus": "draft",
   "promiseId": "7c1b2f40-8f6a-4c21-9d55-0d3b1a7e9c42",
   "nextAction": "wait_setup",
-  "pollAfterMs": 3000
+  "pollAfterMs": 3000,
+  "draftExpired": false
 }
 ```
 
@@ -94,7 +96,8 @@ Response Body (collecting)
   "promiseStatus": "collecting",
   "promiseId": "7c1b2f40-8f6a-4c21-9d55-0d3b1a7e9c42",
   "nextAction": "join",
-  "pollAfterMs": null
+  "pollAfterMs": null,
+  "draftExpired": false
 }
 ```
 
@@ -106,7 +109,21 @@ Response Body (아직 아무도 등록하지 않음)
   "promiseStatus": "unclaimed",
   "promiseId": null,
   "nextAction": "register_host",
-  "pollAfterMs": null
+  "pollAfterMs": null,
+  "draftExpired": false
+}
+```
+
+Response Body (10분이 지난 draft — DB에는 draft가 남아 있지만 unclaimed로 계산)
+
+```json
+{
+  "inviteToken": "k3Zq8vTb1mRa",
+  "promiseStatus": "unclaimed",
+  "promiseId": null,
+  "nextAction": "register_host",
+  "pollAfterMs": null,
+  "draftExpired": true
 }
 ```
 
@@ -144,10 +161,9 @@ Response Body (아직 아무도 등록하지 않음)
 2. 연결된 `promises` 행 조회.
 3. 만료 판정: 기준 시각 + 7일 ≤ 판정 시각이면 410 (MEMBER-01-02). 기준 시각은 confirmed면 `confirmed_start_at`, 그 외 약속은 `voting_deadline_at`(재조율 시 새 마감 시각), 약속이 없거나 `voting_deadline_at`이 없는 draft면 링크 `created_at`.
 4. 약속이 없으면 unclaimed + register_host 반환.
-5. 상태가 draft이고 `created_at + 10분 ≤ 판정 시각`이면 **초안 만료 처리**로 진입한다.
-   - 링크 행 → 약속 행 순서로 `FOR UPDATE` 잠금 (MEMBER-API-00 4.1).
-   - **잠금 후 status와 created_at을 다시 읽는다.** 이 사이에 방장이 설정을 완료했다면 `status = 'collecting'`이므로 **삭제하지 않고** 그대로 collecting을 반환한다 (STATE-02-02).
-   - 여전히 draft이고 10분이 지났으면 약속·방장 참여 기록을 삭제하고 unclaimed + register_host로 응답한다.
+5. 상태가 draft이고 `created_at + 10분 ≤ 판정 시각`이면 **만료로 계산만 한다.** 잠금·삭제 없이 `promiseStatus=unclaimed`, `promiseId=null`, `nextAction=register_host`, `draftExpired=true`로 응답한다 (STATE-02-02).
+   - DB의 draft·방장 참여 기록은 그대로 남는다. 실제 삭제는 새 방장 등록(MEMBER-API-02)이 링크 → 약속 순서로 잠근 뒤 수행한다.
+   - 그 사이에 방장이 설정을 완료했다면 다음 조회부터 collecting으로 보인다. 설정 완료와 만료 삭제의 경쟁은 MEMBER-API-02의 잠금 후 재조회가 판정한다.
 6. 그 외에는 상태에 맞는 `nextAction`만 반환한다.
 7. 정원이 찼어도 `nextAction`은 join으로 둔다. 정원 정보를 공개하지 않으므로 거절은 MEMBER-API-03이 시도 시점에 판정한다.
 
@@ -913,8 +929,13 @@ Response Body (`200 OK`)
 
 ### 요청
 
-- 헤더: 없음
-- Request Body: 없음. 본문을 보내도 무시한다. `source` 등 어떤 필드도 반영하지 않는다.
+헤더
+
+| Name | Value | 필수 |
+| --- | --- | --- |
+| Origin | 서비스 도메인 | O |
+
+Request Body: 없음. 본문을 보내도 무시한다. `source` 등 어떤 필드도 반영하지 않는다.
 
 ### 응답
 
@@ -923,7 +944,7 @@ Response Body (`200 OK`)
 | 이름 | 타입 | 설명 |
 | --- | --- | --- |
 | inviteToken | string | 발급된 초대 토큰 |
-| inviteUrl | string | 서버가 `APP_BASE_URL + "/p/" + inviteToken`으로 조립한 초대 주소 |
+| inviteUrl | string | 서버가 `NEXT_PUBLIC_BASE_URL + "/p/" + inviteToken`으로 조립한 초대 주소 |
 | nextAction | string | 항상 `register_host` |
 
 `promiseId`는 넣지 않는다. 아직 약속이 없기 때문이다.
