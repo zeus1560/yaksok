@@ -216,7 +216,7 @@ Request Body
 
 | 이름 | 타입 | 설명 | 필수 | 기본값 |
 | --- | --- | --- | --- | --- |
-| nickname | string | 표시용 닉네임. 앞뒤 공백 제거 후 2~12자 (MEMBER-05-01) | O | - |
+| nickname | string | 표시용 닉네임. 앞뒤 공백 제거 후 2~12자, 글자 수는 grapheme 단위 (MEMBER-05-01) | O | - |
 | pin | string | 숫자 4자리 (MEMBER-06-01). 원문은 저장하지 않는다 | O | - |
 
 요청 예시
@@ -229,11 +229,12 @@ Request Body
 
 | 항목 | 규칙 | 근거 |
 | --- | --- | --- |
-| 닉네임 길이 | trim 후 2자 이상 12자 이하 | MEMBER-05-01 |
-| 닉네임 이모지 | 첫 버전은 비허용(권장안). 글자 수 계산 기준 미정 | MEMBER-05-01 |
+| 닉네임 길이 | trim 후 2자 이상 12자 이하. 사용자가 보는 글자(`Intl.Segmenter` grapheme) 단위로 센다. 결합 문자는 한 글자 | MEMBER-05-01 |
+| 닉네임 이모지 | **비허용(확정, 2026-11-04).** `\p{Extended_Pictographic}`이 하나라도 있으면 422 | MEMBER-05-01, DECISION_CONFLICTS R-10 |
 | 닉네임 허용 문자 | 제한 없음 (모든 문자 허용) | MEMBER-05-02 |
 | 연속 공백 처리 | 그대로 저장(trim만 적용, 중간 공백 보존) | MEMBER-05-03 |
-| 대소문자 동일 취급 | 구분함 — normalized_nickname은 trim한 원문을 그대로 저장 | MEMBER-05-04 |
+| 대소문자 동일 취급 | 구분함 — normalized_nickname은 trim·NFC 정규화한 값을 그대로 저장 | MEMBER-05-04 |
+| Unicode 정규화 | **처리 순서: trim → NFC → 길이·이모지 검증.** `nickname`·`normalized_nickname` 모두 NFC 값으로 저장한다. 조합형으로 입력된 "가"(ᄀ+ᅡ)도 완성형 "가"로 저장되고 한 글자로 센다. NFKC는 쓰지 않는다(전각 문자 등 원문 보존·대소문자 구분과 충돌). MEMBER-API-03(중복 판정)·04(로그인)도 같은 정규화(`normalizeNickname`)를 거친 뒤 비교한다 | MEMBER-05-04, DECISION_CONFLICTS R-10 |
 | PIN | `^[0-9]{4}$` | MEMBER-06-01 |
 
 ### 응답
@@ -273,10 +274,12 @@ Response Body
 
 | HTTP 상태 | code | 발생 원인 | message 예시 |
 | --- | --- | --- | --- |
+| 400 | INVALID_REQUEST | JSON 파싱 실패, `nickname`·`pin` 누락 또는 문자열이 아님 | 요청 형식이 올바르지 않습니다. |
+| 403 | INVALID_ORIGIN | `Origin` 헤더가 없거나 서비스 도메인과 다름. DB에 아무것도 쓰지 않는다 | 허용되지 않은 요청 출처입니다. |
 | 404 | LINK_NOT_FOUND | 존재하지 않는 토큰 | 유효하지 않은 링크입니다. |
 | 409 | HOST_ALREADY_REGISTERED | 이미 다른 사람이 선점 (MEMBER-02-01) | 이미 다른 분이 약속을 만들었습니다. 본인이 등록했다면 로그인해 주세요. |
 | 410 | LINK_EXPIRED | 기준 시각 + 7일 경과 (MEMBER-01-02) | 만료된 링크입니다. |
-| 422 | VALIDATION_FAILED | 닉네임 길이 위반, PIN 형식 위반 | 닉네임은 2자 이상 12자 이하여야 합니다. |
+| 422 | VALIDATION_FAILED | 닉네임 길이 위반, 닉네임 이모지, PIN 형식 위반. `details.field`에 `nickname` 또는 `pin` | 닉네임은 2자 이상 12자 이하여야 합니다. |
 
 409를 받은 클라이언트는 **본인이 앞서 성공했는지 먼저 확인**해야 한다. 응답이 유실된 뒤 재시도한 경우에도 똑같은 409가 나기 때문이다 (MEMBER-API-00 6장).
 
@@ -295,14 +298,15 @@ Response Body
 3. 연결된 `promises` 행 확인.
    - 있고 draft이며 10분 경과 → 세션 → 방장 참여자 → promise 순서로 삭제 후 계속 진행
    - 있고 그 외 → **409 HOST_ALREADY_REGISTERED**
-4. `promises` 생성 (status = draft, 설정 컬럼은 전부 NULL).
+4. `promises` 생성 (status = draft, 설정 컬럼은 전부 NULL). `created_at`은 잠금 후 읽은 판정 시각으로 넣어 draft 10분이 잠금 대기만큼 줄지 않게 한다. `promise_link_id` UNIQUE 위반(P2002)도 409로 응답한다.
 5. `participants` 생성 (role = host, status = active, password_hash = hash(pin)).
 6. 세션 토큰 생성 → `participant_sessions`에 해시 저장 → 쿠키 발급.
 7. 커밋. 어느 단계든 실패하면 전부 롤백한다 (ERD 8.1).
 
 #### 보안 정보
 
-- PIN은 bcrypt/argon2로 해시해 `password_hash`에만 저장한다.
+- PIN은 Node 내장 `crypto.scrypt`(N=2^15, r=8, p=1, maxmem 64MiB, PIN마다 16바이트 무작위 salt. 매개변수 근거는 DECISION_CONFLICTS R-10)로 해시해 `password_hash`에만 `scrypt$N$r$p$salt$hash` 형식으로 저장한다. 검증은 저장된 매개변수로 다시 계산해 `timingSafeEqual`로 비교한다 (MEMBER-API-04 재사용). 해시 계산은 잠금을 잡기 전에 한다.
+- 세션 만료는 DB 시각 + 24시간, 쿠키 `Max-Age=86400` (MEMBER-API-00 5.2, 확정).
 - 동일 링크에 대한 방장 등록 시도는 IP·토큰 기준 레이트 리밋을 둔다. **[제안]**
 - 세션 토큰은 32바이트 이상 난수를 생성해 원본은 쿠키로만 내려주고 서버에는 해시만 저장한다.
 
