@@ -97,7 +97,7 @@ Next.js의 예를 들면 `/api/integrations/kakao-beta`에서 요청을 받고, 
 | `app/` | 화면과 API. App Router라 폴더 구조가 곧 URL입니다 |
 | `app/api/health/route.ts` | 연결 확인용 API. DB에 붙는지 볼 때 씁니다 |
 | `lib/prisma.ts` | **Prisma 싱글턴.** DB를 쓸 때는 항상 여기서 import합니다 |
-| `prisma/schema.prisma` | DB 스키마. 현재는 연결 확인용 `users` 하나뿐 |
+| `prisma/schema.prisma` | DB 스키마. ERD 신버전 5개 테이블 (`docs/architecture/DATABASE.md`) |
 | `prisma/migrations/` | 마이그레이션 기록. **Git으로 공유**되고 각자 DB에 적용합니다 |
 | `prisma/generated/` | 자동 생성 코드. Git에 안 올라가고 `prisma generate`로 만듭니다 |
 | `prisma.config.ts` | Prisma CLI 설정. DB 주소를 환경변수에서 읽습니다 |

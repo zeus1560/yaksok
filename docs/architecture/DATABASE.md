@@ -87,6 +87,8 @@ erDiagram
 
 모든 시점 컬럼은 @db.Timestamptz(3)으로 지정한다.
 
+모든 `id`는 DB 기본값 `gen_random_uuid()`로, `created_at`은 기본값 `now()`로 생성한다. 그 밖의 기본값은 `promises.status='draft'`, `participants.status='active'`, `participants.availability_version=0`이다. `participants.role`과 `promise_links.source`는 기본값 없이 항상 지정한다.
+
 ### 3.1 `promise_links` — 초대 링크
 
 | 컬럼 | NULL | 역할 |
@@ -111,7 +113,7 @@ erDiagram
 | `daily_end_minute` | 설정 중 허용 | 한국 시각 자정부터 선택 종료 경계까지의 분. 30\~1440의 30분 배수. 1440은 24:00을 뜻한다. |
 | `duration_minutes` | 설정 중 허용 | 약속 전체 길이. 30분 이상의 30분 배수. 예: 90분. |
 | `voting_deadline_at` | 설정 중 허용 | 응답 수정이 종료되는 절대 시각. 서버 판정 시각이 이 값 이상이면 수정 불가. |
-| `status` | 불가 | draft / collecting / closed / confirmed / cancelled 중 하나. |
+| `status` | 불가 | draft / collecting / closed / confirmed / cancelled 중 하나. 기본값 `draft`. |
 | `confirmed_start_at` | 허용 | 최종 약속 시작 날짜·시각. 확정 전과 재조율 시 NULL. |
 | `cancelled_at` | 허용 | 약속이 cancelled로 전환된 실제 시각. 취소 전에는 NULL. |
 | `created_at` | 불가 | 실제 약속이 생성된 시각. 링크 발급 시각과 다를 수 있다. |
@@ -130,7 +132,7 @@ erDiagram
 | `normalized_nickname` | 불가 | 닉네임 정규화 결과. 등록과 로그인에서 동일 규칙을 사용한다. |
 | `password_hash` | 불가 | 약속별 PIN 검증용 해시. PIN 원문은 저장하지 않는다. |
 | `role` | 불가 | host 또는 member. 방장 권한의 기준. |
-| `status` | 불가 | active는 정상 참여, cancelled는 탈퇴·제외. 온라인 여부나 특정 슬롯의 가능 여부가 아니다. |
+| `status` | 불가 | active는 정상 참여, cancelled는 탈퇴·제외. 온라인 여부나 특정 슬롯의 가능 여부가 아니다. 기본값 `active`. |
 | `availability_submitted_at` | 허용 | 현재 제출 완료 시각. NULL이면 미제출 또는 재제출 필요, 값이 있으면 제출 완료. |
 | `availability_version` | 불가 | 참여자별 응답 변경 버전. 기본값 0, 슬롯이나 제출 상태가 DB에서 바뀌는 트랜잭션마다 1 증가. 브라우저 동기화 및 오래된 제출 거부에 사용한다. |
 | `cancelled_at` | 허용 | 참여자가 탈퇴하거나 내보내진 실제 시각. active 상태에서는 NULL. |
@@ -168,11 +170,11 @@ erDiagram
 | 테이블 | 제약 |
 | --- | --- |
 | promise\_links | UNIQUE(invite\_token) |
-| promises | UNIQUE(promise\_link\_id), FK → promise\_[links.id](http://links.id/) ON DELETE RESTRICT |
-| participants | UNIQUE(promise\_id, normalized\_nickname), FK promise\_id → [promises.id](http://promises.id/) ON DELETE RESTRICT |
+| promises | UNIQUE(promise\_link\_id), FK promise\_link\_id → `promise_links.id` ON DELETE RESTRICT ON UPDATE RESTRICT |
+| participants | UNIQUE(promise\_id, normalized\_nickname), FK promise\_id → `promises.id` ON DELETE RESTRICT ON UPDATE RESTRICT |
 | participants | role = 'host' 행에 한해 promise\_id UNIQUE |
-| participant\_available\_slots | UNIQUE(participant\_id, slot\_start\_at), FK participant\_id → [participants.id](http://participants.id/) ON DELETE RESTRICT |
-| participant\_sessions | UNIQUE(session\_token\_hash), FK participant\_id → [participants.id](http://participants.id/) ON DELETE RESTRICT |
+| participant\_available\_slots | UNIQUE(participant\_id, slot\_start\_at), FK participant\_id → `participants.id` ON DELETE RESTRICT ON UPDATE RESTRICT |
+| participant\_sessions | UNIQUE(session\_token\_hash), FK participant\_id → `participants.id` ON DELETE RESTRICT ON UPDATE RESTRICT |
 
 ```sql
 CREATE UNIQUE INDEX uq_one_host_per_promise
@@ -202,22 +204,68 @@ WHERE role = 'host';
 - participants도 `status='cancelled'`일 때만 `cancelled_at`이 존재하고, active 상태에서는 NULL이다.
 - 상태별 필수값은 아래 표대로 검사한다. NULL 허용 컬럼의 단순 비교 CHECK만으로 필수값을 보장할 수 없으므로 IS NOT NULL 조건이 필요하다.
 
+아래 SQL은 `prisma/migrations/*_erd_v2/migration.sql`에 실제로 적용한 CHECK 전체다. Prisma 스키마로 표현할 수 없어 마이그레이션에 직접 작성했다.
+
 ```sql
-ALTER TABLE promise_links
-ADD CONSTRAINT ck_promise_link_source
-CHECK (source IN ('web', 'kakao'));
+-- promise_links
+ALTER TABLE promise_links ADD CONSTRAINT ck_promise_link_source
+  CHECK (source IN ('web', 'kakao'));
 
-ALTER TABLE participants
-ADD CONSTRAINT ck_host_must_be_active
-CHECK (role <> 'host' OR status = 'active');
+-- promises
+ALTER TABLE promises ADD CONSTRAINT ck_promise_status
+  CHECK (status IN ('draft', 'collecting', 'closed', 'confirmed', 'cancelled'));
 
-ALTER TABLE promises
-ADD CONSTRAINT ck_promise_cancelled_at
-CHECK ((status = 'cancelled') = (cancelled_at IS NOT NULL));
+ALTER TABLE promises ADD CONSTRAINT ck_promise_participant_limit
+  CHECK (participant_limit IS NULL OR participant_limit BETWEEN 2 AND 30);
 
-ALTER TABLE participants
-ADD CONSTRAINT ck_participant_cancelled_at
-CHECK ((status = 'cancelled') = (cancelled_at IS NOT NULL));
+ALTER TABLE promises ADD CONSTRAINT ck_promise_date_range
+  CHECK (date_range_start IS NULL OR date_range_end IS NULL OR date_range_start <= date_range_end);
+
+ALTER TABLE promises ADD CONSTRAINT ck_promise_daily_start_minute
+  CHECK (daily_start_minute IS NULL OR (daily_start_minute BETWEEN 0 AND 1410 AND daily_start_minute % 30 = 0));
+
+ALTER TABLE promises ADD CONSTRAINT ck_promise_daily_end_minute
+  CHECK (daily_end_minute IS NULL OR (daily_end_minute BETWEEN 30 AND 1440 AND daily_end_minute % 30 = 0));
+
+ALTER TABLE promises ADD CONSTRAINT ck_promise_daily_range
+  CHECK (daily_start_minute IS NULL OR daily_end_minute IS NULL OR daily_start_minute < daily_end_minute);
+
+ALTER TABLE promises ADD CONSTRAINT ck_promise_duration_minutes
+  CHECK (duration_minutes IS NULL OR (
+    duration_minutes >= 30 AND duration_minutes % 30 = 0
+    AND (daily_start_minute IS NULL OR daily_end_minute IS NULL
+         OR duration_minutes <= daily_end_minute - daily_start_minute)));
+
+ALTER TABLE promises ADD CONSTRAINT ck_promise_cancelled_at
+  CHECK ((status = 'cancelled') = (cancelled_at IS NOT NULL));
+
+-- collecting·closed·confirmed는 모집 설정이 모두 있어야 한다
+ALTER TABLE promises ADD CONSTRAINT ck_promise_required_settings
+  CHECK (status NOT IN ('collecting', 'closed', 'confirmed') OR (
+    participant_limit IS NOT NULL AND date_range_start IS NOT NULL AND date_range_end IS NOT NULL
+    AND daily_start_minute IS NOT NULL AND daily_end_minute IS NOT NULL
+    AND duration_minutes IS NOT NULL AND voting_deadline_at IS NOT NULL));
+
+-- confirmed면 필수, draft·collecting·closed면 NULL, cancelled는 이전 값 유지 가능
+ALTER TABLE promises ADD CONSTRAINT ck_promise_confirmed_start_at
+  CHECK (status = 'cancelled' OR (status = 'confirmed') = (confirmed_start_at IS NOT NULL));
+
+-- participants
+ALTER TABLE participants ADD CONSTRAINT ck_participant_role
+  CHECK (role IN ('host', 'member'));
+
+ALTER TABLE participants ADD CONSTRAINT ck_participant_status
+  CHECK (status IN ('active', 'cancelled'));
+
+ALTER TABLE participants ADD CONSTRAINT ck_host_must_be_active
+  CHECK (role <> 'host' OR status = 'active');
+
+ALTER TABLE participants ADD CONSTRAINT ck_participant_cancelled_at
+  CHECK ((status = 'cancelled') = (cancelled_at IS NOT NULL));
+
+-- participant_available_slots: 00분·30분, 초·소수 초 0 (KST는 UTC+9 고정이라 UTC 기준 판정과 같다)
+ALTER TABLE participant_available_slots ADD CONSTRAINT ck_slot_start_at_boundary
+  CHECK (extract(second FROM slot_start_at) = 0 AND extract(minute FROM slot_start_at) IN (0, 30));
 ```
 
 | 상태 | 정원·날짜·일일 시간·소요 시간·마감 | confirmed\_start\_at | cancelled\_at |
@@ -237,7 +285,7 @@ UNIQUE와 PK에는 인덱스가 생성되므로 동일한 인덱스를 중복 �
 - UNIQUE(participant\_id, slot\_start\_at): 참여자별 슬롯 및 기간 조회에 활용.
 - UNIQUE(promise\_id, normalized\_nickname): 약속별 참여자 조회에도 활용 가능.
 - participant\_sessions(participant\_id): 참여자의 모든 세션 조회·폐기용 추가 인덱스 권장.
-- promises(voting\_deadline\_at) WHERE status = 'collecting': 마감 처리 작업이 주기적으로 약속을 찾는 경우 추가 검토.
+- promises(voting\_deadline\_at) WHERE status = 'collecting': 마감 처리 작업이 주기적으로 약속을 찾는 경우 추가 검토. (P1 자동 마감 도입 시)
 
 FK 선언만으로 참조하는 쪽에 조회 인덱스가 자동 생성되는 것은 아니다. 세부 인덱스 최적화는 실제 실행 계획을 보고 판단한다.
 
@@ -495,7 +543,10 @@ MVP에서는 취소·탈퇴 데이터를 자동 삭제하지 않는다. `cancell
 | 기록 보관 기간 | 10절 "MVP에서는 자동 삭제하지 않음" | STATE-11-02 ❗미결 | 규칙 확정 필요 |
 | 지난 슬롯 처리 | 5.2절 | TIME API 문서에 "ERD 5.2절 첫 문장 수정 필요"로 기록됨 | ERD 수정 대상 |
 
-## 현재 구현 상태 (2026-10-30)
+## 현재 구현 상태 (2026-11-03)
 
-`prisma/schema.prisma` 는 아직 연결 확인용 `User` 모델 하나뿐이다. 이 문서의 5개 테이블로 교체해야 한다.
-Prisma 스키마로 표현할 수 없는 **부분 UNIQUE 인덱스(`WHERE role='host'`)와 CHECK 제약은 마이그레이션 SQL에 직접 작성**해야 한다.
+`prisma/schema.prisma`는 이 문서의 5개 테이블(`PromiseLink`, `Promise`, `Participant`, `ParticipantAvailableSlot`, `ParticipantSession`)로 교체되었다. 마이그레이션 `erd_v2`가 연결 확인용 `users` 테이블을 삭제하고 5개 테이블을 만든다.
+
+Prisma 스키마로 표현할 수 없는 **부분 UNIQUE 인덱스(`uq_one_host_per_promise`)와 4.2절 CHECK 16개는 `erd_v2` 마이그레이션 SQL에 직접 작성**했다. 적용 후 `prisma migrate diff`로 확인한 결과 Prisma는 이 제약들을 지우려 하지 않는다(드리프트 없음). 그래도 새 마이그레이션은 `--create-only`로 먼저 만들고 이 제약을 DROP하는 줄이 없는지 검토한 뒤 적용한다.
+
+`4.3`절의 `participant_sessions(participant_id)` 인덱스는 적용했고, `promises(voting_deadline_at)` 부분 인덱스는 적용하지 않았다.
