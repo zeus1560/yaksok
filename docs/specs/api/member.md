@@ -438,7 +438,7 @@ Response Body
 - 도메인: MEMBER
 - 관련 규칙: MEMBER-04-01, MEMBER-04-02, MEMBER-06-01, MEMBER-06-03, MEMBER-06-04(미정), MEMBER-06-02(미정)
 - 권한: 누구나 (닉네임·PIN을 아는 사람)
-- 허용 상태: draft(생성 후 10분 이내) / collecting / closed / confirmed — 조회는 마감 후에도 가능해야 하므로 로그인 자체는 막지 않는다 (STATE-06-02: 조회 가능, 수정 불가). cancelled는 409 `PROMISE_CANCELLED`, 10분 지난 draft는 404
+- 허용 상태: draft(생성 후 10분 이내) / collecting / closed / confirmed — 조회는 마감 후에도 가능해야 하므로 로그인 자체는 막지 않는다 (STATE-06-02: 조회 가능, 수정 불가). cancelled는 409 `PROMISE_CANCELLED`, 10분 지난 draft는 410 `DRAFT_EXPIRED`(삭제 없음)
 - 상태 전환: 없음
 - 동시성: 약속 잠금 불필요 (읽기 + 세션 생성만). 판정 시각은 DB `clock_timestamp()`
 - TBD: **MEMBER-06-04 (PIN 반복 실패 제한 정책)**, **MEMBER-06-02 (PIN 분실 복구)** — 둘 다 본문 미작성이라 아래 제한값은 제안안
@@ -501,12 +501,13 @@ Response Body
 
 | HTTP 상태 | code | 발생 원인 | message 예시 |
 | --- | --- | --- | --- |
-| 400 | INVALID_REQUEST | JSON 파싱 실패, 필드 누락·문자열 아님 | 요청 형식이 올바르지 않습니다. |
+| 400 | INVALID_REQUEST | JSON 파싱 실패, 필드 누락·문자열 아님, promiseId가 UUID 형식이 아님 | 요청 형식이 올바르지 않습니다. |
 | 401 | INVALID_CREDENTIALS | 닉네임 없음 또는 PIN 불일치 (구분 없음) | 닉네임 또는 PIN이 올바르지 않습니다. |
 | 403 | INVALID_ORIGIN | `Origin` 헤더 없음 또는 서비스 도메인과 다름 (MEMBER-API-00 7절) | 허용되지 않은 요청 출처입니다. |
 | 403 | PARTICIPANT_CANCELLED | 탈퇴했거나 내보내진 참여자 (PIN 인증 성공 후 판정) | 참여가 종료된 계정입니다. |
-| 404 | PROMISE_NOT_FOUND | promiseId가 UUID 형식이 아님, 존재하지 않는 약속, 생성 후 10분 지난 draft | 약속을 찾을 수 없습니다. |
+| 404 | PROMISE_NOT_FOUND | 존재하지 않는 약속 | 약속을 찾을 수 없습니다. |
 | 409 | PROMISE_CANCELLED | cancelled 약속 (STATE-10-01) | 취소된 약속입니다. |
+| 410 | DRAFT_EXPIRED | 생성 후 10분 지난 draft (STATE-02-02). 약속 기준 API 공통 코드, 삭제는 하지 않음 | 설정 시간이 지나 약속이 만료되었습니다. |
 | 410 | ACCESS_PERIOD_EXPIRED | 링크 만료 기준 시각 + 7일 ≤ 판정 시각 (draft 제외) | 접근 기간이 지난 약속입니다. |
 | 422 | VALIDATION_FAILED | 닉네임(등록과 같은 규칙: trim → NFC, 2~12자, 이모지 불가)·PIN(숫자 4자리) 형식 위반 | 닉네임은 2자 이상 12자 이하여야 합니다. |
 
@@ -518,10 +519,10 @@ Response Body
 
 1. `Origin` 검증 → 실패 시 403 `INVALID_ORIGIN`.
 2. 본문 파싱·필드 확인 → 400. 닉네임은 `normalizeNickname`(trim → NFC)을 거쳐 등록과 같은 규칙으로 검증하고, PIN 형식과 함께 위반 시 422.
-3. promiseId가 UUID 형식이 아니거나 약속이 없으면 404 `PROMISE_NOT_FOUND`.
+3. promiseId가 UUID 형식이 아니면 400 `INVALID_REQUEST`(2026-11-04 변경, 이전 404 — 약속 기준 API는 STATE 명세와 같이 400, R-12), 약속이 없으면 404 `PROMISE_NOT_FOUND`.
 4. **약속 상태 판정 (PIN 검증보다 먼저, 약속 잠금 없음, 판정 시각은 DB `clock_timestamp()`).**
    - cancelled → 409 `PROMISE_CANCELLED`
-   - draft이고 `created_at + 10분 ≤ 판정 시각` → 404 `PROMISE_NOT_FOUND`. 삭제는 하지 않는다 (삭제는 MEMBER-API-02 몫)
+   - draft이고 `created_at + 10분 ≤ 판정 시각` → 410 `DRAFT_EXPIRED`(2026-11-04 변경, 이전 404). 이 API는 잠그지 않으므로 삭제는 하지 않는다 (삭제는 잠금을 잡는 MEMBER-API-02·STATE-API-02 몫)
    - draft가 아니면 `linkExpiryBase + 7일 ≤ 판정 시각` → 410 `ACCESS_PERIOD_EXPIRED` (아래 "로그인 가능 기간")
 5. `participants`에서 `(promise_id, normalized_nickname)`로 조회.
 6. 행이 없거나 PIN 해시 불일치면 **둘 다 동일하게 401 INVALID_CREDENTIALS**. 어느 쪽이 틀렸는지 구분해 알려주지 않는다 (ERD 9). 행이 없을 때도 같은 scrypt 매개변수의 더미 해시와 비교해 응답 시간을 비슷하게 유지한다. 실패 반환 지점은 한 곳이다.

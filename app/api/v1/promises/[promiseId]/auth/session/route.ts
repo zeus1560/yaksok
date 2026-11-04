@@ -1,5 +1,6 @@
 import {
   accessPeriodExpired,
+  draftExpired,
   internalError,
   invalidCredentials,
   invalidOrigin,
@@ -48,9 +49,11 @@ export async function POST(
   const { promiseId } = await ctx.params;
   try {
     const result = await loginParticipant(promiseId, { nickname: checked.nickname, pin });
+    if (result.kind === "invalid_request") return invalidRequest();
     if (result.kind === "not_found") return promiseNotFound();
     if (result.kind === "cancelled") return promiseCancelled();
     if (result.kind === "expired") return accessPeriodExpired();
+    if (result.kind === "draft_expired") return draftExpired();
     if (result.kind === "invalid_credentials") return invalidCredentials();
     if (result.kind === "participant_cancelled") return participantCancelled();
 

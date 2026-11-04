@@ -114,6 +114,7 @@ describe("POST /api/v1/promises/[promiseId]/auth/session (MEMBER-API-04)", () =>
     ["not_found", 404, "PROMISE_NOT_FOUND"],
     ["cancelled", 409, "PROMISE_CANCELLED"],
     ["expired", 410, "ACCESS_PERIOD_EXPIRED"],
+    ["draft_expired", 410, "DRAFT_EXPIRED"],
     ["invalid_credentials", 401, "INVALID_CREDENTIALS"],
     ["participant_cancelled", 403, "PARTICIPANT_CANCELLED"],
   ])("%s → %i %s, 쿠키 없음", async (kind, status, code) => {
@@ -124,11 +125,12 @@ describe("POST /api/v1/promises/[promiseId]/auth/session (MEMBER-API-04)", () =>
     expect(res.headers.get("set-cookie")).toBeNull();
   });
 
-  it("UUID 형식 오류는 서비스의 not_found를 받아 404 PROMISE_NOT_FOUND", async () => {
-    loginParticipant.mockResolvedValueOnce({ kind: "not_found" });
+  it("UUID 형식 오류는 서비스의 invalid_request를 받아 400 INVALID_REQUEST, 쿠키 없음", async () => {
+    loginParticipant.mockResolvedValueOnce({ kind: "invalid_request" });
     const res = await call(VALID, { origin: BASE_URL }, "not-a-uuid");
-    expect(res.status).toBe(404);
-    expect((await res.json()).code).toBe("PROMISE_NOT_FOUND");
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe("INVALID_REQUEST");
+    expect(res.headers.get("set-cookie")).toBeNull();
     expect(loginParticipant).toHaveBeenCalledWith("not-a-uuid", expect.anything());
   });
 

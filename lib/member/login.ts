@@ -18,10 +18,12 @@ export type LoginAccess =
   | { kind: "not_found" }
   | { kind: "cancelled" }
   | { kind: "expired" }
+  | { kind: "draft_expired" }
   | { kind: "ok"; sessionExpiresAt: Date };
 
 export type LoginResult =
   | Exclude<LoginAccess, { kind: "ok" }>
+  | { kind: "invalid_request" }
   | { kind: "invalid_credentials" }
   | { kind: "participant_cancelled" }
   | {
@@ -47,9 +49,10 @@ export function resolveLoginAccess(link: LinkWithPromise, now: Date): LoginAcces
   if (promise.status === "cancelled") return { kind: "cancelled" };
 
   if (promise.status === "draft") {
-    // 10분 지난 draft는 없는 약속으로 본다. 삭제는 MEMBER-API-02가 잠금 후 한다 (STATE-02-02)
+    // 10분 지난 draft는 410 DRAFT_EXPIRED(약속 기준 API 공통). 로그인은 잠그지 않으므로 삭제하지 않는다.
+    // 삭제는 잠금을 잡는 MEMBER-API-02·STATE-API-02가 한다 (STATE-02-02)
     if (promise.createdAt.getTime() + DRAFT_EXPIRY_MS <= now.getTime())
-      return { kind: "not_found" };
+      return { kind: "draft_expired" };
     return {
       kind: "ok",
       sessionExpiresAt: new Date(now.getTime() + DRAFT_SESSION_TTL_SECONDS * 1000),
@@ -80,7 +83,8 @@ export async function loginParticipant(
   input: { nickname: string; pin: string },
   options: { sessionToken?: string } = {},
 ): Promise<LoginResult> {
-  if (!UUID.test(promiseId)) return { kind: "not_found" };
+  // 약속 기준 API는 형식 오류를 400으로 구분한다 (STATE 명세와 통일, R-12)
+  if (!UUID.test(promiseId)) return { kind: "invalid_request" };
 
   const [promise, [{ now }]] = await Promise.all([
     prisma.promise.findUnique({

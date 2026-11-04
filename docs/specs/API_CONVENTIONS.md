@@ -59,6 +59,7 @@
 | 404 | LINK_NOT_FOUND / PROMISE_NOT_FOUND | 존재하지 않는 토큰·약속 |
 | 409 | PROMISE_CANCELLED | 취소된 약속에 대한 요청 (STATE API 명세 기준으로 통일, 2026-11-04) |
 | 409 | INVALID_PROMISE_STATE | 이 API에서 허용하지 않는 약속 상태 |
+| 410 | DRAFT_EXPIRED | 약속(promiseId)을 경로로 받는 API에서 생성 후 10분이 지난 draft (STATE-02-02). 잠금을 잡는 쓰기 API는 삭제 후, 잠그지 않는 API는 삭제 없이 응답한다. 링크(inviteToken) 기준 API(MEMBER-API-01)는 에러 대신 `unclaimed`로 응답한다 (2026-11-04, DECISION_CONFLICTS R-11·R-12) |
 | 422 | VALIDATION_FAILED | 형식은 맞지만 값이 규칙 위반 (닉네임 길이, PIN 형식 등) |
 | 500 | INTERNAL_ERROR | 서버 오류. 비밀값은 로그·응답에 남기지 않는다 |
 
@@ -91,6 +92,8 @@
 - **저장:** 원본 토큰은 브라우저에만 두고 서버는 `participant_sessions.session_token_hash`에 해시만 저장한다.
 - **다중 기기:** 여러 기기 동시 로그인을 허용하고 기기별 세션을 따로 둔다 (MEMBER-04-02).
 - **매 요청 재검증:** 세션 만료, 참여자 `status = active`, 약속 현재 상태를 요청마다 다시 확인한다. 클라이언트가 보낸 `isHost`·`participantId`는 믿지 않는다.
+- **세션 인증 순서 (공통 모듈 `lib/member/session-auth.ts`):** promiseId 형식(400 `INVALID_REQUEST`) → 약속 존재(404) → cancelled면 세션 검사보다 먼저 409 `PROMISE_CANCELLED` → `ys_session_{promiseId}` 쿠키의 SHA-256 해시로 세션 조회 → `expires_at > DB 시각`·참여자 `status=active`(실패 시 401 `UNAUTHENTICATED`) → 다른 약속 소속이면 403 `FORBIDDEN`.
+- **쿠키 갱신 (2026-11-04, DECISION_CONFLICTS R-12):** 세션 인증에 성공한 요청의 **모든 응답**(에러 포함)은 `Set-Cookie`로 쿠키를 다시 보낸다. `Max-Age`는 응답 시점 DB `expires_at`까지 남은 초(내림)이며, 같은 요청에서 `expires_at`이 바뀌었으면 바뀐 값으로 계산한다. 같은 요청에서 세션 행이 삭제됐으면 `Max-Age=0`으로 쿠키를 지운다. 서버가 세션을 연장해도 브라우저 쿠키가 처음 받은 Max-Age로 먼저 사라지는 문제를 막기 위해서다.
 
 ### 5.1 쿠키 Path가 만드는 제약 — 반드시 지킬 것
 
@@ -110,7 +113,7 @@ MEMBER-API-01 응답에 본인 정보를 담지 않는 이유가 이것이다.
 | 시점 | 세션 만료(`expires_at`)와 쿠키 Max-Age | 근거 |
 | --- | --- | --- |
 | draft에서 발급 | 발급 시점(DB 시각) + 24시간, 쿠키 Max-Age=86400 | 마감 시각이 아직 없음. **확정 (2026-11-04, DECISION_CONFLICTS R-10)** — 규칙 본문에는 없음 |
-| 모집 시작(draft → collecting) | 해당 약속의 **모든** 세션을 `voting_deadline_at + 7일`로 갱신하고, 이후 요청의 응답에서 Set-Cookie로 쿠키 Max-Age도 갱신한다 | MEMBER-06-03 |
+| 모집 시작(draft → collecting) | 해당 약속의 `status=active` 참여자 세션 중 **아직 유효한 것만** `voting_deadline_at + 7일`로 갱신한다(만료됐거나 cancelled 참여자의 세션은 되살리지 않음, STATE-API-00·02). 요청자 쿠키는 그 응답에서, 다른 기기 쿠키는 이후 세션 인증 응답에서 Set-Cookie로 Max-Age를 갱신한다 | MEMBER-06-03 |
 | 마감 연장·단축 | 동일하게 모든 세션을 새 `voting_deadline_at + 7일`로 갱신한다. 단축이어도 세션을 끊지 않는다 — 마감 후 조회는 허용되기 때문 | STATE-06-02 |
 | 조기 마감 | 기준은 **실제 마감 처리 시각**이다. 설정돼 있던 `voting_deadline_at`이 아니라 `closed`로 전환된 시각 + 7일 | **[제안 — 규칙 본문에 없음]** |
 | 탈퇴·내보내기 | 해당 참여자의 모든 세션 expires_at을 현재 시각으로 변경해 즉시 만료한다(행은 삭제하지 않음). 이후 그 쿠키는 401 | MEMBER-10-03 |
