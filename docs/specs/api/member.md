@@ -323,10 +323,10 @@ Response Body
 - 도메인: MEMBER
 - 관련 규칙: MEMBER-03-02, MEMBER-04-01, MEMBER-05-01, MEMBER-05-05, MEMBER-05-06, MEMBER-06-01, MEMBER-06-03, MEMBER-07-02, STATE-06-01
 - 권한: 누구나 (링크를 아는 사람). 성공 시 member 역할
-- 허용 상태: **collecting 이고 현재 시각 < 마감** 일 때만. draft·closed·confirmed·cancelled는 409
+- 허용 상태: **collecting 이고 현재 시각 < 마감** 일 때만. cancelled 409 `PROMISE_CANCELLED`, draft 409 `PROMISE_NOT_OPEN`(10분 지났으면 410 `DRAFT_EXPIRED`), closed·confirmed 409 `INVALID_PROMISE_STATE`
 - 상태 전환: 없음
-- 동시성: **필수.** `promises` 행을 FOR UPDATE로 잠그고 상태·마감·정원을 검사한 뒤 참여자를 생성한다. 닉네임 경합은 `UNIQUE(promise_id, normalized_nickname)`가 최종 방어 (ERD 8.2)
-- TBD: EXCEPTION-02-01(마지막 정원 경쟁), EXCEPTION-03-01(동일 닉네임 경쟁), EXCEPTION-10-02(중복 참여 요청)
+- 동시성: **필수.** `promises` 행만 FOR UPDATE로 잠그고(삭제를 하지 않으므로 링크 잠금 불필요, MEMBER-API-00 4.1-3) 상태·마감·닉네임·정원을 검사한 뒤 참여자를 생성한다. 닉네임 경합은 `UNIQUE(promise_id, normalized_nickname)`가 최종 방어 (ERD 8.2)
+- 결정 (2026-11-04, DECISION_CONFLICTS R-13): EXCEPTION-02-01(마지막 정원 경쟁)·03-01(동일 닉네임 경쟁)은 약속 행 잠금으로 직렬화되어 먼저 커밋한 요청이 이긴다. EXCEPTION-10-02(중복 참여 요청)는 아래 「중복 참여」
 
 ### 1. 기본 정보
 
@@ -338,7 +338,14 @@ Response Body
 
 방장이 설정을 끝내기 전(draft)에는 등록할 수 없고, "방장이 약속을 설정 중입니다" 화면만 보여준다 (MEMBER-03-02).
 
-**등록에 성공해야 비로소 약속 내용을 볼 수 있다.** MEMBER-API-01은 상태만 주므로, 날짜·시간 범위·정원 같은 설정 값은 이 API의 201 응답과 이후 조회 API에서 처음 내려간다 (MEMBER-08-01).
+**등록에 성공해야 비로소 약속 내용을 볼 수 있다.** MEMBER-API-01은 상태만 주므로, 날짜·시간 범위·정원 같은 설정 값은 등록 후 받은 세션으로 호출하는 조회 API에서 내려간다 (MEMBER-08-01). 이 API의 201 응답에는 정원(`participantLimit`)과 현재 인원만 담는다.
+
+#### 중복 참여 (EXCEPTION-10-02, 2026-11-04 결정)
+
+- 같은 닉네임을 반복해 등록하면 409 `NICKNAME_TAKEN`을 받고 로그인(MEMBER-API-04)으로 복구한다.
+- 이 약속의 **유효한 세션을 가진 브라우저**(세션 미만료 + active 참여자)가 다른 닉네임으로 등록하면 409 `ALREADY_PARTICIPANT`. 쿠키가 없거나 무효·만료·cancelled 참여자의 세션이면 401을 내지 않고 등록을 진행한다.
+- 한 브라우저를 여러 사람이 쓰는 경우는 다른 브라우저로 등록하는 것으로 감수한다.
+- 다른 기기·브라우저에서 다른 닉네임으로 재가입하는 것은 비회원 구조의 한계로 막지 않는다 (ERD 9).
 
 #### 재참여는 허용하지 않는다
 
@@ -378,7 +385,7 @@ Response Body
 | currentParticipantCount | number | 등록 후 active 참여자 수 (방장·미제출자 포함, 탈퇴자 제외 — MEMBER-07-02) |
 | participantLimit | number | 방장 포함 정원 |
 
-응답 헤더: `Set-Cookie: ys_session_{promiseId}=...` (MEMBER-API-00 쿠키 규약 동일)
+응답 헤더: `Set-Cookie: ys_session_{promiseId}=...` (MEMBER-API-00 쿠키 규약 동일, `sessionCookie` 모듈). 세션 `expires_at`은 `linkExpiryBase + 7일`(collecting이므로 `voting_deadline_at + 7일`), `Max-Age`는 잠금 후 판정 시각 기준 `expires_at`까지 남은 초(내림)다 (MEMBER-API-00 5.2). 모든 응답에 `Cache-Control: no-store`.
 
 Response Body
 
@@ -398,30 +405,49 @@ Response Body
 
 | HTTP 상태 | code | 발생 원인 | message 예시 |
 | --- | --- | --- | --- |
+| 400 | INVALID_REQUEST | JSON 파싱 실패, `nickname`·`pin` 누락 또는 문자열이 아님, promiseId가 UUID 형식이 아님 (R-12) | 요청 형식이 올바르지 않습니다. |
+| 403 | INVALID_ORIGIN | `Origin` 헤더 없음 또는 서비스 도메인과 다름 (MEMBER-API-00 7절). DB에 아무것도 쓰지 않는다 | 허용되지 않은 요청 출처입니다. |
 | 404 | PROMISE_NOT_FOUND | 존재하지 않는 promiseId | 약속을 찾을 수 없습니다. |
-| 409 | PROMISE_NOT_OPEN | draft — 방장이 아직 설정 중 (MEMBER-03-02) | 방장이 약속을 설정 중입니다. |
-| 409 | INVALID_PROMISE_STATE | closed·confirmed·cancelled에서의 신규 참여. 방장이 재조율을 시작하고 정원을 늘려야 허용된다 (STATE-06-01) | 마감된 약속에는 참여할 수 없습니다. |
-| 409 | DEADLINE_PASSED | 상태는 collecting이지만 마감 시각을 지남 | 응답 마감이 지났습니다. |
+| 409 | PROMISE_CANCELLED | 취소된 약속 (STATE-10-01) | 취소된 약속입니다. |
+| 409 | ALREADY_PARTICIPANT | 이 약속의 유효한 세션(active 참여자)을 가진 브라우저의 등록 (EXCEPTION-10-02, R-13) | 이 브라우저는 이미 이 약속에 참여 중입니다. |
+| 409 | PROMISE_NOT_OPEN | 생성 후 10분 이내 draft — 방장이 아직 설정 중 (MEMBER-03-02) | 방장이 약속을 설정 중입니다. |
+| 409 | INVALID_PROMISE_STATE | closed·confirmed에서의 신규 참여. 방장이 재조율을 시작하고 정원을 늘려야 허용된다 (STATE-06-01). `details`: `promiseStatus`, `allowedStates: ["collecting"]` | 현재 약속 상태에서는 요청할 수 없습니다. |
+| 409 | DEADLINE_PASSED | 상태는 collecting이지만 판정 시각 ≥ 마감. 상태는 바꾸지 않는다 | 응답 마감이 지났습니다. |
+| 409 | NICKNAME_TAKEN | 같은 약속에 동일 정규화 닉네임 존재. 탈퇴·내보내진 행도 포함한다 (MEMBER-05-05, 05-06, 11-01, 11-02). `details.field = "nickname"` | 이미 사용 중인 닉네임입니다. 본인이 등록했다면 로그인해 주세요. |
 | 409 | PROMISE_FULL | active 참여자 수가 정원에 도달 | 참여 정원이 모두 찼습니다. |
-| 409 | NICKNAME_TAKEN | 같은 약속에 동일 정규화 닉네임 존재. 탈퇴·내보내진 행도 포함한다 (MEMBER-05-05, 05-06, 11-01, 11-02) | 이미 사용 중인 닉네임입니다. 본인이 등록했다면 로그인해 주세요. |
-| 422 | VALIDATION_FAILED | 닉네임·PIN 형식 위반 | PIN은 숫자 4자리여야 합니다. |
+| 410 | DRAFT_EXPIRED | 생성 후 10분 지난 draft (STATE-02-02). 이 API는 링크를 잠그지 않으므로 삭제하지 않는다 (R-12) | 설정 시간이 지나 약속이 만료되었습니다. |
+| 422 | VALIDATION_FAILED | 닉네임(trim → NFC, 2~12자, 이모지 불가)·PIN(숫자 4자리) 형식 위반. `details.field` | PIN은 숫자 4자리여야 합니다. |
 
 ### 처리 순서 / 비고
 
-#### 처리 순서 (단일 트랜잭션)
+#### 처리 순서 (2026-11-04 변경, DECISION_CONFLICTS R-13)
 
-1. 입력 검증 (닉네임 2~12자, PIN 4자리). 실패 시 422.
-2. `SELECT ... FROM promises WHERE id = $1 FOR UPDATE`.
-3. 상태가 collecting이 아니면 409 `INVALID_PROMISE_STATE`. draft면 `PROMISE_NOT_OPEN`으로 구분해 안내한다 (MEMBER-03-02).
-4. **잠금을 얻은 뒤 `clock_timestamp()`로 읽은** 서버 현재 시각이 `voting_deadline_at` 이상이면 409 `DEADLINE_PASSED` (ERD 8.2, STATE-06-01).
-5. active 참여자 수 ≥ `participant_limit`이면 409 `PROMISE_FULL`.
-6. `normalized_nickname` 중복 검사. **탈퇴·내보내진(cancelled) 행도 중복으로 간주**한다 (MEMBER-05-06). 걸리면 409 `NICKNAME_TAKEN`.
-7. `participants` 생성 → 세션 발급 → 커밋.
+요청 단계 (DB 잠금 전)
+
+1. `Origin` 검증 → 실패 시 403 `INVALID_ORIGIN`.
+2. 본문 파싱·필드 확인 → 400. 닉네임은 `normalizeNickname`(trim → NFC) 후 등록 규칙으로, PIN은 형식으로 검증 → 위반 시 422.
+3. promiseId가 UUID 형식이 아니면 400 `INVALID_REQUEST`, 약속이 없으면 404, cancelled면 409 `PROMISE_CANCELLED`.
+4. **기존 참여 확인 (EXCEPTION-10-02).** `ys_session_{promiseId}` 쿠키가 있고 그 세션이 미만료이며 active 참여자의 것이면 409 `ALREADY_PARTICIPANT`. 쿠키가 없거나 무효·만료·cancelled 참여자면 401을 내지 않고 진행한다 (`session-auth.ts`의 선택적 확인 `findActivePromiseSession`, 판정 시각은 DB `clock_timestamp()`).
+5. PIN 해시를 계산한다 (잠금 전).
+
+트랜잭션
+
+6. `SELECT ... FROM promises WHERE id = $1 FOR UPDATE` (링크 행은 잠그지 않음). 판정 시각은 **잠금 후 `clock_timestamp()`**.
+7. cancelled → 409 `PROMISE_CANCELLED`.
+8. draft: `created_at + 10분 ≤ 판정 시각`이면 410 `DRAFT_EXPIRED`(삭제 없음), 아니면 409 `PROMISE_NOT_OPEN` (MEMBER-03-02).
+9. closed·confirmed → 409 `INVALID_PROMISE_STATE`.
+10. 판정 시각 ≥ `voting_deadline_at` → 409 `DEADLINE_PASSED` (경계값 거절, 상태 변경 없음 — ERD 8.2, STATE-06-01).
+11. `normalized_nickname`이 같은 참여자가 **상태와 관계없이(cancelled 포함)** 있으면 409 `NICKNAME_TAKEN` (MEMBER-05-06).
+12. active 참여자 수 ≥ `participant_limit` → 409 `PROMISE_FULL`.
+13. `participants`(role = member, status = active) 생성 → 세션 발급 → 커밋. 생성 중 UNIQUE 위반(P2002)도 409 `NICKNAME_TAKEN`.
+
+**닉네임 검사를 정원 검사보다 먼저 하는 이유:** 마지막 자리를 차지한 사람이 응답을 받지 못하고 같은 닉네임으로 재시도하면, 정원을 먼저 볼 경우 `PROMISE_FULL`을 받아 본인이 이미 등록됐다는 사실을 알 수 없다. 닉네임을 먼저 보면 `NICKNAME_TAKEN`을 받아 로그인 복구(MEMBER-API-04, MEMBER-API-00 6절)로 넘어갈 수 있다. 정원이 찬 약속에서 남의 닉네임과 겹친 신규 사용자도 `NICKNAME_TAKEN`을 받지만, 어느 쪽이든 등록은 거절되므로 결과는 같다.
 
 #### 보안 정보
 
 - **응답 유실 복구:** `NICKNAME_TAKEN`은 남이 썰 경우와 본인이 이미 등록해 놓고 응답만 못 받은 경우를 구분할 수 없다. 클라이언트는 같은 닉네임·PIN으로 MEMBER-API-04를 호출해 본인 여부를 판별한다 (MEMBER-API-00 6장).
 - 등록과 로그인은 별도 엔드포인트다. 이미 존재하는 닉네임으로 등록을 시도해도 **PIN을 검증해 로그인시키지 않는다.** 그렇게 하면 등록 폼이 PIN 대입 공격 경로가 된다. 닉네임 중복 시 로그인 화면(MEMBER-API-04)으로 안내한다.
+- PIN·세션 토큰 원문은 로그와 응답 본문 어디에도 남기지 않는다. 세션 토큰은 쿠키로만 내려준다.
 - 등록 요청도 IP 기준 레이트 리밋을 둔다. **[제안]**
 - 참여 제외만으로는 동일인이 새 닉네임으로 재가입하는 것을 막지 못한다. 비회원 구조의 한계로 명시된 사항이다 (ERD 9).
 

@@ -14,6 +14,7 @@ vi.mock("@/lib/prisma", () => ({
 import { hashSessionToken } from "./session";
 import {
   authenticatePromiseSession,
+  findActivePromiseSession,
   readCookie,
   withSessionCookie,
   type PromiseSession,
@@ -149,6 +150,50 @@ describe("authenticatePromiseSession (세션 인증 공통)", () => {
       PROMISE_ID.toUpperCase(),
     );
     expect(result.kind).toBe("ok");
+  });
+});
+
+describe("findActivePromiseSession (선택적 확인 모드)", () => {
+  beforeEach(() => {
+    for (const fn of [promiseFindUnique, sessionFindUnique, queryRaw]) fn.mockReset();
+  });
+
+  it("유효 세션 + active 참여자 → 참여자 id", async () => {
+    mockSession();
+    expect(await findActivePromiseSession(request(`${COOKIE}=${TOKEN}`), PROMISE_ID, NOW)).toEqual({
+      participantId: "pt-1",
+    });
+  });
+
+  it("쿠키 없음 → null, 세션 조회 없음", async () => {
+    expect(await findActivePromiseSession(request(), PROMISE_ID, NOW)).toBeNull();
+    expect(sessionFindUnique).not.toHaveBeenCalled();
+  });
+
+  it("위조 쿠키 → null", async () => {
+    sessionFindUnique.mockResolvedValueOnce(null);
+    expect(await findActivePromiseSession(request(`${COOKIE}=forged`), PROMISE_ID, NOW)).toBeNull();
+  });
+
+  it("만료 세션(expires_at = DB 시각) → null", async () => {
+    mockSession({ expiresAt: NOW });
+    expect(
+      await findActivePromiseSession(request(`${COOKIE}=${TOKEN}`), PROMISE_ID, NOW),
+    ).toBeNull();
+  });
+
+  it("cancelled 참여자의 세션 → null", async () => {
+    mockSession({ status: "cancelled" });
+    expect(
+      await findActivePromiseSession(request(`${COOKIE}=${TOKEN}`), PROMISE_ID, NOW),
+    ).toBeNull();
+  });
+
+  it("다른 약속의 세션 → null", async () => {
+    mockSession({ promiseId: OTHER_PROMISE_ID });
+    expect(
+      await findActivePromiseSession(request(`${COOKIE}=${TOKEN}`), PROMISE_ID, NOW),
+    ).toBeNull();
   });
 });
 
