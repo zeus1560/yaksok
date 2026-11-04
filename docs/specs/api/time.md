@@ -23,11 +23,11 @@
 - 도메인: TIME
 - 관련 규칙: TIME-02-02(API 시간 형식), TIME-02-03(시간 정밀도), TIME-05-02(자정 넘김), TIME-06-01(슬롯 입력 단위), TIME-07-01(시간 구간 경계), TIME-08-01(과거 슬롯 입력), TIME-10-01~04(저장·제출·반영), TIME-11-01~02(제출 후 수정), TIME-12-01(빈 선택 제출), TIME-15-01~04(마감 판정), STATE-09-04(범위 변경 시 제출 상태), STATE-10-01(취소)
 - 권한: 이 약속의 **active 참여자 본인**(방장 포함). 다른 참여자의 입력은 수정할 수 없다.
-- 허용 상태: effectiveStatus가 collecting일 때만 허용한다. draft·closed·confirmed·cancelled는 409로 거절한다.
-- 상태 전환: DB 상태는 collecting인데 마감 시각이 지났으면, 이 요청이 closed로 전환해 **커밋한 뒤** 409를 반환한다.
+- 허용 상태: effectiveStatus가 collecting일 때만 허용한다. draft·closed·confirmed·cancelled는 409로 거절하고, 생성 후 10분이 지난 draft는 410 `DRAFT_EXPIRED`(삭제 없음)로 거절한다.
+- 상태 전환: DB 상태는 collecting인데 마감 시각이 지났으면, 이 요청이 closed로 전환해 **커밋한 뒤** 409 `VOTING_CLOSED`를 반환한다. 응답은 에러여도 전환은 롤백하지 않는다.
 - 동시성: promises 행을 FOR UPDATE로 잠근다. 마감 판정 시각은 잠금을 얻은 뒤의 DB 시각(`clock_timestamp()`)으로 한다.
 - 동기화: `participants.availability_version`으로 판단한다. 슬롯이나 제출 상태를 바꾸는 모든 API는 버전을 +1 한다(STATE 범위 변경·재조율 포함). 탈퇴·내보내기는 슬롯·제출 상태를 보존하므로 버전을 올리지 않는다(ERD 6.2).
-- TBD: 상한 초과 에러 코드
+- 상한: 원본 slots 5,000개 초과 422 `SLOT_LIMIT_EXCEEDED`, 본문 256KB 초과 413 `PAYLOAD_TOO_LARGE` (2026-11-04 확정, DECISION_CONFLICTS R-14)
 
 #### 1. 기본 정보
 
@@ -44,6 +44,7 @@
 | Name | Value | 필수 |
 | --- | --- | --- |
 | Cookie | `ys_session_{promiseId}=...` | O |
+| Origin | 서비스 도메인(`NEXT_PUBLIC_BASE_URL`의 origin) | O |
 | Content-Type | `application/json` | O |
 
 **Path 파라미터**
@@ -81,7 +82,7 @@
 | version | integer | 저장 후 새 버전. 브라우저는 이 값을 다음 baseVersion으로 쓴다 |
 | submitted | boolean | 항상 true |
 | submittedAt | string (ISO-8601, 밀리초 3자리) | 제출 시각 |
-| slots | string[] | 저장 후 서버에 있는 내 슬롯 전체(그대로 둔 지난 슬롯 포함). 시각 오름차순 |
+| slots | string[] | 저장 후 서버에 있는 내 슬롯 전체(그대로 둔 지난 슬롯 포함). 시각 오름차순. 초 단위 표기(`2026-10-28T14:00:00+09:00`, 밀리초 없음) |
 | droppedSlotCount | integer | 날짜·하루 시간 범위 밖이라 저장하지 않은 슬롯 수(지난 슬롯은 세지 않음) |
 
 ```json
@@ -101,29 +102,33 @@
 
 #### 에러
 
-형식: `{"error":{"code","message","details"}}`
+형식: `{ "code", "message", "details"? }` (API_CONVENTIONS 3절). 세션 인증에 성공한 뒤의 모든 응답(에러 포함)은 쿠키를 갱신한다(API_CONVENTIONS 5절).
 
 | HTTP 상태 | code | 발생 원인 | message 예시 |
 | --- | --- | --- | --- |
-| 401 | `UNAUTHENTICATED` | 세션 쿠키 없음·만료, 탈퇴·내보내진 참여자, 다른 약속의 세션 (ERD 11절) | 다시 로그인해 주세요. |
+| 400 | `INVALID_REQUEST` | promiseId 형식 오류. JSON 파싱 실패, baseVersion(0 이상 정수)·slots(문자열 배열) 누락·타입 오류 | 요청 형식이 올바르지 않습니다. |
+| 401 | `UNAUTHENTICATED` | 세션 쿠키 없음·만료, 탈퇴·내보내진 참여자(잠금 후 재확인 포함, ERD 11절) | 다시 로그인해 주세요. |
+| 403 | `INVALID_ORIGIN` | Origin 헤더 없음·불일치 (A-09) | 허용되지 않은 요청 출처입니다. |
+| 403 | `FORBIDDEN` | 다른 약속의 세션 | 이 작업을 수행할 권한이 없습니다. |
 | 404 | `PROMISE_NOT_FOUND` | 없는 약속 | 약속을 찾을 수 없습니다. |
-| 409 | `PROMISE_NOT_COLLECTING` | draft(방장 설정 중) | 아직 시간을 입력할 수 없습니다. |
+| 409 | `PROMISE_NOT_OPEN` | draft(방장 설정 중) | 방장이 약속을 설정 중입니다. |
 | 409 | `VOTING_CLOSED` | 마감·확정됨 (마감 시각에 막 도달한 경우 포함) | 응답이 마감되었습니다. |
 | 409 | `PROMISE_CANCELLED` | 취소된 약속 | 취소된 약속입니다. |
-| 409 | `AVAILABILITY_VERSION_CONFLICT` | baseVersion ≠ 현재 버전. details: `{ "currentVersion": 5, "submitted": true, "slots": ["2026-10-28T14:00:00.000+09:00"] }` | 다른 기기에서 먼저 저장했어요. 최신 내용을 확인해 주세요. |
-| 422 | `INVALID_REQUEST_BODY` | baseVersion·slots 누락, 타입 오류 | 요청 형식이 올바르지 않습니다. |
-| 422 | `INVALID_SLOT_FORMAT` | +09:00 아님, 분이 00·30 아님, 초가 0 아님, 존재하지 않는 날짜 | 시간 형식이 올바르지 않습니다. |
-| 422 | `SLOT_LIMIT_EXCEEDED` **[제안]** | 원본 slots 5,000개 초과 (제외·중복 정리 전 개수 기준) | 한 번에 저장할 수 있는 시간은 5,000칸까지입니다. |
+| 409 | `AVAILABILITY_VERSION_CONFLICT` | baseVersion ≠ 현재 버전(재시도 아님). details: `{ "currentVersion": 5, "submitted": true, "slots": ["2026-10-28T14:00:00+09:00"] }` (slots는 200과 같은 초 단위 표기) | 다른 기기에서 먼저 저장했어요. 최신 내용을 확인해 주세요. |
+| 410 | `DRAFT_EXPIRED` | 생성 후 10분이 지난 draft. 링크를 잠그지 않으므로 삭제하지 않는다 (R-12) | 설정 시간이 지나 약속이 만료되었습니다. |
+| 413 | `PAYLOAD_TOO_LARGE` | 본문 256KB 초과 (Content-Length와 실제 읽은 크기 모두 확인) | 요청 본문이 너무 큽니다. |
+| 422 | `INVALID_SLOT_FORMAT` | +09:00 아님, 분이 00·30 아님, 초가 0 아님(밀리초는 .000만 허용), 존재하지 않는 날짜 | 시간 형식이 올바르지 않습니다. |
+| 422 | `SLOT_LIMIT_EXCEEDED` | 원본 slots 5,000개 초과 (제외·중복 정리 전 개수 기준) | 한 번에 저장할 수 있는 시간은 5,000칸까지입니다. |
 
 409 AVAILABILITY_VERSION_CONFLICT를 받으면 브라우저는 로컬 입력을 폐기하고 "다른 기기에서 먼저 저장했어요"를 안내한 뒤, details의 최신 값(currentVersion·submitted·slots)으로 화면을 다시 그린다. 다시 조회할 필요가 없다(TIME-10-04, ERD 8.2).
 
 #### 처리 순서
 
-1. 세션 쿠키를 검증한다. 없거나 만료됐으면 401 (MEMBER-API-00 공통 규약).
-2. 트랜잭션 전에 Body 형식을 검사한다. 형식 오류는 422, 원본 slots가 5,000개를 넘으면 422.
-3. 트랜잭션을 시작하고 promises 행을 `FOR UPDATE`로 잠근다. 행이 없으면 404.
-4. 잠금을 얻은 뒤 DB 현재 시각을 읽고 effectiveStatus를 판정한다. cancelled는 409 PROMISE_CANCELLED, draft는 409 PROMISE_NOT_COLLECTING, closed·confirmed는 409 VOTING_CLOSED. collecting인데 현재 시각 ≥ 마감 시각이면 status를 closed로 바꿔 **커밋**한 뒤 409 VOTING_CLOSED.
-5. 세션의 참여자가 이 약속 소속이고 active인지 다시 확인한다. 아니면 401 UNAUTHENTICATED(탈퇴·내보내기 포함, ERD 11절).
+1. Origin을 검증한다. 없거나 다르면 403 `INVALID_ORIGIN`. 모든 응답에 `Cache-Control: no-store`.
+2. 본문 크기를 확인한다. Content-Length 또는 실제로 읽은 크기가 256KB를 넘으면 413 `PAYLOAD_TOO_LARGE`.
+3. 세션 인증 공통 모듈(`lib/member/session-auth.ts`) 순서로 인증한다: promiseId 형식 400 → 약속 없음 404 → cancelled 409 `PROMISE_CANCELLED`(세션 검사보다 먼저) → 세션 없음·만료·cancelled 참여자 401 → 다른 약속 세션 403 `FORBIDDEN`. 이후의 모든 응답은 쿠키를 갱신한다.
+4. 트랜잭션 전에 Body 형식을 검사한다. 형식 오류는 400 `INVALID_REQUEST`, 원본 slots가 5,000개를 넘으면 422 `SLOT_LIMIT_EXCEEDED`, 슬롯 문자열 형식 오류는 422 `INVALID_SLOT_FORMAT`. 같은 시각은 하나로 합친다.
+5. 트랜잭션을 시작하고 promises 행을 `FOR UPDATE`로 잠근 뒤 DB 현재 시각(`clock_timestamp()`)을 읽어 판정한다. cancelled는 409 `PROMISE_CANCELLED`, draft는 생성 후 10분이 지났으면 410 `DRAFT_EXPIRED`(삭제 없음) 아니면 409 `PROMISE_NOT_OPEN`, closed·confirmed는 409 `VOTING_CLOSED`. collecting인데 현재 시각 ≥ 마감 시각이면 status를 closed로 바꿔 **커밋**한 뒤 409 `VOTING_CLOSED`(에러 응답이어도 전환은 롤백하지 않는다). 이어서 세션과 참여자를 다시 확인한다 — 세션이 만료됐거나(탈퇴·내보내기는 세션을 즉시 만료) 참여자가 이 약속의 active 참여자가 아니면 401 `UNAUTHENTICATED`(ERD 11절).
 6. 저장 가능한 슬롯만 남긴다(DB는 바꾸지 않는다). 한국 날짜가 날짜 범위 안이고, 시작 ≥ 하루 시작 시각이고, 시작 + 30분 ≤ 하루 종료 시각(24:00은 1440분)이어야 한다. (10/27 확정) 지난 슬롯(시작 시각 ≤ 현재)은 거절하지도 저장하지도 않고 무시하며 droppedSlotCount에도 넣지 않는다. 이미 저장된 지난 슬롯은 8번에서 지우지 않고 그대로 둔다(지난 시간은 추가·삭제 불가, TIME-08-01). 재제출 때 화면에 남아 있던 지난 슬롯이 함께 전송돼도 422가 나지 않고, 과거 기록도 보존하기 위해서다.
 7. `availability_version`과 baseVersion이 다르면 먼저 재시도인지 확인한다(ERD 8.2). 6번에서 남은 슬롯이 서버에 저장된 내 슬롯(지난 슬롯 제외)과 같고 제출 상태면, 이미 저장된 요청의 재시도로 보고 아무것도 바꾸지 않은 채 200을 반환한다(버전·제출 시각 그대로). 응답이 유실돼 같은 요청을 다시 보낸 경우 충돌로 오인하지 않기 위해서다. 다르면 409 `AVAILABILITY_VERSION_CONFLICT`. 아무것도 저장하지 않고, details에 현재 버전·제출 여부·저장 슬롯을 담아 반환한다(ERD 8.2).
 8. 내 기존 슬롯 중 미래 슬롯(시작 시각 > 현재)만 삭제하고 남은 슬롯을 넣는다. 지난 슬롯은 그대로 둔다. 즉 미래 칸은 덮어쓰고 지난 칸은 고정한다. `availability_submitted_at = 현재 시각`, `availability_version + 1`로 갱신한다.
@@ -131,7 +136,7 @@
 
 #### 코드 예제
 
-구조를 보여주는 예제이며 모델·헬퍼 이름은 실제 스키마에 맞게 바꾼다. 하루 경계는 ERD대로 분 값(`daily_start_minute`·`daily_end_minute`, 24:00=1440)으로 저장돼 있어 숫자 그대로 읽는다. Asia/Seoul은 서머타임이 없어 +9시간 고정 계산이 가능하다.
+구조를 보여주는 예제이며 모델·헬퍼 이름은 실제 스키마에 맞게 바꾼다. 에러 코드·처리 순서·슬롯 표기는 위 에러 표·처리 순서·응답 표가 기준이다(예제는 정렬 전 코드를 담고 있고, `toKstIso`는 슬롯에도 밀리초를 붙인다). 실제 구현: `app/api/v1/promises/[promiseId]/me/availability/route.ts`, `lib/time/slots.ts`, `lib/time/submit-availability.ts`. 하루 경계는 ERD대로 분 값(`daily_start_minute`·`daily_end_minute`, 24:00=1440)으로 저장돼 있어 숫자 그대로 읽는다. Asia/Seoul은 서머타임이 없어 +9시간 고정 계산이 가능하다.
 
 ```ts
 // app/api/v1/promises/[promiseId]/me/availability/route.ts
@@ -265,8 +270,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ promiseI
 - 대상 참여자는 세션으로만 정한다. Body·쿼리의 participantId, isHost 값은 받지 않는다.
 - 세션이 유효해도 잠금 안에서 active 여부와 약속 소속을 다시 검사한다. 탈퇴한 사람이 쿠키를 들고 있어도 막기 위해서다(ERD 11절).
 - 세션 쿠키는 HttpOnly, Secure, SameSite=Lax, Path=`/api/v1/promises/{promiseId}`로 둔다.
-- 쓰기 요청이므로 Origin 헤더 검사로 CSRF를 막는다. **[제안]**
-- Body 크기 상한은 256KB로 둔다(5,000개 × 약 30바이트에 여유). **[제안]**
+- 쓰기 요청이므로 Origin 헤더 검사로 CSRF를 막는다. 실패하면 403 `INVALID_ORIGIN` (필수, 2026-11-04).
+- Body 크기 상한은 256KB로 둔다(5,000개 × 약 30바이트에 여유). 초과하면 413 `PAYLOAD_TOO_LARGE` (확정, 2026-11-04).
 - 참여자·IP 기준 레이트 리밋을 둔다. **[제안]**
 - 로그에 세션 토큰·쿠키 값을 남기지 않는다.
 
@@ -333,11 +338,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ promiseI
 | participants[].participantId | string (UUID) | 참여자 ID |
 | participants[].nickname | string | 표시 이름 |
 | participants[].isHost | boolean | 방장 여부(표시용) |
-| participants[].availableSlots | string[] | 제출 완료자만 저장된 슬롯을 담는다. 미제출·제출 해제·빈 선택 제출은 모두 []. 시각 오름차순 |
+| participants[].availableSlots | string[] | 제출 완료자만 저장된 슬롯을 담는다. 미제출·제출 해제·빈 선택 제출은 모두 []. 시각 오름차순. TIME-API-01과 같은 초 단위 표기(밀리초 없음) |
 | me.participantId | string (UUID) | 내 참여자 ID |
 | me.version | integer | 내 availability_version. TIME-API-01의 baseVersion으로 쓴다 |
 | me.submitted | boolean | 내 제출 여부. 제출 해제 상태면 false |
-| me.slots | string[] | 서버에 저장된 내 슬롯. 제출 해제 상태에서도 그대로 보여줘 확인 후 다시 제출할 수 있게 한다 |
+| me.slots | string[] | 서버에 저장된 내 슬롯(초 단위 표기, 밀리초 없음). 제출 해제 상태에서도 그대로 보여줘 확인 후 다시 제출할 수 있게 한다 |
 
 participants[] 안의 내 항목은 다른 사람과 같은 규칙을 따른다. 그래서 제출 해제 상태면 내 항목의 availableSlots는 []이고, me.slots에는 저장된 슬롯이 남아 있다. 지난 시각 슬롯도 저장된 그대로 내려주며, 화면에서 serverTime 기준으로 지난 칸을 구분한다.
 
@@ -359,7 +364,7 @@ participants[] 안의 내 항목은 다른 사람과 같은 규칙을 따른다.
       "participantId": "a1f0c2d4-1b2c-4d3e-8f90-1234567890ab",
       "nickname": "승주",
       "isHost": true,
-      "availableSlots": ["2026-10-28T14:00:00.000+09:00", "2026-10-28T14:30:00.000+09:00"]
+      "availableSlots": ["2026-10-28T14:00:00+09:00", "2026-10-28T14:30:00+09:00"]
     },
     {
       "participantId": "b2e1d3c5-2c3d-4e5f-9a01-234567890abc",
@@ -371,14 +376,14 @@ participants[] 안의 내 항목은 다른 사람과 같은 규칙을 따른다.
       "participantId": "c3f2e4d6-3d4e-4f60-ab12-34567890abcd",
       "nickname": "혜승",
       "isHost": false,
-      "availableSlots": ["2026-10-28T14:00:00.000+09:00"]
+      "availableSlots": ["2026-10-28T14:00:00+09:00"]
     }
   ],
   "me": {
     "participantId": "a1f0c2d4-1b2c-4d3e-8f90-1234567890ab",
     "version": 4,
     "submitted": true,
-    "slots": ["2026-10-28T14:00:00.000+09:00", "2026-10-28T14:30:00.000+09:00"]
+    "slots": ["2026-10-28T14:00:00+09:00", "2026-10-28T14:30:00+09:00"]
   }
 }
 ```
@@ -531,7 +536,7 @@ sequenceDiagram
     Note over L: 4 ≠ 3 → 로컬 폐기, 다른 기기에서 갱신 안내
 ```
 
-노트북이 폴링 전에 제출하더라도 서버가 "기준 3 ≠ 현재 4"로 409 SUBMISSION_CONFLICT를 반환하므로, 휴대폰의 제출이 덮어써지지 않는다.
+노트북이 폴링 전에 제출하더라도 서버가 "기준 3 ≠ 현재 4"로 409 `AVAILABILITY_VERSION_CONFLICT`를 반환하므로, 휴대폰의 제출이 덮어써지지 않는다.
 
 ### 제출 해제 (범위 확대)
 
@@ -559,7 +564,7 @@ sequenceDiagram
 
 | 상태 | 제출 (TIME-API-01) | 현황 조회 (TIME-API-02) | 비고 |
 | --- | --- | --- | --- |
-| draft | 409 PROMISE_NOT_COLLECTING | 409 PROMISE_NOT_COLLECTING | 방장 설정 중 |
+| draft | 409 PROMISE_NOT_OPEN (10분 지나면 410 DRAFT_EXPIRED) | 409 PROMISE_NOT_COLLECTING | 방장 설정 중. TIME-API-02 코드는 구현 때 정렬 |
 | collecting | 가능 | 가능 (5초 폴링) | 마감 시각이 지났으면 closed로 처리 |
 | closed | 409 VOTING_CLOSED | 가능 (본인 입력 확인, STATE-06-02) | 5초 폴링 유지 (확정·재조율 반영) |
 | confirmed | 409 VOTING_CLOSED | 가능 | 입력 잠금 (STATE-08-01) |
@@ -573,8 +578,9 @@ sequenceDiagram
 
 | 구분 | 형식 | 예시 | 근거 |
 | --- | --- | --- | --- |
-| 실제 시점 (슬롯·마감·확정) | ISO-8601, +09:00 포함 | `2026-10-20T14:00:00+09:00` | TIME-01-01, 02-01 |
-| 제출 시각 | ISO-8601, 밀리초 3자리 | `2026-10-12T14:35:10.027+09:00` | 제출 여부 판단용 (비교에는 사용 안 함) |
+| 실제 시점 (슬롯·마감·확정) | ISO-8601, +09:00 포함, 초 단위 | `2026-10-20T14:00:00+09:00` | TIME-01-01, 02-01 |
+| 슬롯 응답 (TIME-API-01 200·409 details, TIME-API-02) | 초 단위, 밀리초 없음 | `2026-10-28T14:00:00+09:00` | 30분 경계라 밀리초가 의미 없음. 같은 시각이 문자열로 같아야 화면 비교가 맞는다 (R-14) |
+| 제출 시각 | ISO-8601, 밀리초 3자리 | `2026-10-12T14:35:10.027+09:00` | 제출 여부 판단용 (비교에는 사용 안 함). 밀리초 3자리는 submittedAt에만 쓴다 |
 | 버전 | 정수, 참여자별, 0부터 시작 | `4` | TIME-10-04 (10/27 확정) |
 | 로컬 저장 형식 | v(저장 형식 버전), baseVersion, slots | `{ "v": 1, "baseVersion": 3, "slots": [...] }` | 저장 형식 변경 대비 |
 | 날짜 범위 | YYYY-MM-DD (한국 날짜) | `2026-10-20` | TIME-02-01 |
@@ -648,10 +654,10 @@ sequenceDiagram
 ### 제안 (팀 확인 필요)
 
 - [x] 지난 슬롯은 거절하지 않고 무시, 이미 저장된 지난 슬롯은 보존(미래 칸만 덮어쓰기) (TIME-API-01 처리 순서 6·8)
-- [ ] 재시도 처리: 버전이 달라도 서버 저장 슬롯이 요청과 같고 제출 상태면 409 대신 200 (TIME-API-01 처리 순서 7). 응답 유실 후 같은 요청을 다시 보낸 경우 대비
-- [ ] 슬롯 5,000개 초과 시 422 SLOT_LIMIT_EXCEEDED
+- [x] 재시도 처리 (2026-11-04 확정): 버전이 달라도 서버 저장 슬롯이 요청과 같고 제출 상태면 409 대신 200 (TIME-API-01 처리 순서 7). 응답 유실 후 같은 요청을 다시 보낸 경우 대비
+- [x] 슬롯 5,000개 초과 시 422 SLOT_LIMIT_EXCEEDED (2026-11-04 확정)
 - [ ] TIME-API-02의 serverTime 필드, REPEATABLE READ 조회
-- [ ] 상태 관련 에러 코드를 MEMBER-API-00에서 통일 (참여 등록의 PROMISE_NOT_OPEN·DEADLINE_PASSED와 TIME의 PROMISE_NOT_COLLECTING·VOTING_CLOSED, 탈퇴자 세션의 401과 403)
+- [ ] 상태 관련 에러 코드를 MEMBER-API-00에서 통일 — TIME-API-01은 2026-11-04 정렬(DECISION_CONFLICTS R-14). VOTING_CLOSED는 유지, TIME-API-02 남음. (참여 등록의 PROMISE_NOT_OPEN·DEADLINE_PASSED와 TIME의 PROMISE_NOT_COLLECTING·VOTING_CLOSED, 탈퇴자 세션의 401과 403)
 
 ### 미결 (다음 회의)
 

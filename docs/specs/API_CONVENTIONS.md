@@ -62,6 +62,7 @@
 | 409 | PROMISE_CANCELLED | 취소된 약속에 대한 요청 (STATE API 명세 기준으로 통일, 2026-11-04) |
 | 409 | INVALID_PROMISE_STATE | 이 API에서 허용하지 않는 약속 상태 |
 | 410 | DRAFT_EXPIRED | 약속(promiseId)을 경로로 받는 API에서 생성 후 10분이 지난 draft (STATE-02-02). 잠금을 잡는 쓰기 API는 삭제 후, 잠그지 않는 API는 삭제 없이 응답한다. 링크(inviteToken) 기준 API(MEMBER-API-01)는 에러 대신 `unclaimed`로 응답한다 (2026-11-04, DECISION_CONFLICTS R-11·R-12) |
+| 413 | PAYLOAD_TOO_LARGE | 요청 본문이 API별 상한을 넘음. Content-Length와 실제로 읽은 크기를 모두 확인한다. 상한은 API 명세에 적는다(TIME-API-01: 256KB). 세션 인증 전에 판정하므로 쿠키를 갱신하지 않는다 (2026-11-04, DECISION_CONFLICTS R-14) |
 | 422 | VALIDATION_FAILED | 형식은 맞지만 값이 규칙 위반 (닉네임 길이, PIN 형식 등) |
 | 500 | INTERNAL_ERROR | 서버 오류. 비밀값은 로그·응답에 남기지 않는다 |
 

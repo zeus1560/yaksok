@@ -3,6 +3,7 @@ import {
   addCalendarMonths,
   isCalendarDate,
   seoulDateOf,
+  toSeoulIsoMillisString,
   seoulMidnight,
   toSeoulIsoString,
 } from "./seoul";
@@ -48,5 +49,16 @@ describe("toSeoulIsoString", () => {
 
   it("UTC 기준 전날이어도 서울 날짜로 넘어간다", () => {
     expect(toSeoulIsoString(new Date("2026-10-11T15:30:00Z"))).toBe("2026-10-12T00:30:00+09:00");
+  });
+});
+
+describe("toSeoulIsoMillisString", () => {
+  it("밀리초 3자리와 +09:00으로 표기한다 (자정 넘김 포함)", () => {
+    expect(toSeoulIsoMillisString(new Date("2026-10-27T09:35:10.027Z"))).toBe(
+      "2026-10-27T18:35:10.027+09:00",
+    );
+    expect(toSeoulIsoMillisString(new Date("2026-10-27T15:00:00Z"))).toBe(
+      "2026-10-28T00:00:00.000+09:00",
+    );
   });
 });

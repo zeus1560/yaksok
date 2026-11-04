@@ -1,4 +1,4 @@
-# 현재 기능: 참여자 등록 API (MEMBER-API-03)
+# 현재 기능: 가능 시간 제출 API (TIME-API-01)
 
 ## 상태
 
@@ -6,31 +6,33 @@
 
 ## 스펙
 
-`context/features/006-participant-registration-api.md`
+`context/features/007-availability-submit-api.md`
 
 ## 목표
 
-모집 중인 약속에 닉네임·PIN으로 참여자를 등록하고 세션을 발급한다. 정원·닉네임 경쟁, 응답 유실 복구, 이미 참여한 브라우저의 중복 등록을 일관되게 처리한다.
+active 참여자(방장 포함)가 자기 미래 가능 시간 슬롯을 전체 교체 제출한다. 지난 슬롯은 보존·무시하고, 범위 밖 슬롯은 빼고 저장하며, 참여자별 `availability_version`으로 다른 기기의 제출을 덮어쓰지 않고 응답 유실 재시도는 200으로 처리한다.
 
 ## 수용 기준
 
 - [x] AC-1 Origin 403, 전 응답 `Cache-Control: no-store`
-- [x] AC-2 본문 400 / 닉네임·PIN 422 / promiseId 형식 400 / 404 / 취소 409
-- [x] AC-3 유효 세션(active 참여자) 쿠키 → 409 `ALREADY_PARTICIPANT`, 없음·위조·만료·cancelled 참여자 → 진행
-- [x] AC-4 해시는 잠금 전, `promises`만 `FOR UPDATE`, 잠금 후 `clock_timestamp()`
-- [x] AC-5 잠금 후 cancelled 409 → draft 410/409 → closed·confirmed 409 → 마감 409
-- [x] AC-6 닉네임(cancelled 포함) 409 — 정원보다 먼저, P2002도 409
-- [x] AC-7 정원 409
-- [x] AC-8 세션 `linkExpiryBase + 7일`, `sessionCookie`, Max-Age 남은 초
-- [x] AC-9 201 본문 명세 표 그대로
-- [x] AC-10 PIN·토큰 원문 로그·응답 없음
-- [x] AC-11 병렬 등록 정원·닉네임 각 1건만 201
+- [x] AC-2 Content-Length·실제 크기 256KB 초과 413
+- [x] AC-3 `session-auth.ts` 순서, 인증 후 모든 응답 쿠키 갱신
+- [x] AC-4 본문 400 `INVALID_REQUEST`
+- [x] AC-5 5,001개 422 `SLOT_LIMIT_EXCEEDED`
+- [x] AC-6 형식 422 `INVALID_SLOT_FORMAT`, 중복 합침
+- [x] AC-7 `promises`만 `FOR UPDATE`, 잠금 후 `clock_timestamp()`, 상태 판정 순서, 마감 경과 closed 커밋 + 409
+- [x] AC-8 잠금 후 세션·참여자 재확인 401
+- [x] AC-9 지난 슬롯 무시·미집계, 범위 밖 droppedSlotCount
+- [x] AC-10 버전 충돌 409(details) / 재시도 200
+- [x] AC-11 미래 슬롯만 교체, 제출 시각·버전 +1, 빈 배열 제출
+- [x] AC-12 200 본문 명세 형식
+- [x] AC-13 토큰·쿠키 로그 없음
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-참여자등록-api` (`main` d7ca1c6에서 생성, STATE-API-02 PR #10 병합 포함)
-- 시작 시 작업 트리: 깨끗함. 병합된 로컬 `ahn/feat-설정완료-api` 삭제
-- 선행 모듈 확인: `lib/member/session-auth.ts`, `nickname.ts`(`normalizeNickname`), `pin.ts`(`hashPin`), `session.ts`, `link-status.ts`(`linkExpiryBase`), `lib/origin.ts`, `lib/api-error.ts`(`DRAFT_EXPIRED`) 모두 있음
+- 브랜치: `ahn/feat-가능시간제출-api` (`main` c546c8e에서 생성, MEMBER-API-03 PR #11 병합 포함)
+- 시작 시 작업 트리: 깨끗함. 원격이 사라진(`gone`) 로컬 `ahn/` 브랜치 없음 → 삭제 없음. 원격이 남은 로컬 브랜치: `ahn/feat-로그인-api`, `ahn/feat-링크조회-api`, `ahn/feat-방장등록-api`, `ahn/feat-참여자등록-api`
+- 선행 확인: `lib/member/session-auth.ts`, `lib/origin.ts`, `lib/api-error.ts`(`PROMISE_NOT_OPEN`·`DRAFT_EXPIRED`), `lib/time/seoul.ts` 있음. 스키마에 `participants.availability_version`·`availability_submitted_at`, `participant_available_slots` 있음 → 스키마 변경 없음
 
 ## 검증 결과
 
@@ -38,26 +40,26 @@
 
 | 명령 | 결과 |
 | --- | --- |
-| `npm run test` | 통과 — 19 파일, 330 테스트 (이번 57건: participant-registration 25, participants route 26, session-auth 선택적 확인 6) |
+| `npm run test` | 통과 — 22 파일, 433 테스트 (이번 78건: slots 25, submit-availability 19, availability route 33, seoul 1) |
 | `npm run lint` | 통과 |
 | `npm run typecheck` | 통과 |
-| `npm run build` | 통과 — `/api/v1/promises/[promiseId]/participants` 동적(ƒ) |
-| dev 서버 + 개발 DB: 링크 발급 → 방장 등록 → 설정 완료 → 참여자 등록 | 201, 본문 명세 그대로(`currentParticipantCount` 2, `participantLimit` 3), `no-store`, Set-Cookie 속성 `HttpOnly; Secure; SameSite=Lax; Path=/api/v1/promises/{id}`, Max-Age=862501 = 마감(11-07 18:00) + 7일까지 남은 초. 저장: role=member·status=active·scrypt 해시, 세션 11-14 18:00(+09:00) |
-| 중복 참여 | 참여자 쿠키로 다른 닉네임 409 `ALREADY_PARTICIPANT`, 방장 쿠키도 409, 위조 쿠키는 등록 진행(이미 있는 닉네임이라 409 `NICKNAME_TAKEN`) |
-| 실패 응답 | Origin 없음 403, 깨진 본문 400, PIN 형식 422, UUID 형식 오류 400, 없는 약속 404 |
-| 병렬 정원 경쟁 | 남은 자리 1개(정원 3)에 다른 닉네임 2건 → 201 1건, 409 `PROMISE_FULL` 1건 |
-| 병렬 닉네임 경쟁 | 같은 닉네임 2건 → 201 1건, 409 `NICKNAME_TAKEN` 1건 |
-| 응답 유실 복구 | 등록 201 → 쿠키 없이 같은 닉네임 재시도 409 `NICKNAME_TAKEN` → 같은 닉네임·PIN 로그인(MEMBER-API-04) 200, 같은 participantId |
-| 로그 | dev 로그에 오류·PIN·토큰 없음 |
-| 정리 | 확인용 링크 2·약속 2·참여자 6·세션 7 삭제, 5개 테이블 스냅샷(행 수·md5)이 시작 상태와 동일 |
+| `npm run build` | 통과 — `/api/v1/promises/[promiseId]/me/availability` 동적(ƒ) |
+| dev 서버 + 개발 DB: 링크 발급 → 방장 등록 → 설정 완료 → 참여자 등록 → 제출 | 200 `{version:1, submitted:true, submittedAt:"…19:08:03.587+09:00", slots:[11-10 09:00, 09:30, 11-12 23:30], droppedSlotCount:1}` — `.000` 중복 합침, 24:00 범위 23:30 통과, 다음 날 00:00 제외(1건), 지난 슬롯(11-04 09:00) 무시·미집계. no-store, Set-Cookie Max-Age = 마감 + 7일까지 남은 초 |
+| 두 기기 같은 baseVersion | 기기 2(로그인 세션, base 0, 다른 내용) → 409 `AVAILABILITY_VERSION_CONFLICT`, details `{currentVersion:1, submitted:true, slots(.000+09:00)}` |
+| 같은 요청 재전송 | 기기 1 base 0 재전송 → 200, version 1·submittedAt 그대로 |
+| 재제출 | base 1 빈 배열 → 200 version 2, slots []. DB에 지난 슬롯(11-04 09:00)을 직접 넣은 뒤 base 2 재제출 → 지난 슬롯 보존 + 미래 슬롯 교체, DB version 3 |
+| 마감 경과 | `voting_deadline_at`을 과거로 바꾼 뒤 제출 → 409 `VOTING_CLOSED`, DB status `closed` 커밋 확인, 버전 3 그대로. 재요청 409 `VOTING_CLOSED` |
+| 실패 응답 | 422 `INVALID_SLOT_FORMAT`(분 15), 400(baseVersion 문자열) — 둘 다 쿠키 갱신. Origin 없음 403, 300,000바이트 본문 413, 쿠키 없음 401 — 쿠키 없음 |
+| 로그 | dev 로그에 오류·토큰·쿠키 값 없음 |
+| 정리 | 확인용 링크 1·약속 1·참여자 2·세션 3·슬롯 2 삭제, 5개 테이블 스냅샷(행 수·md5)이 시작 상태와 동일 |
 
-DB 스키마 변경 없음 → `db:status` 해당 없음. UI 변경 없음 → 브라우저 확인 해당 없음. cancelled 약속·draft·closed·confirmed·마감 경과·cancelled 참여자 닉네임·만료/cancelled 참여자 세션은 단위 테스트로만 확인했다(dev 서버 미확인).
+DB 스키마 변경 없음 → `db:status` 해당 없음. UI 변경 없음 → 브라우저 확인 해당 없음. draft·만료 draft·confirmed·cancelled·탈퇴 참여자·다른 약속 세션은 단위 테스트로만 확인했다(dev 서버 미확인).
 
 ## 메모
 
-- 문서 수정: member.md MEMBER-API-03(규칙 연결, 중복 참여 절, 설정 값 문장, 에러 표, 처리 순서·닉네임 우선 이유, 보안), DECISION_CONFLICTS(R-13 신설, A-09), API_CONVENTIONS 5.2(참여자 등록 세션 행).
+- 문서 수정: time.md TIME-API-01(허용 상태·상태 전환·상한, Origin 헤더, 에러 표, 처리 순서 1~5, 보안 정보, 코드 예제 안내), 「두 기기 충돌」 `SUBMISSION_CONFLICT` → `AVAILABILITY_VERSION_CONFLICT`, 상태별 허용 표 TIME-API-01 draft 칸, 결정·미결 목록 체크. DECISION_CONFLICTS R-14 신설, C-08 보강, A-05 해결, A-09 TIME-API-01 ✅.
 - 판단·미결은 스펙의 「미정 사항」에 정리했다.
-- 검토 후(2026-11-04, 판단 1~5 승인): 모든 API 라우트(links, links/[inviteToken], host, auth/session, start, participants)의 모든 응답에 `Cache-Control: no-store` 적용. 빠져 있던 곳은 links 발급·host·auth/session. 공통 헬퍼 `lib/no-store.ts`로 모으고 라우트별 no-store 테스트 추가. 재검증: test 355건·lint·typecheck·build 통과, dev 서버에서 links 403·host 404·auth/session 400·404에 `no-store` 확인(DB 쓰기 없는 요청만). `/api/health`는 요청 범위 밖이라 그대로 둠.
+- 검토 후(2026-11-05, 판단 1·2·5 승인): ① 재시도 200의 `slots`는 이미 서버 저장값 전체(지난 슬롯 포함)였음을 확인하고, 요청에 없는 지난 슬롯도 응답에 담기는 테스트를 추가. ② 409 details `slots`를 200과 같은 초 단위로 통일(밀리초 3자리는 `submittedAt`만), TIME 명세 예시·TIME-API-02 `availableSlots`·`me.slots` 형식·시간 표기 규약 갱신, R-14에 근거 추가. ③ API_CONVENTIONS 3절 공통 에러 코드에 413 `PAYLOAD_TOO_LARGE` 추가. 재검증: test 433건·lint·typecheck·build 통과. dev 서버 재확인은 하지 않았다(표기 변경은 route 단위 테스트로 확인).
 
 ## 완료 이력
 
@@ -110,3 +112,11 @@ DB 스키마 변경 없음 → `db:status` 해당 없음. UI 변경 없음 → �
 - 변경: `POST /api/v1/promises/[promiseId]/participants`, `lib/member/participant-registration.ts`(순수 판정 `resolveJoinAccess`, `registerParticipant` — 잠금 전 존재·취소·기존 참여 확인, 해시 잠금 전, `promises`만 `FOR UPDATE`, 잠금 후 `clock_timestamp()`, 닉네임 → 정원 순서, P2002 → 409, 세션 `linkExpiryBase + 7일`), `session-auth.ts` 선택적 확인 `findActivePromiseSession`, 409 5종 헬퍼. 모든 API 응답 `Cache-Control: no-store`(공통 `lib/no-store.ts`, links 발급·host·auth/session 누락 수정). `/feature` 시작 단계에 main 동기화 준비 절차 추가. 문서: member.md MEMBER-API-03, DECISION_CONFLICTS R-13 신설·A-09, API_CONVENTIONS 3절 no-store·5.2 참여자 등록 행
 - 검증: Vitest 355건(이번 82건), lint·typecheck·build 통과. 개발 DB에서 링크 발급 → 방장 등록 → 설정 완료 → 참여자 등록 201, 병렬 정원·닉네임 경쟁 각 201 1건·409 1건, 응답 유실 → `NICKNAME_TAKEN` → 로그인 200, `ALREADY_PARTICIPANT`·위조 쿠키 진행, 403·400·422·404. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
 - 남은 제한: 상태별 거절·만료/cancelled 참여자 세션은 단위 테스트로만 확인, 레이트 리밋 [제안], PIN 시도 제한(MEMBER-06-04) 미구현
+
+### 2026-11-05 — 가능 시간 제출 API (TIME-API-01)
+
+- 스펙: `context/features/007-availability-submit-api.md`
+- 브랜치: `ahn/feat-가능시간제출-api`
+- 변경: `PUT /api/v1/promises/[promiseId]/me/availability`(Origin 403 → 256KB 413(Content-Length·실제 크기) → `session-auth.ts` 인증 → 본문 400 → 5,000개 422 → 형식 422, 인증 후 모든 응답 쿠키 갱신), `lib/time/slots.ts`(`parseSlotStrings` 상한·형식·중복 합침, `filterSlots` 지난 슬롯 무시·한국 날짜·하루 경계·24:00), `lib/time/submit-availability.ts`(`promises`만 `FOR UPDATE`, 잠금 후 `clock_timestamp()`, cancelled → draft 410/409 → closed·confirmed → 마감 경과 closed 전환 커밋 + 409, 세션·참여자 재확인 401, 버전 충돌 409/재시도 200, 미래 슬롯만 교체·버전 +1), `toSeoulIsoMillisString`, 413·409 2종·422 2종 헬퍼. 슬롯 응답 표기는 초 단위로 통일(밀리초는 `submittedAt`만). 문서: time.md TIME-API-01 정렬·슬롯 표기·TIME-API-02 slots 형식, DECISION_CONFLICTS R-14 신설·C-08·A-05 해결·A-09, API_CONVENTIONS 3절 413 공통화
+- 검증: Vitest 433건(이번 78건), lint·typecheck·build 통과. 개발 DB에서 링크 발급 → 방장 등록 → 설정 완료 → 참여자 등록 → 제출 200, 두 기기 같은 baseVersion 409, 재전송 200(버전 그대로), 지난 슬롯 보존·미래 교체, 마감 경과 closed 커밋 + 409, 403·413·400·422·401. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
+- 남은 제한: draft·만료 draft·confirmed·cancelled·탈퇴 참여자·다른 약속 세션은 단위 테스트로만 확인, 슬롯 표기 통일 후 dev 서버 미재확인, 레이트 리밋 [제안] 미구현, TIME-API-02 draft 코드 정렬 남음
