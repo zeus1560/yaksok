@@ -61,11 +61,11 @@ describe("resolveLoginAccess (MEMBER-API-04 판정)", () => {
     });
   });
 
-  it("draft 10분 경계: 1ms 전은 통과, 정확히 10분이면 not_found", () => {
+  it("draft 10분 경계: 1ms 전은 통과, 정확히 10분이면 draft_expired", () => {
     const draft = { status: "draft", votingDeadlineAt: null };
     const boundary = CREATED.getTime() + 10 * MIN;
     expect(access(draft, new Date(boundary - 1)).kind).toBe("ok");
-    expect(access(draft, new Date(boundary))).toEqual({ kind: "not_found" });
+    expect(access(draft, new Date(boundary))).toEqual({ kind: "draft_expired" });
   });
 
   it.each(["collecting", "closed"])("%s: 마감 + 7일 경계 (정확히 같으면 expired)", (status) => {
@@ -135,9 +135,9 @@ describe("loginParticipant", () => {
   });
 
   it.each(["not-a-uuid", "7c1b2f40-8f6a-4c21-9d55-0d3b1a7e9c4", ""])(
-    "UUID 형식이 아닌 promiseId(%s)는 DB 조회 없이 not_found",
+    "UUID 형식이 아닌 promiseId(%s)는 DB 조회 없이 invalid_request",
     async (id) => {
-      expect(await loginParticipant(id, INPUT)).toEqual({ kind: "not_found" });
+      expect(await loginParticipant(id, INPUT)).toEqual({ kind: "invalid_request" });
       expect(promiseFindUnique).not.toHaveBeenCalled();
     },
   );
@@ -153,6 +153,17 @@ describe("loginParticipant", () => {
     expect(await loginParticipant(PROMISE_ID, INPUT)).toEqual({ kind: "cancelled" });
     expect(participantFindUnique).not.toHaveBeenCalled();
     expect(verifyPin).not.toHaveBeenCalled();
+  });
+
+  it("10분 지난 draft → draft_expired, PIN 비교·세션 생성 없음 (로그인은 삭제하지 않는다)", async () => {
+    mockPromise({
+      status: "draft",
+      votingDeadlineAt: null,
+      createdAt: new Date(NOW.getTime() - 10 * MIN),
+    });
+    expect(await loginParticipant(PROMISE_ID, INPUT)).toEqual({ kind: "draft_expired" });
+    expect(verifyPin).not.toHaveBeenCalled();
+    expect(sessionCreate).not.toHaveBeenCalled();
   });
 
   it("접근 기간 만료 → expired, PIN 비교 없음", async () => {

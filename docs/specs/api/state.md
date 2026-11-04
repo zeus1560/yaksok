@@ -387,12 +387,13 @@ if (!response.ok) {
 | 이름 | 명세 |
 | --- | --- |
 | `participantLimit` | integer, 필수. 방장 포함 2~30명이며 현재 active 인원 이상 |
-| `dateRange.startDate`, `dateRange.endDate` | YYYY-MM-DD, 필수. 양끝 포함. `endDate`는 한국 시간 오늘부터 3개월 이내(달력의 월 단위로 계산) |
+| `dateRange.startDate`, `dateRange.endDate` | YYYY-MM-DD, 필수. 양끝 포함. 달력에 실제로 있는 날짜. `startDate`는 판정 시각 기준 한국 시간 오늘 이후(오늘 허용, **2026-11-04 구현에서 추가 — DECISION_CONFLICTS R-12**). `startDate ≤ endDate`. `endDate`는 한국 시간 오늘부터 3개월 이내(달력의 월 단위로 계산, 그 달에 같은 날이 없으면 말일. 예: 11-30 → 02-28) |
 | `dailyTimeRange.startTime`, `dailyTimeRange.endTime` | HH:mm, 필수. 시작은 00:00~23:30, 종료는 00:30~24:00의 30분 경계이며 시작 분 값은 종료 분 값보다 작아야 함 |
 | `durationMinutes` | integer, 필수. 30 이상·30분 배수이며 하루 시간 범위 이하 |
-| `votingDeadlineAt` | 오프셋 포함 ISO 8601, 필수. 잠금 후 DB 시각보다 미래이고 마지막 후보 날짜 00:00(Asia/Seoul)보다 이전 |
+| `votingDeadlineAt` | 오프셋(`Z` 또는 `±HH:mm`) 포함 ISO 8601, 필수. 오프셋이 없으면 400. 잠금 후 DB 시각보다 미래이고 마지막 후보 날짜 00:00(Asia/Seoul)보다 이전 |
 
 - `dateRangeLimitMonths`는 받지 않는다. 3개월은 서버 공통 제한값이다.
+- 형식 오류(필드 누락·타입·없는 날짜·없는 시각·오프셋 없는 마감)는 400 `INVALID_REQUEST`, 형식은 맞지만 규칙 위반은 422 `VALIDATION_FAILED`(`details.field`에 `participantLimit`·`dateRange`·`dailyTimeRange`·`durationMinutes`·`votingDeadlineAt` 중 첫 위반)이다.
 
 ```json
 {
@@ -429,22 +430,36 @@ if (!response.ok) {
 | 400 | INVALID_REQUEST | UUID·JSON·필드 형식 오류 | — |
 | 401 | UNAUTHENTICATED | 세션 없음·만료·해시 불일치 또는 참여자 비활성 | — |
 | 403 | FORBIDDEN | 다른 약속 소속 또는 권한 부족 | — |
+| 403 | INVALID_ORIGIN | `Origin` 헤더 없음 또는 서비스 도메인과 다름 (API_CONVENTIONS 7절, DECISION_CONFLICTS A-09) | 허용되지 않은 요청 출처입니다. |
 | 404 | PROMISE_NOT_FOUND | 약속 없음 | — |
 | 409 | PROMISE_CANCELLED | 약속이 취소됨 | — |
 | 410 | DRAFT_EXPIRED | draft 생성 후 10분이 지나 만료·정리됨 | — |
-| 409 | INVALID_PROMISE_STATE | 현재 상태에서 허용되지 않는 요청 | — |
+| 409 | INVALID_PROMISE_STATE | 현재 상태에서 허용되지 않는 요청. `details`에 `promiseStatus`, `allowedStates: ["draft"]` | — |
 | 422 | VALIDATION_FAILED | 값이 비즈니스 규칙을 위반 | — |
 | 500 | INTERNAL_ERROR | 서버 오류 | — |
+
+모든 응답(에러 포함)에 `Cache-Control: no-store`를 붙인다.
 
 ### **처리 순서 / 비고**
 
 #### **처리 순서**
 
-1. promiseId 형식과 약속 존재 여부를 확인한다. 약속이 cancelled이면 세션 인증보다 우선하여 `409 PROMISE_CANCELLED`를 반환한다. 그다음 세션 소속을 확인하고 promise_link와 promises 행을 정해진 순서로 잠근 뒤 취소 상태·최신 active host·draft 상태를 다시 확인한다. 잠금 후 현재 시각이 created_at+10분 이상이면 세션·방장 참여자·promise를 명시적으로 삭제하고 `410 DRAFT_EXPIRED`를 반환한다.
-2. 모든 필수 설정을 검증한다. participantLimit은 2~30명, 날짜 범위의 종료일은 한국 시간 오늘부터 3개월 이내(달력의 월 단위로 계산)여야 한다. 일일 시작·종료 문자열은 분 값으로 변환하며 종료 24:00은 1440으로 저장한다. 하나라도 실패하면 아무 값도 저장하지 않는다.
+0. `Origin`을 검증한다. 실패하면 `403 INVALID_ORIGIN`.
+1. promiseId 형식(오류 시 `400 INVALID_REQUEST`)과 약속 존재 여부를 확인한다. 약속이 cancelled이면 세션 인증보다 우선하여 `409 PROMISE_CANCELLED`를 반환한다. 그다음 세션(만료·active 참여자, 실패 시 401)과 약속 소속(다르면 403 `FORBIDDEN`)을 확인하고, 본문 형식을 검사(400)한 뒤 promise_link와 promises 행을 정해진 순서로 잠근 뒤 취소 상태·최신 active host·draft 상태를 다시 확인한다. 잠금 후 현재 시각이 created_at+10분 이상이면 세션·방장 참여자·promise를 명시적으로 삭제하고 `410 DRAFT_EXPIRED`를 반환한다. **이 삭제는 410 응답을 내더라도 커밋한다(롤백하지 않는다).**
+2. 모든 필수 설정을 검증한다. participantLimit은 2~30명이며 잠금 후 active 인원 이상, 시작일은 한국 시간 오늘 이후, 날짜 범위의 종료일은 한국 시간 오늘부터 3개월 이내(달력의 월 단위로 계산)여야 한다. 일일 시작·종료 문자열은 분 값으로 변환하며 종료 24:00은 1440으로 저장한다. 하나라도 실패하면 아무 값도 저장하지 않는다.
 3. 설정과 `status=collecting`을 함께 저장한다.
-4. `status=active`인 참여자의 현재 유효한 세션만 `votingDeadlineAt + 7일`로 갱신한다. 이미 만료됐거나 cancelled 참여자에게 속한 세션은 다시 활성화하지 않는다. 각 브라우저 쿠키 만료는 다음 응답에서 같은 기준으로 갱신한다.
+4. `status=active`인 참여자의 현재 유효한 세션(`expires_at > 잠금 후 판정 시각`)만 `votingDeadlineAt + 7일`로 갱신한다. 이미 만료됐거나 cancelled 참여자에게 속한 세션은 다시 활성화하지 않는다. 각 브라우저 쿠키 만료는 다음 응답에서 같은 기준으로 갱신한다.
 5. 이미 collecting인 재요청은 409이며 조회 API로 성공 여부를 확인한다.
+
+#### **쿠키 갱신**
+
+세션 인증에 성공한 뒤의 모든 응답(200과 400·403·409·410·422 포함)은 `Set-Cookie`로 요청자 쿠키를 다시 보낸다. `Max-Age`는 응답 시점 DB `expires_at`까지 남은 초(내림)다.
+
+- 200: 이번 요청에서 갱신된 `votingDeadlineAt + 7일` 기준. 요청자 세션이 잠금 대기 중 만료돼 갱신되지 않았다면 원래 `expires_at` 기준.
+- 잠금 전 오류(본문 400): 인증 시점의 `expires_at`과 판정 시각 기준.
+- 잠금 후 오류(403·409·422): 원래 `expires_at`과 잠금 후 판정 시각 기준.
+- 410 `DRAFT_EXPIRED`, 잠금 후 약속이 이미 정리된 404: 세션 행이 지워졌으므로 빈 값과 `Max-Age=0`으로 쿠키를 지운다.
+- 세션 인증 전 실패(400 형식·401·403·404·409 취소·`INVALID_ORIGIN`)는 쿠키를 보내지 않는다.
 
 #### **보안 정보**
 

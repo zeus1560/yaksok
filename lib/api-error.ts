@@ -6,10 +6,14 @@ export type ApiErrorCode =
   | "HOST_ALREADY_REGISTERED"
   | "LINK_EXPIRED"
   | "INVALID_CREDENTIALS"
+  | "UNAUTHENTICATED"
+  | "FORBIDDEN"
   | "PARTICIPANT_CANCELLED"
   | "PROMISE_NOT_FOUND"
   | "PROMISE_CANCELLED"
+  | "INVALID_PROMISE_STATE"
   | "ACCESS_PERIOD_EXPIRED"
+  | "DRAFT_EXPIRED"
   | "VALIDATION_FAILED"
   | "INTERNAL_ERROR";
 
@@ -69,6 +73,26 @@ export function promiseCancelled(): Response {
 
 export function accessPeriodExpired(): Response {
   return apiError(410, "ACCESS_PERIOD_EXPIRED", "접근 기간이 지난 약속입니다.");
+}
+
+// 생성 후 10분 안에 설정을 마치지 못한 draft (STATE-02-02). 약속 기준 API의 공통 코드
+export function draftExpired(): Response {
+  return apiError(410, "DRAFT_EXPIRED", "설정 시간이 지나 약속이 만료되었습니다.");
+}
+
+export function unauthenticated(): Response {
+  return apiError(401, "UNAUTHENTICATED", "다시 로그인해 주세요.");
+}
+
+export function forbidden(): Response {
+  return apiError(403, "FORBIDDEN", "이 작업을 수행할 권한이 없습니다.");
+}
+
+export function invalidPromiseState(promiseStatus: string, allowedStates: string[]): Response {
+  return apiError(409, "INVALID_PROMISE_STATE", "현재 약속 상태에서는 요청할 수 없습니다.", {
+    promiseStatus,
+    allowedStates,
+  });
 }
 
 export function internalError(): Response {
