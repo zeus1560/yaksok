@@ -289,9 +289,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ promiseI
 - 도메인: TIME
 - 관련 규칙: TIME-02-02(API 시간 형식), TIME-02-03(시간 정밀도), TIME-05-02(자정 넘김), TIME-10-03(미제출 입력 계산), TIME-10-04(제출과 반영), TIME-12-01(빈 선택 제출), TIME-12-02(미제출과 불참 구분), TIME-15-01~04(마감 판정), STATE-09-04(범위 변경 시 제출 상태), STATE-10-01(취소)
 - 권한: 이 약속의 **active 참여자**(방장 포함). 비참여자·탈퇴자는 다른 사람의 가능 시간을 볼 수 없다.
-- 허용 상태: effectiveStatus가 collecting·closed·confirmed일 때 200. draft·cancelled는 409.
+- 허용 상태: effectiveStatus가 collecting·closed·confirmed일 때 200. cancelled는 409 `PROMISE_CANCELLED`, draft는 409 `PROMISE_NOT_OPEN`이고 생성 후 10분이 지난 draft는 410 `DRAFT_EXPIRED`(삭제 없음).
 - 상태 전환: 없음. DB를 바꾸지 않는다. collecting이면서 마감 시각이 지난 경우 응답의 status만 closed로 계산한다(실제 전환은 쓰기 요청이 한다).
-- 동시성: 잠그지 않는다. 약속·참여자·슬롯을 한 시점 기준으로 읽도록 REPEATABLE READ 읽기 트랜잭션 하나에서 조회한다. **[제안]**
+- 동시성: 잠그지 않는다. 약속·참여자·슬롯을 한 시점 기준으로 읽도록 REPEATABLE READ 읽기 트랜잭션 하나에서 조회하고, 판정 시각은 그 트랜잭션 안의 `now()`로 한다(읽기 시점과 일치). (2026-11-05 확정, DECISION_CONFLICTS R-14)
 - 폴링: 5초 주기. 마감 후에도 같은 주기로 계속하며, 탭이 숨겨지면 멈추고 돌아오면 즉시 조회한다.
 - ETag·304: MVP 미적용. 필요 시 P1에서 검토하며, 응답 형식을 바꾸지 않고 추가할 수 있다.
 
@@ -328,13 +328,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ promiseI
 | 이름 | 타입 | 설명 |
 | --- | --- | --- |
 | status | string | effectiveStatus. collecting / closed / confirmed. DB가 collecting이어도 현재 시각 ≥ 마감이면 closed |
-| serverTime **[제안]** | string (ISO-8601, 밀리초 3자리) | 조회 기준 서버 시각. 남은 시간 표시와 지난 슬롯 회색 처리에 기기 시계 대신 사용(TIME-15-03) |
+| serverTime | string (ISO-8601, 밀리초 3자리) | 조회 기준 서버 시각(판정 시각 = 읽기 트랜잭션의 `now()`). 남은 시간 표시와 지난 슬롯 회색 처리에 기기 시계 대신 사용(TIME-15-03). (2026-11-05 확정) |
 | settings.dateRangeStart / dateRangeEnd | string (YYYY-MM-DD) | 선택 가능 날짜 범위(양끝 포함, 한국 날짜) |
 | settings.dailyStartTime / dailyEndTime | string ("HH:mm") | 하루 선택 가능 시각 경계. 종료는 "24:00" 가능 |
 | settings.durationMinutes | integer | 약속 소요 시간(30의 배수) |
-| settings.votingDeadlineAt | string (ISO-8601) | 응답 마감 시각 |
+| settings.votingDeadlineAt | string (ISO-8601, 초 단위) | 응답 마감 시각. STATE-API-02 응답과 같은 표기(`2026-10-27T23:00:00+09:00`) |
 | totalParticipants | integer | active 참여자 전체 수. 가능 인원 표시의 분모 |
-| participants[] | array | active 참여자 목록. 등록순 |
+| participants[] | array | active 참여자 목록. 등록순(`created_at`, 같으면 `id`) |
 | participants[].participantId | string (UUID) | 참여자 ID |
 | participants[].nickname | string | 표시 이름 |
 | participants[].isHost | boolean | 방장 여부(표시용) |
@@ -356,7 +356,7 @@ participants[] 안의 내 항목은 다른 사람과 같은 규칙을 따른다.
     "dailyStartTime": "09:00",
     "dailyEndTime": "24:00",
     "durationMinutes": 120,
-    "votingDeadlineAt": "2026-10-27T23:00:00.000+09:00"
+    "votingDeadlineAt": "2026-10-27T23:00:00+09:00"
   },
   "totalParticipants": 3,
   "participants": [
@@ -390,31 +390,35 @@ participants[] 안의 내 항목은 다른 사람과 같은 규칙을 따른다.
 
 #### 에러
 
-형식: `{"error":{"code","message","details"}}`
+형식: `{ "code", "message", "details"? }` (API_CONVENTIONS 3절). 세션 인증에 성공한 뒤의 모든 응답(에러 포함)은 쿠키를 갱신한다(API_CONVENTIONS 5절). 모든 응답에 `Cache-Control: no-store`.
 
 | HTTP 상태 | code | 발생 원인 | message 예시 |
 | --- | --- | --- | --- |
-| 401 | `UNAUTHENTICATED` | 세션 쿠키 없음·만료, 탈퇴·내보내진 참여자, 다른 약속의 세션 (ERD 11절) | 다시 로그인해 주세요. |
+| 400 | `INVALID_REQUEST` | promiseId 형식 오류 | 요청 형식이 올바르지 않습니다. |
+| 401 | `UNAUTHENTICATED` | 세션 쿠키 없음·만료, 탈퇴·내보내진 참여자(트랜잭션 안 재확인 포함, ERD 11절) | 다시 로그인해 주세요. |
+| 403 | `FORBIDDEN` | 다른 약속의 세션 | 이 작업을 수행할 권한이 없습니다. |
 | 404 | `PROMISE_NOT_FOUND` | 없는 약속 | 약속을 찾을 수 없습니다. |
-| 409 | `PROMISE_NOT_COLLECTING` | draft(방장 설정 중) | 방장이 약속을 설정 중입니다. |
+| 409 | `PROMISE_NOT_OPEN` | draft(방장 설정 중) | 방장이 약속을 설정 중입니다. |
 | 409 | `PROMISE_CANCELLED` | 취소된 약속. 데이터는 보관하지만 내용은 보여주지 않는다 | 취소된 약속입니다. |
+| 410 | `DRAFT_EXPIRED` | 생성 후 10분이 지난 draft. 조회는 DB를 바꾸지 않으므로 삭제하지 않는다 (R-12) | 설정 시간이 지나 약속이 만료되었습니다. |
 
 #### 처리 순서
 
-1. 세션 쿠키를 검증한다. 없거나 만료됐으면 401 (MEMBER-API-00).
-2. REPEATABLE READ 읽기 트랜잭션을 시작한다. 잠금은 걸지 않는다.
-3. promises 행을 읽는다. 없으면 404. 하루 경계는 분 값(`daily_start_minute`·`daily_end_minute`)으로 읽어 응답에서 "HH:mm"으로 바꾼다(1440 → "24:00").
-4. effectiveStatus를 계산한다. cancelled는 409 PROMISE_CANCELLED, draft는 409 PROMISE_NOT_COLLECTING. collecting이면서 현재 시각 ≥ 마감이면 closed로 계산만 하고 DB는 바꾸지 않는다.
-5. 세션의 참여자가 이 약속 소속이고 active인지 확인한다. 아니면 401 UNAUTHENTICATED(탈퇴·내보내기 포함, ERD 11절).
-6. active 참여자와 그 슬롯을 읽는다. 제출 시각이 있는 참여자만 availableSlots에 슬롯을 담고, 나머지는 []로 둔다.
-7. 내 version·제출 여부·저장 슬롯으로 me를 만든다.
-8. `Cache-Control: no-store`로 200을 반환한다.
+1. 읽기 요청이므로 Origin은 검사하지 않는다. 모든 응답에 `Cache-Control: no-store`.
+2. 세션 인증 공통 모듈(`lib/member/session-auth.ts`) 순서로 인증한다: promiseId 형식 400 → 약속 없음 404 → cancelled 409 `PROMISE_CANCELLED`(세션 검사보다 먼저) → 세션 없음·만료·cancelled 참여자 401 → 다른 약속 세션 403 `FORBIDDEN`. 이후의 모든 응답은 쿠키를 갱신한다.
+3. REPEATABLE READ 읽기 트랜잭션을 시작한다. 잠금은 걸지 않는다. 판정 시각은 트랜잭션 안의 `now()`다.
+4. promises 행을 읽는다. 인증 뒤 사라졌으면(만료 draft 정리) 404이고 쿠키를 지운다. 하루 경계는 분 값(`daily_start_minute`·`daily_end_minute`)으로 읽어 응답에서 "HH:mm"으로 바꾼다(1440 → "24:00").
+5. 상태를 판정한다. cancelled는 409 `PROMISE_CANCELLED`, draft는 `created_at + 10분 ≤ 판정 시각`이면 410 `DRAFT_EXPIRED`(삭제 없음) 아니면 409 `PROMISE_NOT_OPEN`.
+6. 세션과 참여자를 다시 확인한다. 세션이 없거나 만료됐거나(탈퇴·내보내기는 세션을 즉시 만료) 참여자가 이 약속의 active 참여자가 아니면 401 `UNAUTHENTICATED`(ERD 11절).
+7. effectiveStatus를 계산한다. collecting이면서 판정 시각 ≥ 마감이면 closed로 계산만 하고 DB는 바꾸지 않는다. closed·confirmed는 그대로.
+8. active 참여자와 그 슬롯을 등록순으로 읽는다. 제출 시각이 있는 참여자만 availableSlots에 슬롯을 담고, 나머지는 []로 둔다.
+9. 내 version·제출 여부·저장 슬롯으로 me를 만들고 200을 반환한다.
 
 브라우저 동기화 규칙: 폴링 응답의 me.version이 로컬 저장값의 baseVersion과 다르면 다른 기기 제출이나 범위 변경으로 내 데이터가 바뀐 것이다. 로컬 입력을 폐기하고 "다른 곳에서 내용이 바뀌었어요"를 안내한 뒤 me.slots로 화면을 다시 그린다(TIME-10-04).
 
 #### 코드 예제
 
-구조를 보여주는 예제이며 모델·헬퍼 이름은 실제 스키마에 맞게 바꾼다. 읽기 트랜잭션 안의 `now()`는 스냅샷 시점과 같아 조회 데이터와 판정 시각이 일치한다.
+구조를 보여주는 예제이며 모델·헬퍼 이름은 실제 스키마에 맞게 바꾼다. 에러 코드·처리 순서·시각 표기는 위 에러 표·처리 순서·응답 표가 기준이다(예제는 정렬 전 코드를 담고 있다 — 세션 재확인·draft 410·`toKstIso`가 슬롯·마감에도 밀리초를 붙이는 점이 다르다). 실제 구현: `app/api/v1/promises/[promiseId]/availability/route.ts`, `lib/time/availability-status.ts`. 읽기 트랜잭션 안의 `now()`는 스냅샷 시점과 같아 조회 데이터와 판정 시각이 일치한다.
 
 ```ts
 // app/api/v1/promises/[promiseId]/availability/route.ts
@@ -564,7 +568,7 @@ sequenceDiagram
 
 | 상태 | 제출 (TIME-API-01) | 현황 조회 (TIME-API-02) | 비고 |
 | --- | --- | --- | --- |
-| draft | 409 PROMISE_NOT_OPEN (10분 지나면 410 DRAFT_EXPIRED) | 409 PROMISE_NOT_COLLECTING | 방장 설정 중. TIME-API-02 코드는 구현 때 정렬 |
+| draft | 409 PROMISE_NOT_OPEN (10분 지나면 410 DRAFT_EXPIRED) | 409 PROMISE_NOT_OPEN (10분 지나면 410 DRAFT_EXPIRED) | 방장 설정 중. 두 API 모두 삭제 없음 (R-14) |
 | collecting | 가능 | 가능 (5초 폴링) | 마감 시각이 지났으면 closed로 처리 |
 | closed | 409 VOTING_CLOSED | 가능 (본인 입력 확인, STATE-06-02) | 5초 폴링 유지 (확정·재조율 반영) |
 | confirmed | 409 VOTING_CLOSED | 가능 | 입력 잠금 (STATE-08-01) |
@@ -580,7 +584,7 @@ sequenceDiagram
 | --- | --- | --- | --- |
 | 실제 시점 (슬롯·마감·확정) | ISO-8601, +09:00 포함, 초 단위 | `2026-10-20T14:00:00+09:00` | TIME-01-01, 02-01 |
 | 슬롯 응답 (TIME-API-01 200·409 details, TIME-API-02) | 초 단위, 밀리초 없음 | `2026-10-28T14:00:00+09:00` | 30분 경계라 밀리초가 의미 없음. 같은 시각이 문자열로 같아야 화면 비교가 맞는다 (R-14) |
-| 제출 시각 | ISO-8601, 밀리초 3자리 | `2026-10-12T14:35:10.027+09:00` | 제출 여부 판단용 (비교에는 사용 안 함). 밀리초 3자리는 submittedAt에만 쓴다 |
+| 제출 시각·서버 시각 | ISO-8601, 밀리초 3자리 | `2026-10-12T14:35:10.027+09:00` | 제출 시각(submittedAt)은 제출 여부 판단용(비교에는 사용 안 함), 서버 시각(TIME-API-02 serverTime)은 기기 시계 대신 쓰는 기준 시각. 밀리초 3자리는 이 둘에만 쓴다 |
 | 버전 | 정수, 참여자별, 0부터 시작 | `4` | TIME-10-04 (10/27 확정) |
 | 로컬 저장 형식 | v(저장 형식 버전), baseVersion, slots | `{ "v": 1, "baseVersion": 3, "slots": [...] }` | 저장 형식 변경 대비 |
 | 날짜 범위 | YYYY-MM-DD (한국 날짜) | `2026-10-20` | TIME-02-01 |
@@ -656,8 +660,8 @@ sequenceDiagram
 - [x] 지난 슬롯은 거절하지 않고 무시, 이미 저장된 지난 슬롯은 보존(미래 칸만 덮어쓰기) (TIME-API-01 처리 순서 6·8)
 - [x] 재시도 처리 (2026-11-04 확정): 버전이 달라도 서버 저장 슬롯이 요청과 같고 제출 상태면 409 대신 200 (TIME-API-01 처리 순서 7). 응답 유실 후 같은 요청을 다시 보낸 경우 대비
 - [x] 슬롯 5,000개 초과 시 422 SLOT_LIMIT_EXCEEDED (2026-11-04 확정)
-- [ ] TIME-API-02의 serverTime 필드, REPEATABLE READ 조회
-- [ ] 상태 관련 에러 코드를 MEMBER-API-00에서 통일 — TIME-API-01은 2026-11-04 정렬(DECISION_CONFLICTS R-14). VOTING_CLOSED는 유지, TIME-API-02 남음. (참여 등록의 PROMISE_NOT_OPEN·DEADLINE_PASSED와 TIME의 PROMISE_NOT_COLLECTING·VOTING_CLOSED, 탈퇴자 세션의 401과 403)
+- [x] TIME-API-02의 serverTime 필드, REPEATABLE READ 조회 (2026-11-05 확정, DECISION_CONFLICTS R-14)
+- [x] 상태 관련 에러 코드를 MEMBER-API-00에서 통일 — TIME-API-01은 2026-11-04, TIME-API-02는 2026-11-05 정렬(DECISION_CONFLICTS R-14). VOTING_CLOSED는 유지. (참여 등록의 PROMISE_NOT_OPEN·DEADLINE_PASSED와 TIME의 PROMISE_NOT_COLLECTING·VOTING_CLOSED, 탈퇴자 세션의 401과 403)
 
 ### 미결 (다음 회의)
 
