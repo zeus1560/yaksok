@@ -6,6 +6,11 @@ export function toSeoulIsoString(date: Date): string {
   return `${new Date(date.getTime() + SEOUL_OFFSET_MS).toISOString().slice(0, 19)}+09:00`;
 }
 
+// 밀리초 3자리 표기. 예: 2026-10-27T18:35:10.027+09:00 (TIME-API-01 submittedAt·충돌 details)
+export function toSeoulIsoMillisString(date: Date): string {
+  return `${new Date(date.getTime() + SEOUL_OFFSET_MS).toISOString().slice(0, 23)}+09:00`;
+}
+
 // 날짜 문자열(YYYY-MM-DD)은 사전순 비교가 날짜 순서와 같다
 
 // 그 시점의 서울 날짜

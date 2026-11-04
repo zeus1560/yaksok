@@ -20,6 +20,11 @@ export type ApiErrorCode =
   | "NICKNAME_TAKEN"
   | "ALREADY_PARTICIPANT"
   | "VALIDATION_FAILED"
+  | "PAYLOAD_TOO_LARGE"
+  | "VOTING_CLOSED"
+  | "AVAILABILITY_VERSION_CONFLICT"
+  | "INVALID_SLOT_FORMAT"
+  | "SLOT_LIMIT_EXCEEDED"
   | "INTERNAL_ERROR";
 
 export function apiError(
@@ -125,6 +130,36 @@ export function nicknameTaken(): Response {
 
 export function alreadyParticipant(): Response {
   return apiError(409, "ALREADY_PARTICIPANT", "이 브라우저는 이미 이 약속에 참여 중입니다.");
+}
+
+export function payloadTooLarge(): Response {
+  return apiError(413, "PAYLOAD_TOO_LARGE", "요청 본문이 너무 큽니다.");
+}
+
+// TIME-API-01 가능 시간 제출. 입력 화면이 구분해 안내해야 하는 TIME 고유 코드 (DECISION_CONFLICTS R-14)
+export function votingClosed(): Response {
+  return apiError(409, "VOTING_CLOSED", "응답이 마감되었습니다.");
+}
+
+export function availabilityVersionConflict(details: {
+  currentVersion: number;
+  submitted: boolean;
+  slots: string[];
+}): Response {
+  return apiError(
+    409,
+    "AVAILABILITY_VERSION_CONFLICT",
+    "다른 기기에서 먼저 저장했어요. 최신 내용을 확인해 주세요.",
+    details,
+  );
+}
+
+export function invalidSlotFormat(): Response {
+  return apiError(422, "INVALID_SLOT_FORMAT", "시간 형식이 올바르지 않습니다.");
+}
+
+export function slotLimitExceeded(): Response {
+  return apiError(422, "SLOT_LIMIT_EXCEEDED", "한 번에 저장할 수 있는 시간은 5,000칸까지입니다.");
 }
 
 export function internalError(): Response {
