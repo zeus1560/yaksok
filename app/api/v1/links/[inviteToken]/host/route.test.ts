@@ -121,4 +121,30 @@ describe("POST /api/v1/links/[inviteToken]/host (MEMBER-API-02)", () => {
     const logged = JSON.stringify(vi.mocked(console.error).mock.calls);
     expect(logged).not.toContain("4827");
   });
+
+  const CREATED = {
+    kind: "created",
+    promiseId: "p",
+    participantId: "pt",
+    nickname: "승주",
+    draftExpiresAt: new Date(),
+    sessionToken: "t",
+    sessionMaxAgeSeconds: 86400,
+  };
+  it.each([
+    ["201", VALID, { origin: BASE_URL }, CREATED, 201],
+    ["403 Origin", VALID, {}, null, 403],
+    ["400 본문", "{x", { origin: BASE_URL }, null, 400],
+    ["422 PIN", { nickname: "승주", pin: "1" }, { origin: BASE_URL }, null, 422],
+    ["404", VALID, { origin: BASE_URL }, { kind: "not_found" }, 404],
+    ["409", VALID, { origin: BASE_URL }, { kind: "already_registered" }, 409],
+    ["410", VALID, { origin: BASE_URL }, { kind: "expired" }, 410],
+    ["500", VALID, { origin: BASE_URL }, new Error("db"), 500],
+  ])("%s 응답도 Cache-Control: no-store", async (_name, body, headers, result, status) => {
+    if (result instanceof Error) registerHost.mockRejectedValueOnce(result);
+    else if (result) registerHost.mockResolvedValueOnce(result);
+    const res = await call(body, headers);
+    expect(res.status).toBe(status);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
 });

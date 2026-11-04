@@ -153,4 +153,37 @@ describe("POST /api/v1/promises/[promiseId]/auth/session (MEMBER-API-04)", () =>
     const logged = JSON.stringify(vi.mocked(console.error).mock.calls);
     expect(logged).not.toContain("1357");
   });
+
+  const OK = {
+    kind: "ok",
+    promiseId: PROMISE_ID,
+    participantId: "pt",
+    nickname: "혜승",
+    role: "member",
+    status: "active",
+    promiseStatus: "collecting",
+    sessionExpiresAt: new Date(),
+    sessionToken: "t",
+    sessionMaxAgeSeconds: 60,
+  };
+  it.each([
+    ["200", VALID, { origin: BASE_URL }, OK, 200],
+    ["403 Origin", VALID, {}, null, 403],
+    ["400 본문", "{x", { origin: BASE_URL }, null, 400],
+    ["422 PIN", { nickname: "혜승", pin: "1" }, { origin: BASE_URL }, null, 422],
+    ["400 형식", VALID, { origin: BASE_URL }, { kind: "invalid_request" }, 400],
+    ["401", VALID, { origin: BASE_URL }, { kind: "invalid_credentials" }, 401],
+    ["403 cancelled 참여자", VALID, { origin: BASE_URL }, { kind: "participant_cancelled" }, 403],
+    ["404", VALID, { origin: BASE_URL }, { kind: "not_found" }, 404],
+    ["409", VALID, { origin: BASE_URL }, { kind: "cancelled" }, 409],
+    ["410 접근 기간", VALID, { origin: BASE_URL }, { kind: "expired" }, 410],
+    ["410 draft", VALID, { origin: BASE_URL }, { kind: "draft_expired" }, 410],
+    ["500", VALID, { origin: BASE_URL }, new Error("db"), 500],
+  ])("%s 응답도 Cache-Control: no-store", async (_name, body, headers, result, status) => {
+    if (result instanceof Error) loginParticipant.mockRejectedValueOnce(result);
+    else if (result) loginParticipant.mockResolvedValueOnce(result);
+    const res = await call(body, headers);
+    expect(res.status).toBe(status);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
 });

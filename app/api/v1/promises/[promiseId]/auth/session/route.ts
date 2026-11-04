@@ -14,6 +14,7 @@ import { loginParticipant } from "@/lib/member/login";
 import { validateNickname } from "@/lib/member/nickname";
 import { isPinFormat } from "@/lib/member/pin";
 import { sessionCookie } from "@/lib/member/session";
+import { noStore } from "@/lib/no-store";
 import { isAllowedOrigin } from "@/lib/origin";
 import { toSeoulIsoString } from "@/lib/time/seoul";
 
@@ -23,6 +24,13 @@ export async function POST(
   request: Request,
   ctx: RouteContext<"/api/v1/promises/[promiseId]/auth/session">,
 ) {
+  return noStore(await handle(request, ctx));
+}
+
+async function handle(
+  request: Request,
+  ctx: RouteContext<"/api/v1/promises/[promiseId]/auth/session">,
+): Promise<Response> {
   if (!isAllowedOrigin(request)) return invalidOrigin();
 
   let body: unknown;

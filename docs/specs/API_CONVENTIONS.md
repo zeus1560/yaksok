@@ -32,6 +32,8 @@
 
 ## 3. 응답 포맷
 
+모든 API 응답(성공·에러)에 `Cache-Control: no-store`를 붙인다. 상태·세션·만료가 요청마다 달라지기 때문이다. Route Handler는 처리 함수를 `lib/no-store.ts`의 `noStore`로 한 번 감싼다 (2026-11-04).
+
 성공 시 래퍼 없이 리소스 객체를 그대로 반환한다.
 
 ```json

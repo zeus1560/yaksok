@@ -17,12 +17,8 @@ import { validateNickname } from "@/lib/member/nickname";
 import { registerParticipant } from "@/lib/member/participant-registration";
 import { isPinFormat } from "@/lib/member/pin";
 import { sessionCookie } from "@/lib/member/session";
+import { noStore } from "@/lib/no-store";
 import { isAllowedOrigin } from "@/lib/origin";
-
-function noStore(response: Response): Response {
-  response.headers.set("Cache-Control", "no-store");
-  return response;
-}
 
 // MEMBER-API-03 참여자 등록. PIN·세션 토큰 원문은 로그와 응답 본문에 남기지 않는다
 export async function POST(
