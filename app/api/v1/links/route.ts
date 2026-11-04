@@ -1,9 +1,14 @@
 import { internalError, invalidOrigin } from "@/lib/api-error";
 import { issueInviteLink } from "@/lib/member/invite-link";
+import { noStore } from "@/lib/no-store";
 import { isAllowedOrigin } from "@/lib/origin";
 
 // MEMBER-API-09 초대 링크 발급 (웹). 요청 본문은 읽지 않는다
 export async function POST(request: Request) {
+  return noStore(await handle(request));
+}
+
+async function handle(request: Request): Promise<Response> {
   if (!isAllowedOrigin(request)) {
     return invalidOrigin();
   }

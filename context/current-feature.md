@@ -1,4 +1,4 @@
-# 현재 기능: 설정 완료와 모집 시작 API (STATE-API-02)
+# 현재 기능: 참여자 등록 API (MEMBER-API-03)
 
 ## 상태
 
@@ -6,31 +6,31 @@
 
 ## 스펙
 
-`context/features/005-start-collecting-api.md`
+`context/features/006-participant-registration-api.md`
 
 ## 목표
 
-방장이 draft에서 필수 설정을 저장하고 collecting으로 전환한다. 이후 세션 인증 API가 재사용할 공통 인증 모듈과 쿠키 갱신 규칙을 만든다.
+모집 중인 약속에 닉네임·PIN으로 참여자를 등록하고 세션을 발급한다. 정원·닉네임 경쟁, 응답 유실 복구, 이미 참여한 브라우저의 중복 등록을 일관되게 처리한다.
 
 ## 수용 기준
 
-- [x] AC-1 Origin 403 `INVALID_ORIGIN`, 전 응답 `Cache-Control: no-store`
-- [x] AC-2 세션 인증 공통 모듈: 형식 400 → 404 → 취소 409(세션보다 먼저) → 401 → 다른 약속 403
-- [x] AC-3 세션 인증 성공 후 모든 응답 Set-Cookie, Max-Age = 응답 시점 `expires_at`까지 남은 초(삭제 시 0)
-- [x] AC-4 링크 → 약속 `FOR UPDATE`, 잠금 후 `clock_timestamp()`, 취소 409·비방장 403·비 draft 409
-- [x] AC-5 10분 지난 draft 삭제 + 410 `DRAFT_EXPIRED`, 삭제 커밋
-- [x] AC-6 설정 형식 400 / 규칙 422, 실패 시 저장 없음 (날짜 상한 R-07, 시작일 ≥ 오늘)
-- [x] AC-7 설정 + collecting 한 트랜잭션
-- [x] AC-8 active 유효 세션만 `마감 + 7일`
-- [x] AC-9 200 본문 명세 그대로, +09:00
-- [x] AC-10 MEMBER-API-04 만료 draft 410(삭제 없음)
-- [x] AC-11 MEMBER-API-04 promiseId 형식 오류 404 → 400 `INVALID_REQUEST`(약속 기준 API 통일)
+- [x] AC-1 Origin 403, 전 응답 `Cache-Control: no-store`
+- [x] AC-2 본문 400 / 닉네임·PIN 422 / promiseId 형식 400 / 404 / 취소 409
+- [x] AC-3 유효 세션(active 참여자) 쿠키 → 409 `ALREADY_PARTICIPANT`, 없음·위조·만료·cancelled 참여자 → 진행
+- [x] AC-4 해시는 잠금 전, `promises`만 `FOR UPDATE`, 잠금 후 `clock_timestamp()`
+- [x] AC-5 잠금 후 cancelled 409 → draft 410/409 → closed·confirmed 409 → 마감 409
+- [x] AC-6 닉네임(cancelled 포함) 409 — 정원보다 먼저, P2002도 409
+- [x] AC-7 정원 409
+- [x] AC-8 세션 `linkExpiryBase + 7일`, `sessionCookie`, Max-Age 남은 초
+- [x] AC-9 201 본문 명세 표 그대로
+- [x] AC-10 PIN·토큰 원문 로그·응답 없음
+- [x] AC-11 병렬 등록 정원·닉네임 각 1건만 201
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-설정완료-api` (`main` 11ed1e8에서 생성, MEMBER-API-04 병합 포함)
-- 시작 시 작업 트리: 깨끗함
-- 선행 모듈 확인: `lib/member/login.ts`, `session.ts`(`sessionMaxAgeSeconds`), `link-status.ts`, `lib/origin.ts`, `lib/api-error.ts` 모두 있음
+- 브랜치: `ahn/feat-참여자등록-api` (`main` d7ca1c6에서 생성, STATE-API-02 PR #10 병합 포함)
+- 시작 시 작업 트리: 깨끗함. 병합된 로컬 `ahn/feat-설정완료-api` 삭제
+- 선행 모듈 확인: `lib/member/session-auth.ts`, `nickname.ts`(`normalizeNickname`), `pin.ts`(`hashPin`), `session.ts`, `link-status.ts`(`linkExpiryBase`), `lib/origin.ts`, `lib/api-error.ts`(`DRAFT_EXPIRED`) 모두 있음
 
 ## 검증 결과
 
@@ -38,25 +38,27 @@
 
 | 명령 | 결과 |
 | --- | --- |
-| `npm run test` | 통과 — 17 파일, 273 테스트 (이번 116건 추가: start-settings·start-collecting·session-auth·start route·seoul 114, MEMBER-API-04 2) |
+| `npm run test` | 통과 — 19 파일, 330 테스트 (이번 57건: participant-registration 25, participants route 26, session-auth 선택적 확인 6) |
 | `npm run lint` | 통과 |
 | `npm run typecheck` | 통과 |
-| `npm run build` | 통과 — `/api/v1/promises/[promiseId]/start` 동적(ƒ) |
-| dev 서버 + 개발 DB: 링크 발급 → 방장 등록 → 같은 쿠키로 설정 완료 | 200, 본문 명세 그대로(`endTime` "24:00", 마감 +09:00), `Cache-Control: no-store`, Set-Cookie Max-Age=1124255 = 지금 기준 마감(11-10 18:00) + 7일까지 남은 초(차이 0초) |
-| 저장값 | `status=collecting`, 정원 4, 2026-11-04~11-20, 540/1440, 60분, 마감 저장. 방장 유효 세션·멤버 세션 → 11-17 18:00(+09:00). 방장의 이미 만료된 세션·cancelled 참여자의 유효 세션은 그대로 |
-| 실패 응답 | Origin 없음 403, 쿠키 없음·만료 세션·cancelled 참여자 세션 401, 방장 아닌 멤버 세션 403(쿠키 갱신 포함), UUID 형식 오류 400, 오프셋 없는 마감 400, 어제 시작 422, 정원 1 422 — 이 동안 약속 draft·설정 NULL 유지. 재요청 409 + details |
-| 만료 draft | `created_at` 10분 전으로 이동 → 로그인(MEMBER-API-04) 410 `DRAFT_EXPIRED`·행 유지 → 설정 완료 410 + `Max-Age=0` → 약속·참여자·세션 0행(커밋 확인), 링크 유지, 링크 조회 unclaimed |
-| 로그 | dev 로그에 오류·토큰 없음 (pg SSL 모드 경고만) |
-| 정리 | 확인용 링크·약속·참여자·세션 삭제, 5개 테이블 스냅샷(행 수·md5)이 시작 상태와 동일 |
+| `npm run build` | 통과 — `/api/v1/promises/[promiseId]/participants` 동적(ƒ) |
+| dev 서버 + 개발 DB: 링크 발급 → 방장 등록 → 설정 완료 → 참여자 등록 | 201, 본문 명세 그대로(`currentParticipantCount` 2, `participantLimit` 3), `no-store`, Set-Cookie 속성 `HttpOnly; Secure; SameSite=Lax; Path=/api/v1/promises/{id}`, Max-Age=862501 = 마감(11-07 18:00) + 7일까지 남은 초. 저장: role=member·status=active·scrypt 해시, 세션 11-14 18:00(+09:00) |
+| 중복 참여 | 참여자 쿠키로 다른 닉네임 409 `ALREADY_PARTICIPANT`, 방장 쿠키도 409, 위조 쿠키는 등록 진행(이미 있는 닉네임이라 409 `NICKNAME_TAKEN`) |
+| 실패 응답 | Origin 없음 403, 깨진 본문 400, PIN 형식 422, UUID 형식 오류 400, 없는 약속 404 |
+| 병렬 정원 경쟁 | 남은 자리 1개(정원 3)에 다른 닉네임 2건 → 201 1건, 409 `PROMISE_FULL` 1건 |
+| 병렬 닉네임 경쟁 | 같은 닉네임 2건 → 201 1건, 409 `NICKNAME_TAKEN` 1건 |
+| 응답 유실 복구 | 등록 201 → 쿠키 없이 같은 닉네임 재시도 409 `NICKNAME_TAKEN` → 같은 닉네임·PIN 로그인(MEMBER-API-04) 200, 같은 participantId |
+| 로그 | dev 로그에 오류·PIN·토큰 없음 |
+| 정리 | 확인용 링크 2·약속 2·참여자 6·세션 7 삭제, 5개 테이블 스냅샷(행 수·md5)이 시작 상태와 동일 |
 
-DB 스키마 변경 없음 → `db:status` 해당 없음. UI 변경 없음 → 브라우저 확인 해당 없음.
+DB 스키마 변경 없음 → `db:status` 해당 없음. UI 변경 없음 → 브라우저 확인 해당 없음. cancelled 약속·draft·closed·confirmed·마감 경과·cancelled 참여자 닉네임·만료/cancelled 참여자 세션은 단위 테스트로만 확인했다(dev 서버 미확인).
 
 ## 메모
 
-- 사용자 확인(2026-11-04): 날짜 상한은 R-07 유지. 요청서의 "시작일 + 89일"은 채택하지 않음.
-- 문서 수정: state.md STATE-API-02(403 `INVALID_ORIGIN`, 시작일 ≥ 오늘, 400/422 구분, 쿠키 갱신, 410 커밋), member.md MEMBER-API-04(410 `DRAFT_EXPIRED`), API_CONVENTIONS(3절 `DRAFT_EXPIRED`, 5절 인증 순서·쿠키 갱신, 5.2 모집 시작 행), DECISION_CONFLICTS(R-11 갱신, R-12 신설, A-09).
-- 판단·미결은 스펙의 「미정 사항·판단」에 정리했다.
-- 검토 후 수정(2026-11-04, 판단 전부 승인): MEMBER-API-04 promiseId 형식 오류를 400으로 통일(member.md·테스트·R-12), R-12 시작 날짜 근거에서 상한 관련 문장 삭제. 재검증: test 273건·lint·typecheck·build 통과. 이 400 변경은 단위·라우트 테스트로만 확인했고 dev 서버 curl은 다시 돌리지 않았다.
+- 문서 수정: member.md MEMBER-API-03(규칙 연결, 중복 참여 절, 설정 값 문장, 에러 표, 처리 순서·닉네임 우선 이유, 보안), DECISION_CONFLICTS(R-13 신설, A-09), API_CONVENTIONS 5.2(참여자 등록 세션 행).
+- 판단·미결은 스펙의 「미정 사항」에 정리했다.
+- 검토 후(2026-11-04, 판단 1~5 승인): 모든 API 라우트(links, links/[inviteToken], host, auth/session, start, participants)의 모든 응답에 `Cache-Control: no-store` 적용. 빠져 있던 곳은 links 발급·host·auth/session. 공통 헬퍼 `lib/no-store.ts`로 모으고 라우트별 no-store 테스트 추가. 재검증: test 355건·lint·typecheck·build 통과, dev 서버에서 links 403·host 404·auth/session 400·404에 `no-store` 확인(DB 쓰기 없는 요청만). `/api/health`는 요청 범위 밖이라 그대로 둠.
+
 ## 완료 이력
 
 이후 기록은 오래된 것부터 최신 순서로 맨 아래에 추가한다. 기존 기록을 삭제하지 않는다.
@@ -100,3 +102,11 @@ DB 스키마 변경 없음 → `db:status` 해당 없음. UI 변경 없음 → �
 - 변경: `POST /api/v1/promises/[promiseId]/start`, 세션 인증 공통 모듈 `lib/member/session-auth.ts`(형식 400 → 404 → 취소 409 → 401 → 다른 약속 403, 인증 성공 후 모든 응답 쿠키 갱신 `withSessionCookie`), 설정 검증 `lib/state/start-settings.ts`(400 형식 / 422 규칙, R-07 3개월·시작일 ≥ 오늘), `lib/state/start-collecting.ts`(링크 → 약속 `FOR UPDATE`, 잠금 후 재확인, 만료 draft 삭제 커밋 + 410, 설정·collecting 저장, active 유효 세션만 마감 + 7일), 서울 날짜 헬퍼, 401·403·409(details)·410 `DRAFT_EXPIRED` 헬퍼. MEMBER-API-04: 만료 draft 404 → 410 `DRAFT_EXPIRED`(삭제 없음), promiseId 형식 오류 404 → 400. 문서: state.md STATE-API-02, member.md MEMBER-API-04, API_CONVENTIONS 3·5·5.2절, DECISION_CONFLICTS R-11 갱신·R-12 신설·A-09
 - 검증: Vitest 273건(이번 116건), lint·typecheck·build 통과. 개발 DB에서 링크 발급 → 방장 등록 → 같은 쿠키로 설정 완료 200, Max-Age = 마감 + 7일까지 남은 초(차이 0초), 1440 저장, 만료 세션·cancelled 참여자 세션 유지, 401·403·400·422·409, 10분 지난 draft 로그인 410(행 유지)·설정 완료 410(삭제 커밋, 링크 unclaimed). 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
 - 남은 제한: 시작 날짜 하한 등 R-12 항목 STATE 담당자 구현과 비교 필요, 마감 입력 규칙(TIME-13-xx) 미결, API_CONVENTIONS 5.2 마감 연장 행은 STATE-API-03에서 정리, PIN 시도 제한 미구현
+
+### 2026-11-04 — 참여자 등록 API (MEMBER-API-03)
+
+- 스펙: `context/features/006-participant-registration-api.md`
+- 브랜치: `ahn/feat-참여자등록-api`
+- 변경: `POST /api/v1/promises/[promiseId]/participants`, `lib/member/participant-registration.ts`(순수 판정 `resolveJoinAccess`, `registerParticipant` — 잠금 전 존재·취소·기존 참여 확인, 해시 잠금 전, `promises`만 `FOR UPDATE`, 잠금 후 `clock_timestamp()`, 닉네임 → 정원 순서, P2002 → 409, 세션 `linkExpiryBase + 7일`), `session-auth.ts` 선택적 확인 `findActivePromiseSession`, 409 5종 헬퍼. 모든 API 응답 `Cache-Control: no-store`(공통 `lib/no-store.ts`, links 발급·host·auth/session 누락 수정). `/feature` 시작 단계에 main 동기화 준비 절차 추가. 문서: member.md MEMBER-API-03, DECISION_CONFLICTS R-13 신설·A-09, API_CONVENTIONS 3절 no-store·5.2 참여자 등록 행
+- 검증: Vitest 355건(이번 82건), lint·typecheck·build 통과. 개발 DB에서 링크 발급 → 방장 등록 → 설정 완료 → 참여자 등록 201, 병렬 정원·닉네임 경쟁 각 201 1건·409 1건, 응답 유실 → `NICKNAME_TAKEN` → 로그인 200, `ALREADY_PARTICIPANT`·위조 쿠키 진행, 403·400·422·404. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
+- 남은 제한: 상태별 거절·만료/cancelled 참여자 세션은 단위 테스트로만 확인, 레이트 리밋 [제안], PIN 시도 제한(MEMBER-06-04) 미구현

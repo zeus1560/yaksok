@@ -11,15 +11,11 @@ import {
   validationFailed,
 } from "@/lib/api-error";
 import { authenticatePromiseSession, withSessionCookie } from "@/lib/member/session-auth";
+import { noStore } from "@/lib/no-store";
 import { isAllowedOrigin } from "@/lib/origin";
 import { startCollecting } from "@/lib/state/start-collecting";
 import { minuteToTime, parseStartSettings } from "@/lib/state/start-settings";
 import { toSeoulIsoString } from "@/lib/time/seoul";
-
-function noStore(response: Response): Response {
-  response.headers.set("Cache-Control", "no-store");
-  return response;
-}
 
 // STATE-API-02 설정 완료와 모집 시작
 export async function POST(

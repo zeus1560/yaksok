@@ -32,6 +32,8 @@
 
 ## 3. 응답 포맷
 
+모든 API 응답(성공·에러)에 `Cache-Control: no-store`를 붙인다. 상태·세션·만료가 요청마다 달라지기 때문이다. Route Handler는 처리 함수를 `lib/no-store.ts`의 `noStore`로 한 번 감싼다 (2026-11-04).
+
 성공 시 래퍼 없이 리소스 객체를 그대로 반환한다.
 
 ```json
@@ -119,6 +121,7 @@ MEMBER-API-01 응답에 본인 정보를 담지 않는 이유가 이것이다.
 | 탈퇴·내보내기 | 해당 참여자의 모든 세션 expires_at을 현재 시각으로 변경해 즉시 만료한다(행은 삭제하지 않음). 이후 그 쿠키는 401 | MEMBER-10-03 |
 | draft 탈퇴, 10분 만료 | 세션 행 물리 삭제(약속과 함꼐 삭제됨) | ERD 10절 |
 
+| 참여자 등록(MEMBER-API-03)으로 발급 | `linkExpiryBase + 7일`(collecting이므로 `voting_deadline_at + 7일`). 쿠키 Max-Age는 잠금 후 판정 시각 기준 `expires_at`까지 남은 초(내림) | **확정 (2026-11-04, DECISION_CONFLICTS R-13)** |
 | 재인증(MEMBER-API-04)으로 발급 | draft면 발급 시각 + 24시간. 그 외에는 `linkExpiryBase + 7일`(MEMBER-API-01 링크 만료와 같은 기준 시각). 쿠키 Max-Age는 `expires_at`까지 남은 초(내림) | **확정 (2026-11-04)** |
 
 **만료 후 재로그인:** 로그인 가능 기간 = 링크 유효 기간(`linkExpiryBase + 7일`)이다. 이 기간이 지나면 **PIN 재인증도 거절한다**(MEMBER-API-04에서 410 `ACCESS_PERIOD_EXPIRED`). 7일은 "로그인 유지 기간"이 아니라 "본인 입력에 접근할 수 있는 기간"으로 해석한다. **확정 (2026-11-04, DECISION_CONFLICTS R-11).** 확정된 약속은 `confirmed_start_at` 기준이라 마감 + 7일이 지나도 로그인할 수 있다.

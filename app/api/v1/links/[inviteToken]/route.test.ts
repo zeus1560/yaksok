@@ -70,4 +70,14 @@ describe("GET /api/v1/links/[inviteToken] (MEMBER-API-01)", () => {
     expect(text).not.toContain("secret-host");
     expect(JSON.parse(text).code).toBe("INTERNAL_ERROR");
   });
+
+  it.each([
+    ["410", () => lookupInviteLink.mockResolvedValueOnce({ kind: "expired" }), 410],
+    ["500", () => lookupInviteLink.mockRejectedValueOnce(new Error("db")), 500],
+  ])("%s 응답도 Cache-Control: no-store", async (_name, setup, status) => {
+    setup();
+    const res = await call();
+    expect(res.status).toBe(status);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
 });

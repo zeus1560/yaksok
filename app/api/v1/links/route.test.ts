@@ -96,4 +96,15 @@ describe("POST /api/v1/links (MEMBER-API-09)", () => {
     expect(res.status).toBe(500);
     expect(text).not.toContain("secret-host");
   });
+
+  it.each([
+    ["201", () => create.mockResolvedValueOnce({ id: "link-1" }), { origin: BASE_URL }, 201],
+    ["403 Origin 없음", () => {}, {}, 403],
+    ["500 DB 오류", () => create.mockRejectedValue(new Error("db")), { origin: BASE_URL }, 500],
+  ])("%s 응답도 Cache-Control: no-store", async (_name, setup, headers, status) => {
+    setup();
+    const res = await POST(linkRequest(headers));
+    expect(res.status).toBe(status);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
 });

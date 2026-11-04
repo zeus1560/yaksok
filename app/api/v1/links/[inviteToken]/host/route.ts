@@ -11,6 +11,7 @@ import { registerHost } from "@/lib/member/host-registration";
 import { validateNickname } from "@/lib/member/nickname";
 import { isPinFormat } from "@/lib/member/pin";
 import { sessionCookie } from "@/lib/member/session";
+import { noStore } from "@/lib/no-store";
 import { isAllowedOrigin } from "@/lib/origin";
 import { toSeoulIsoString } from "@/lib/time/seoul";
 
@@ -19,6 +20,13 @@ export async function POST(
   request: Request,
   ctx: RouteContext<"/api/v1/links/[inviteToken]/host">,
 ) {
+  return noStore(await handle(request, ctx));
+}
+
+async function handle(
+  request: Request,
+  ctx: RouteContext<"/api/v1/links/[inviteToken]/host">,
+): Promise<Response> {
   if (!isAllowedOrigin(request)) return invalidOrigin();
 
   let body: unknown;

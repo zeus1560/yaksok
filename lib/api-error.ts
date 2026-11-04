@@ -14,6 +14,11 @@ export type ApiErrorCode =
   | "INVALID_PROMISE_STATE"
   | "ACCESS_PERIOD_EXPIRED"
   | "DRAFT_EXPIRED"
+  | "PROMISE_NOT_OPEN"
+  | "DEADLINE_PASSED"
+  | "PROMISE_FULL"
+  | "NICKNAME_TAKEN"
+  | "ALREADY_PARTICIPANT"
   | "VALIDATION_FAILED"
   | "INTERNAL_ERROR";
 
@@ -93,6 +98,33 @@ export function invalidPromiseState(promiseStatus: string, allowedStates: string
     promiseStatus,
     allowedStates,
   });
+}
+
+// MEMBER-API-03 참여자 등록
+export function promiseNotOpen(): Response {
+  return apiError(409, "PROMISE_NOT_OPEN", "방장이 약속을 설정 중입니다.");
+}
+
+export function deadlinePassed(): Response {
+  return apiError(409, "DEADLINE_PASSED", "응답 마감이 지났습니다.");
+}
+
+export function promiseFull(): Response {
+  return apiError(409, "PROMISE_FULL", "참여 정원이 모두 찼습니다.");
+}
+
+// 남이 쓰는 닉네임과 본인이 이미 등록한 경우를 구분하지 않는다. 클라이언트는 로그인으로 가린다 (API_CONVENTIONS 6절)
+export function nicknameTaken(): Response {
+  return apiError(
+    409,
+    "NICKNAME_TAKEN",
+    "이미 사용 중인 닉네임입니다. 본인이 등록했다면 로그인해 주세요.",
+    { field: "nickname" },
+  );
+}
+
+export function alreadyParticipant(): Response {
+  return apiError(409, "ALREADY_PARTICIPANT", "이 브라우저는 이미 이 약속에 참여 중입니다.");
 }
 
 export function internalError(): Response {
