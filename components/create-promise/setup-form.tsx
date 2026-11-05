@@ -4,12 +4,7 @@ import { useEffect, useRef, useState, type SubmitEvent, type ReactNode } from "r
 import { Button, Card, FieldError } from "@/components/common/ui";
 import { callApi, type StartedSettings } from "@/components/create-promise/api";
 import { Calendar } from "@/components/create-promise/calendar";
-import {
-  formatCountdown,
-  isUrgent,
-  remainingMs,
-  type SetupRecord,
-} from "@/lib/create-promise/countdown";
+import { formatCountdown, isUrgent, remainingMs } from "@/lib/create-promise/countdown";
 import { addDays, selectDate, type DateRange } from "@/lib/create-promise/date-range";
 import { resolveDeadline, toDeadlinePayload } from "@/lib/create-promise/deadline";
 import {
@@ -49,12 +44,13 @@ const SELECT =
   "h-12 w-full rounded-lg border border-line bg-paper px-3 text-base outline-none focus:border-blue";
 
 export function SetupForm(props: {
-  inviteToken: string;
-  record: SetupRecord;
+  promiseId: string;
+  // 이 기기에서 방장 등록한 순간의 기기 시각 + 10분. null이면 기준값이 없어 카운트다운을 숨긴다
+  localExpiresAt: number | null;
   onDone: (settings: StartedSettings) => void;
   onReset: (notice: string) => void;
 }) {
-  const { record } = props;
+  const { promiseId, localExpiresAt } = props;
   const [now, setNow] = useState(() => Date.now());
   const [today] = useState(() => seoulDateOf(new Date()));
 
@@ -87,7 +83,7 @@ export function SetupForm(props: {
     [],
   );
 
-  const left = remainingMs(record.localExpiresAt, now);
+  const left = localExpiresAt === null ? null : remainingMs(localExpiresAt, now);
 
   function clearError(field: Field) {
     setErrors((prev) => ({ ...prev, [field]: undefined }));
@@ -145,7 +141,7 @@ export function SetupForm(props: {
 
     setPending(true);
     const result = await callApi<{ settings: StartedSettings }>(
-      `/api/v1/promises/${record.promiseId}/start`,
+      `/api/v1/promises/${promiseId}/start`,
       {
         method: "POST",
         body: {
@@ -195,15 +191,22 @@ export function SetupForm(props: {
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-[28px] font-bold leading-snug">새 약속 만들기</h2>
-          <p
-            role="timer"
-            aria-live="off"
-            className={`rounded-full px-3 py-1 text-sm font-medium ${
-              isUrgent(left) ? "bg-danger/10 text-danger" : "bg-blue-soft text-ink"
-            }`}
-          >
-            설정 시간 {formatCountdown(left)} 남음
-          </p>
+          {left === null ? (
+            // 다른 기기·저장소 삭제로 경과 시간 기준값이 없다. 남은 시간은 서버만 알며 만료는 410으로 판정한다
+            <p className="rounded-full bg-blue-soft px-3 py-1 text-sm font-medium text-ink">
+              등록 후 10분 안에 설정을 마쳐야 합니다
+            </p>
+          ) : (
+            <p
+              role="timer"
+              aria-live="off"
+              className={`rounded-full px-3 py-1 text-sm font-medium ${
+                isUrgent(left) ? "bg-danger/10 text-danger" : "bg-blue-soft text-ink"
+              }`}
+            >
+              설정 시간 {formatCountdown(left)} 남음
+            </p>
+          )}
         </div>
 
         <Section

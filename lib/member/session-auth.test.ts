@@ -87,6 +87,26 @@ describe("authenticatePromiseSession (세션 인증 공통)", () => {
     expect(sessionFindUnique).not.toHaveBeenCalled();
   });
 
+  it("allowCancelled: cancelled 약속도 세션 검사를 이어서 한다 (MEMBER-API-05)", async () => {
+    mockPromise("cancelled");
+    mockSession();
+    const result = await authenticatePromiseSession(request(`${COOKIE}=${TOKEN}`), PROMISE_ID, {
+      allowCancelled: true,
+    });
+    expect(result).toMatchObject({
+      kind: "ok",
+      promise: { id: PROMISE_ID, status: "cancelled" },
+      participant: { id: "pt-1", role: "host" },
+    });
+  });
+
+  it("allowCancelled: cancelled 약속이어도 쿠키가 없으면 unauthenticated", async () => {
+    mockPromise("cancelled");
+    expect(
+      await authenticatePromiseSession(request(), PROMISE_ID, { allowCancelled: true }),
+    ).toEqual({ kind: "unauthenticated" });
+  });
+
   it("쿠키 없음 → unauthenticated", async () => {
     mockPromise();
     expect(await authenticatePromiseSession(request(), PROMISE_ID)).toEqual({

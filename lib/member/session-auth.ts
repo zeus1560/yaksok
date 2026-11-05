@@ -40,9 +40,12 @@ export function readCookie(request: Request, name: string): string | null {
   return null;
 }
 
+// allowCancelled: 취소된 약속도 세션 검사를 이어서 한다. 허용 상태에 cancelled가 포함된 API(MEMBER-API-05)만 쓴다
+// 나머지 검사 순서는 같다. 이 옵션이 없으면 취소된 약속은 세션보다 먼저 cancelled다
 export async function authenticatePromiseSession(
   request: Request,
   promiseId: string,
+  options: { allowCancelled?: boolean } = {},
 ): Promise<SessionAuthResult> {
   if (!UUID.test(promiseId)) return { kind: "invalid_request" };
 
@@ -55,7 +58,7 @@ export async function authenticatePromiseSession(
   ]);
   if (!promise) return { kind: "not_found" };
   // 취소된 약속은 세션이 없거나 만료돼도 취소 사실만 알린다 (STATE-API-00)
-  if (promise.status === "cancelled") return { kind: "cancelled" };
+  if (promise.status === "cancelled" && !options.allowCancelled) return { kind: "cancelled" };
 
   const found = await lookupCookieSession(request, promise.id, now);
   if (found.kind === "none") return { kind: "unauthenticated" };
