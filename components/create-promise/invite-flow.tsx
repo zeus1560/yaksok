@@ -8,46 +8,72 @@ import {
   readStorage,
   removeStorage,
   type LinkStatus,
+  type MyParticipation,
   type StartedSettings,
 } from "@/components/create-promise/api";
 import { DoneCard } from "@/components/create-promise/done-card";
 import { RegisterHostCard } from "@/components/create-promise/register-host-card";
 import { SetupForm } from "@/components/create-promise/setup-form";
 import { DRAFT_POLL_FALLBACK_MS } from "@/components/create-promise/constants";
+import { setupStorageKey } from "@/lib/create-promise/countdown";
 import {
-  parseSetupRecord,
-  setupStorageKey,
-  type SetupRecord,
-} from "@/lib/create-promise/countdown";
+  decideInviteView,
+  setupCountdownBase,
+  type MeOutcome,
+} from "@/lib/create-promise/invite-view";
 
-// /p/[inviteToken] 화면 분기 (MEMBER-API-01 화면 분기 표, DECISION_CONFLICTS R-15)
-// 저장소 값은 화면 복원에만 쓴다. 방장 권한은 서버가 세션 쿠키로 확인한다
+// /p/[inviteToken] 화면 분기 (MEMBER-API-01 화면 분기 표, DECISION_CONFLICTS R-15·R-17)
+// 링크 조회 → promiseId가 있으면 /me(MEMBER-API-05)로 본인을 확인해 화면을 정한다
+// 브라우저 저장소는 카운트다운의 경과 시간 기준값으로만 쓰고 방장 여부 판단에는 쓰지 않는다
 
 type View =
   | { kind: "loading" }
   | { kind: "register"; notice: string | null }
   | { kind: "waiting"; pollMs: number; notice: string | null }
-  | { kind: "setup"; record: SetupRecord }
+  // localExpiresAt이 null이면 이 기기에 기준값이 없다(다른 기기·저장소 삭제) — 카운트다운을 숨긴다
+  | { kind: "setup"; promiseId: string; localExpiresAt: number | null }
   | { kind: "done"; settings: StartedSettings }
   | { kind: "invalid" }
   | { kind: "expired" }
   | { kind: "join" }
   | { kind: "error" };
 
+async function fetchMe(promiseId: string): Promise<MeOutcome> {
+  const result = await callApi<MyParticipation>(
+    `/api/v1/promises/${encodeURIComponent(promiseId)}/me`,
+  );
+  return result.ok
+    ? { ok: true, role: result.data.role, promiseStatus: result.data.promiseStatus }
+    : { ok: false };
+}
+
 async function lookup(inviteToken: string, notice: string | null = null): Promise<View> {
+  const storageKey = setupStorageKey(inviteToken);
   const result = await callApi<LinkStatus>(`/api/v1/links/${encodeURIComponent(inviteToken)}`);
   if (!result.ok) {
     if (result.status === 404) return { kind: "invalid" };
     if (result.status === 410) return { kind: "expired" };
     return { kind: "error" };
   }
-  switch (result.data.nextAction) {
-    case "register_host":
+  const { promiseId, nextAction, pollAfterMs } = result.data;
+  const me = promiseId ? await fetchMe(promiseId) : null;
+
+  switch (decideInviteView(nextAction, me)) {
+    case "setup": {
+      // decideInviteView가 setup을 고르면 promiseId가 있다
+      const id = promiseId as string;
+      const localExpiresAt = setupCountdownBase(readStorage(storageKey), id, Date.now());
+      if (localExpiresAt === null) removeStorage(storageKey);
+      return { kind: "setup", promiseId: id, localExpiresAt };
+    }
+    case "register":
+      // 링크가 다시 비었다(만료 draft 포함). 이전 약속의 기준값은 쓸 일이 없다
+      removeStorage(storageKey);
       return { kind: "register", notice };
-    case "wait_setup":
-      return { kind: "waiting", pollMs: result.data.pollAfterMs ?? DRAFT_POLL_FALLBACK_MS, notice };
-    default:
-      // 참여·로그인·결과·취소 화면은 PR 2 이후에 교체한다
+    case "waiting":
+      // /me 일시 오류일 수 있어 기준값을 지우지 않는다. 다음 폴링에서 방장으로 확인되면 카운트다운을 이어 쓴다
+      return { kind: "waiting", pollMs: pollAfterMs ?? DRAFT_POLL_FALLBACK_MS, notice };
+    case "join":
       return { kind: "join" };
   }
 }
@@ -63,19 +89,17 @@ export function InviteFlow({ inviteToken }: { inviteToken: string }) {
     [inviteToken],
   );
 
-  // 첫 진입: 이 토큰의 설정 진행 정보가 있고 시한이 남았으면 설정 화면을 바로 연다
+  // 첫 진입: 링크 조회와 /me로 화면을 정한다
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const record = parseSetupRecord(readStorage(storageKey), Date.now());
-      const next: View = record ? { kind: "setup", record } : await lookup(inviteToken);
-      if (!record) removeStorage(storageKey);
+      const next = await lookup(inviteToken);
       if (!cancelled) setView(next);
     })();
     return () => {
       cancelled = true;
     };
-  }, [inviteToken, storageKey]);
+  }, [inviteToken]);
 
   // 설정 중 대기: pollAfterMs 간격으로 다시 조회한다 (MEMBER-03-02)
   useEffect(() => {
@@ -99,7 +123,13 @@ export function InviteFlow({ inviteToken }: { inviteToken: string }) {
         <RegisterHostCard
           inviteToken={inviteToken}
           notice={view.notice}
-          onRegistered={(record) => setView({ kind: "setup", record })}
+          onRegistered={(record) =>
+            setView({
+              kind: "setup",
+              promiseId: record.promiseId,
+              localExpiresAt: record.localExpiresAt,
+            })
+          }
           onConflict={() => reload("이미 다른 분이 이 링크로 약속을 만들고 있어요.")}
           onLinkGone={(kind) => setView({ kind })}
         />
@@ -119,8 +149,8 @@ export function InviteFlow({ inviteToken }: { inviteToken: string }) {
     case "setup":
       return (
         <SetupForm
-          inviteToken={inviteToken}
-          record={view.record}
+          promiseId={view.promiseId}
+          localExpiresAt={view.localExpiresAt}
           onDone={(settings) => {
             removeStorage(storageKey);
             setView({ kind: "done", settings });
