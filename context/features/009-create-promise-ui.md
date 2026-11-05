@@ -62,6 +62,10 @@
 - lint·typecheck·test·build(dev 서버 종료 후)
 - 브라우저 확인 목록은 `context/current-feature.md`에 기록
 
+## 화면 분기 위치
+
+`/p/[inviteToken]` 분기는 클라이언트 컴포넌트가 링크 조회 API(MEMBER-API-01)를 호출해 정한다. 저장소 복원과 대기 화면 폴링이 브라우저에서만 가능하기 때문이다. "서버 컴포넌트는 `lib/`를 직접 호출한다"(`context/coding-standards.md`)는 일반 규칙의 예외다.
+
 ## 설정 완료 실패 분기
 
 상태 코드가 아니라 에러 코드로 분기한다(`lib/create-promise/start-failure.ts`).
