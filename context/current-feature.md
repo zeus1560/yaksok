@@ -1,35 +1,37 @@
-# 현재 기능: 가능 시간 현황 조회 API (TIME-API-02)
+# 현재 기능: 약속 만들기 화면 (홈 → 방장 등록 → 설정 → 완료)
 
 ## 상태
 
-완료
+검토 중
 
 ## 스펙
 
-`context/features/008-availability-status-api.md`
+`context/features/009-create-promise-ui.md`
 
 ## 목표
 
-active 참여자(방장 포함)가 입력 화면에 필요한 약속 상태(effectiveStatus)·설정 범위·참여자별 가능 시간·내 동기화 정보(version·제출 여부·저장 슬롯)를 한 번에 받는다. REPEATABLE READ 읽기 트랜잭션 하나에서 조회하고 DB는 바꾸지 않으며, 다른 참여자의 제출 여부는 드러내지 않는다.
+웹에서 방장이 링크 발급 → 방장 등록 → 필수 설정(날짜 범위·하루 시간·소요 시간·정원·마감)을 10분 안에 마치고 초대 링크를 복사한다. 같은 링크를 연 다른 사람은 설정이 끝날 때까지 대기 화면에서 폴링한다. API·DB 변경 없음.
 
 ## 수용 기준
 
-- [x] AC-1 no-store, Origin 검사 없음
-- [x] AC-2 `session-auth.ts` 순서, 인증 후 모든 응답 쿠키 갱신
-- [x] AC-3 REPEATABLE READ 읽기 트랜잭션, 잠금 없음, 판정 시각 `now()`
-- [x] AC-4 cancelled 409, draft 410/409 `PROMISE_NOT_OPEN`
-- [x] AC-5 트랜잭션 안 세션·참여자 재확인 401
-- [x] AC-6 마감 경과 collecting → status closed 계산만
-- [x] AC-7 200 본문 형식(serverTime 밀리초, 슬롯·마감 초 단위, 24:00)
-- [x] AC-8 active 참여자 등록순, 제출자만 availableSlots, 제출 여부 비노출
-- [x] AC-9 me(version·submitted·slots, 제출 해제여도 슬롯 유지)
-- [x] AC-10 토큰·쿠키 로그 없음, 500 원문 미노출
+- [x] AC-1 홈 버튼: 요청 중 비활성·"만드는 중…", 성공 시 `/p/{token}`, 실패 안내
+- [x] AC-2 링크 분기: 등록·대기(폴링)·404·410·임시 참여, 저장소 복원 우선
+- [x] AC-3 방장 등록: 화면 검증, 422 `details.field`, 409 → 대기
+- [x] AC-4 날짜: 오늘 이전·R-07 상한 초과 불가, 종료일 내일부터, 오늘만 안내
+- [x] AC-5 하루 시간: 30분 드롭다운, 기본 09:00~24:00, 종료는 시작보다 늦은 시각만
+- [x] AC-6 소요 시간: −/+ 30분, 기본 2시간, 범위 축소 시 자동 감소 + 안내
+- [x] AC-7 정원 2~30, −/+와 직접 입력
+- [x] AC-8 마감 기본값(TIME-13-02 확정), 직접 수정 후 유지, `+09:00` 전송
+- [x] AC-9 경과 시간 카운트다운·1분 강조·새로고침 복원, 0이어도 화면이 막지 않음
+- [x] AC-10 422 입력란 표시, 410 안내·저장소 삭제·방장 등록 화면 복귀
+- [x] AC-11 완료 화면 요약·배지·복사 토스트·비활성 입력 버튼
+- [x] AC-12 모바일 한 열 / 넓은 화면 두 열, PIN·세션 로그 없음, 같은 출처 fetch
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-가능시간조회-api` (`main` 32351df에서 생성, TIME-API-01 PR #12 병합 포함)
-- 시작 시 작업 트리: 깨끗함. 원격이 사라진(`gone`) 로컬 `ahn/` 브랜치 없음 → 삭제 없음. 원격이 남은 로컬 브랜치: `ahn/feat-가능시간제출-api`, `ahn/feat-로그인-api`, `ahn/feat-링크조회-api`, `ahn/feat-방장등록-api`, `ahn/feat-참여자등록-api`
-- 선행 확인: `lib/member/session-auth.ts`, `lib/api-error.ts`(`PROMISE_NOT_OPEN`·`DRAFT_EXPIRED`), `lib/time/seoul.ts`, `lib/time/slots.ts` 있음. 스키마 변경 없음
+- 브랜치: `ahn/feat-약속만들기-화면` (`main` 477127c에서 생성, TIME-API-02 PR #13 병합 포함)
+- 시작 시 작업 트리: 깨끗함. 원격이 사라진(`gone`) 로컬 `ahn/` 브랜치 없음 → 삭제 없음. 원격이 남은 로컬 브랜치: `ahn/feat-가능시간제출-api`, `ahn/feat-가능시간조회-api`, `ahn/feat-로그인-api`, `ahn/feat-링크조회-api`, `ahn/feat-방장등록-api`, `ahn/feat-참여자등록-api`
+- 선행 확인: `app/api/v1/links`(POST), `links/[inviteToken]`(GET), `links/[inviteToken]/host`(POST), `promises/[promiseId]/start`(POST) 모두 main에 있음
 
 ## 검증 결과
 
@@ -37,30 +39,39 @@ active 참여자(방장 포함)가 입력 화면에 필요한 약속 상태(effe
 
 | 명령 | 결과 |
 | --- | --- |
-| `npm run test` | 통과 — 24 파일, 468 테스트 (이번 35건: availability-status 19, availability route 16) |
+| `npm run test` | 통과 — 30 파일, 521 테스트 (이번 53건: date-range 14, deadline 10, time-options 8, countdown 8, start-failure 11, format 2 — `lib/create-promise/`) |
 | `npm run lint` | 통과 |
 | `npm run typecheck` | 통과 |
-| `npm run build` | 통과 — `/api/v1/promises/[promiseId]/availability` 동적(ƒ) |
-| dev 서버 + 개발 DB: 링크 발급 → 방장 등록 → (draft 조회) → 설정 완료 → 참여자 3명 등록 → 방장 제출·1명 빈 선택 제출 → 현황 조회 | draft 409 `PROMISE_NOT_OPEN`(쿠키 갱신). 200 `{status:collecting, serverTime:"…01:18:53.499+09:00", settings{09:00, "24:00", votingDeadlineAt:"2026-11-09T18:00:00+09:00"}, totalParticipants:4}` — 등록순(방장·철수·영희·민수), 방장 슬롯 초 단위(`.000` 입력도 초 단위), 23:30 슬롯, 빈 제출자·미제출자 모두 `[]`, no-store, Max-Age = 마감 + 7일까지 남은 초(차이 1초 이내) |
-| 미제출자 조회 | 영희 `me {version:0, submitted:false, slots:[]}` |
-| 다른 기기 제출 | 방장 재로그인 세션으로 base 1 제출 200 → 첫 기기 재조회 `me.version` 1 → 2, slots·availableSlots 갱신 |
-| 제출 해제(DB에서 submitted_at NULL, version+1) | 내 항목 `availableSlots []`, `me {version:3, submitted:false, slots:[저장 슬롯]}` |
-| 탈퇴(DB에서 cancelled + 세션 즉시 만료) | 탈퇴자 조회 401(인증 모듈 단계, 쿠키 없음), 방장 조회 `totalParticipants 3`·목록에서 빠짐 |
-| 마감 경과(DB 마감을 1분 전으로) | 응답 `status: closed`, DB `collecting` 그대로 |
-| DB closed / confirmed / cancelled | 200 closed / 200 confirmed / 409 `PROMISE_CANCELLED`(쿠키 없음) |
-| 실패 응답 | promiseId 형식 400, 쿠키 없음 401, 없는 약속 404 — 모두 no-store |
-| 로그 | dev 로그에 오류·토큰·쿠키 값 없음 |
-| 정리 | 확인용 링크·약속·참여자·세션·슬롯 삭제, 5개 테이블 스냅샷(행 수·md5)이 시작 상태와 동일 |
+| `npm run build` | 통과 (dev 서버 종료 후) — `/` 정적(○), `/p/[inviteToken]` 동적(ƒ) |
+| 브라우저 (Playwright + 로컬 Chromium, 프로젝트 의존성 추가 없이 scratchpad에 설치) | 아래 표 |
 
-DB 스키마 변경 없음 → `db:status` 해당 없음. UI 변경 없음 → 브라우저 확인 해당 없음. 10분 경계 draft 410, 다른 약속 세션 403, 트랜잭션 안 재확인 401은 단위 테스트로만 확인했다(dev 서버 미확인).
+| 브라우저 확인 | 결과 |
+| --- | --- |
+| 홈 → 새 약속 만들기 → `/p/{token}` → 방장 등록 → 설정 → 완료 → 링크 복사 | 통과. 클립보드 값 = 초대 주소, "링크를 복사했어요" 토스트, "내 가능 시간 입력하기" 비활성 |
+| 화면 검증 | 닉네임 1자·PIN 2자리 → 각 입력란 오류 |
+| 설정 중 새로고침 | 설정 화면 복원, 카운트다운 9:57 → 9:57로 이어짐 |
+| 다른 브라우저(390px)로 같은 링크 | 대기 화면 → 방장 완료 후 폴링으로 "참여 화면은 준비 중입니다"로 바뀜 |
+| 오늘만 선택 | "오늘 하루짜리 약속은…" 안내 |
+| 마감 기본값 | 오늘~12.10 → 12-09T23:59(시작일 전날 지남 → 종료일 전날), 12.10~12.20 → 12-09T23:59, 직접 18:00으로 수정 후 범위 변경 → 유지 |
+| 하루 범위 18:00~19:00 | 소요 2시간 → 1시간 자동 감소 + 안내, 종료 목록 18:30~24:00(12개) |
+| 정원 40 입력 | 30으로 보정 |
+| 완료 화면 | 제목 "12.11–12.21 · 방장 포함 4명", 저장소 값 삭제 |
+| 10분 초과(개발 DB에서 draft `created_at` −11분) 후 설정 완료 | 410 → "설정 시간이 지났어요…" + 방장 등록 화면, 저장소 삭제 |
+| 390px 너비 | 한 열 배치, `scrollWidth` 390(가로 스크롤 없음) |
+| `/p/notatoken` | "잘못된 링크" 안내 |
+| 브라우저 콘솔 | 오류·PIN 없음 |
+| 정리 | 확인용 링크 3개와 딸린 약속·참여자·세션 삭제, 5개 테이블 스냅샷(행 수·md5)이 시작 상태와 동일. dev 서버 종료, 3000 포트 비어 있음 |
+
+미확인: 만료 링크 410 화면(7일 경과 데이터를 만들지 않음 — 404와 같은 컴포넌트), 422 서버 오류의 입력란 표시(화면 검증이 먼저 막아 서버 422를 유도하지 않음), 1분 이하 강조 색, 실제 휴대폰 기기.
 
 ## 메모
 
-- 문서 수정: time.md TIME-API-02(허용 상태·동시성 확정, serverTime 확정, votingDeadlineAt 초 단위·예시, 등록순 기준, 에러 형식·표(400·403·409 `PROMISE_NOT_OPEN`·410), 처리 순서 1~9, 코드 예제 안내), 상태별 허용 표 draft 칸, 시간 표기 규약(밀리초는 submittedAt·serverTime), 결정 목록 체크. DECISION_CONFLICTS R-14에 TIME-API-02 정렬·확정 근거 추가, A-06 해결.
-- 요청서 외 정렬: 에러 형식 줄 `{"error":{…}}` → API_CONVENTIONS 3절, 예시 `votingDeadlineAt` `.000` 제거(요청서 4의 "STATE-API-02와 같은 표기"를 따름).
-- 코드 예제(time.md)의 `PROMISE_NOT_COLLECTING`은 TIME-API-01처럼 "정렬 전 코드"로 안내만 붙이고 그대로 두었다.
-- dev 서버: 이미 떠 있던 dev 서버(PID 1364)가 모든 API에 500(jest-worker 오류)을 내 종료 후 새로 띄웠다. 원인은 같은 시점의 `npm run build`로 추정.
-- 검토 후(2026-11-05): 판단 1~5(요청서 외 문서 정렬 2건, 재확인에 세션 만료 포함, 등록순 동률 `id`, 인증 뒤 약속 소멸 404 + 쿠키 삭제, 코드 예제 그대로) 승인. 확인용 dev 서버 종료(하위 `next` 프로세스까지, 3000 포트 비움). `/feature` 테스트 단계에 dev 서버 정리 규칙(build는 dev 서버 끈 뒤, 작업 후 dev 서버 종료, 쿠키·토큰 미출력)을 추가해 별도 chore 커밋.
+- 문서 수정: DECISION_CONFLICTS R-15(화면 결정)·R-16(TIME-13-02 확정, 종료일 오늘 빈틈) 신설, C-04 해결, 미결 수 TIME 24 → 23·합계 80 → 79(README 포함). TIME.md TIME-13-02 확정·미결 목록에서 제외.
+- 화면용 순수 로직은 서버 전용이 아니라 `lib/create-promise/`에 두었다(브라우저에서도 import). `lib/state/start-settings.ts`·`lib/time/seoul.ts`·`lib/member/nickname.ts`의 순수 함수·상수를 재사용해 서버 검증과 값이 어긋나지 않게 했다.
+- `/p/[inviteToken]` 분기는 클라이언트가 링크 조회 API를 호출한다. 저장소 복원과 폴링이 브라우저에서만 가능하기 때문이다.
+- 글꼴: Figma는 Noto Sans KR이지만 웹 폰트를 받지 않고 CSS 글꼴 목록(Pretendard → Noto Sans KR → 시스템 한글)으로 지정. 기존 Geist 폰트·create-next-app 홈 제거.
+- 새 의존성 없음.
+- 검토 후(2026-11-06): 설정 완료 실패를 상태 코드가 아니라 에러 코드로 분기하도록 수정(`lib/create-promise/start-failure.ts`). 저장소 삭제 + 재조회는 `DRAFT_EXPIRED`·`UNAUTHENTICATED`·`FORBIDDEN`·`PROMISE_NOT_FOUND`·`PROMISE_CANCELLED`·`INVALID_PROMISE_STATE`만. `INVALID_ORIGIN`·422·400·5xx·네트워크 오류는 저장소를 유지하고 오류 안내. 409 복구(대기 화면의 "방장이신가요? 로그인" → host면 설정 화면)는 PR 2로 넘김(스펙 009·feature-list 기록).
 
 ## 완료 이력
 
