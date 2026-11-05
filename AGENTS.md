@@ -61,6 +61,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## 현재 상태
 
 - ERD 확정. (5개 테이블)
+- 진행 상태와 다음 작업은 `context/current-feature.md`와 `context/feature-list.md`를 따른다.
 
 ## 커밋
 
