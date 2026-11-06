@@ -1,34 +1,35 @@
-# 현재 기능: 내 참여 정보 조회 API (MEMBER-API-05)와 방장 복원 전환
+# 현재 기능: 참여 경로 화면 (참여자 등록·로그인·도착)
 
 ## 상태
 
-완료
+검토 중
 
 ## 스펙
 
-`context/features/010-me-api.md`
+`context/features/011-participate-ui.md`
 
 ## 목표
 
-`GET /api/v1/promises/{promiseId}/me`로 세션 쿠키의 주인(참여자·역할·제출 여부·권한)을 서버에서 확인한다. `/p/[inviteToken]`은 이 결과로 방장 설정 화면을 연다. 브라우저 저장소는 카운트다운 기준값으로만 남긴다. 스키마 변경 없음.
+링크로 들어온 사람이 닉네임·PIN으로 참여하거나 다른 기기에서 로그인하고, 등록·방장 등록 응답 유실을 같은 값으로 복구한다. 도착 화면은 `/me` 기준으로 닉네임·방장을 보여 주고 시간 입력(PR 3) 자리를 둔다. API·DB 변경 없음.
 
 ## 수용 기준
 
-- [x] AC-1 200 본문·표기·쿠키 갱신·no-store
-- [x] AC-2 permissions 조합(상태 × 마감 × 역할, cancelled 참여자 모두 false)
-- [x] AC-3 deadlinePassed 경계(정확히 마감 시각 = true)
-- [x] AC-4 취소된 약속 200
-- [x] AC-5 400·401·403·404, 인증 후 세션 소실 401 + 쿠키 삭제
-- [x] AC-6 매 요청 한 문장 재조회, 소속 대조
-- [x] AC-7 draft + host → 설정, 다른 브라우저 → 대기
-- [x] AC-8 저장소 없는 방장 → 카운트다운 숨김 + 10분 안내
-- [x] AC-9 완료 후 새로고침 `/me` role=host
+- [x] AC-1 세션 없는 collecting → 등록 화면, 등록 전 설정 값 비공개, 201 → 도착
+- [x] AC-2 로그인 전환·다른 기기 로그인, 401 비구분 문구
+- [x] AC-3 `NICKNAME_TAKEN` → 로그인 1회 판별(200 복구 / 401 안내 + 로그인 전환)
+- [x] AC-4 대기 화면 방장 로그인 → 설정 화면
+- [x] AC-5 도착 화면(`/me` 닉네임·방장 표시), 방장 새로고침도 도착
+- [x] AC-6 정원 초과·마감 경과·마감·취소 안내, 마감 뒤 로그인 진입점
+- [x] AC-7 에러 코드 기준 실패 분기 순수 함수와 코드별 테스트
+- [x] AC-8 PIN 노출 없음, 숫자 키패드·자동완성 끔, 요청 중 버튼 비활성
+- [x] AC-9 390px 한 열
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-내정보조회-api` (`main` ed76d3b에서 생성, 009 PR #14 병합 포함)
-- 시작 시 작업 트리: 깨끗함. 원격이 사라진(`gone`) 로컬 `ahn/` 브랜치 없음 → 삭제 없음. 원격이 남은 로컬 브랜치: `ahn/feat-가능시간제출-api`, `ahn/feat-가능시간조회-api`, `ahn/feat-로그인-api`, `ahn/feat-링크조회-api`, `ahn/feat-방장등록-api`, `ahn/feat-약속만들기-화면`, `ahn/feat-참여자등록-api`
-- 선행 확인: `components/create-promise/*`, `app/p/[inviteToken]/page.tsx`, `lib/member/session-auth.ts` 모두 main에 있음
+- 브랜치: `ahn/feat-참여화면` (`main` 0068bf6에서 생성, 010 PR #15 병합 포함)
+- 시작 시 작업 트리: 깨끗함. 원격이 사라진(`gone`) 로컬 `ahn/` 브랜치 없음 → 삭제 없음
+- 선행 확인: `app/api/v1/promises/[promiseId]/{participants,auth/session,me}`, `components/create-promise/invite-flow.tsx` 모두 main에 있음
+- 첫 커밋은 010 완료 기록(스펙 010 상태, 완료 이력, feature-list)
 
 ## 검증 결과
 
@@ -36,37 +37,36 @@
 
 | 명령 | 결과 |
 | --- | --- |
-| `npm run test` | 통과 — 34 파일, 577 테스트 (이번 56건: me-permissions·me·me 라우트·invite-view 신규, session-auth `allowCancelled` 2건) |
+| `npm run test` | 통과 — 35 파일, 613 테스트 (이번 36건: `lib/participate/failure` 신규, `invite-view` 화면 결정 갱신) |
 | `npm run lint` | 통과 |
 | `npm run typecheck` | 통과 |
-| `npm run build` | 통과 (dev 서버 종료 후) — `/api/v1/promises/[promiseId]/me` 동적(ƒ) |
+| `npm run build` | 통과 (dev 서버 종료 후) |
 
-| 브라우저·개발 DB 확인 (Playwright + 로컬 Chromium) | 결과 |
+| 브라우저·개발 DB 확인 (Playwright + 로컬 Chromium, 참여자 화면 390px) | 결과 |
 | --- | --- |
-| 방장 등록 → 새로고침(저장소 유지) | 설정 화면, 카운트다운 이어짐, `/me` 200 host·draft·`canManagePromise` true |
-| 다른 브라우저(390px)로 같은 링크 | 대기 화면, `/me` 401 `UNAUTHENTICATED` |
-| 같은 브라우저 저장소 삭제 후 새로고침 | 설정 화면, `role=timer` 0개, "등록 후 10분 안에 설정을 마쳐야 합니다" 표시 |
-| 저장소 없는 상태로 설정 완료 | 완료 화면 |
-| 완료 후 새로고침 | 임시 참여 화면, `/me` 200 `role=host`·collecting·권한 모두 true |
-| 다른 브라우저 폴링 | 완료 후 임시 참여 화면으로 바뀜 |
-| A 약속 세션 토큰을 B 약속 쿠키 이름으로 B `/me` | 403 `FORBIDDEN` |
-| A 약속 쿠키 그대로 B `/me`(이름 불일치) | 401 |
-| 쿠키 없음 / 형식 오류 / 없는 약속 | 401(no-store) / 400 / 404 |
-| DB에서 마감을 1초 전으로(collecting 유지) | `deadlinePassed` true, 입력·제출 false, 관리·탈퇴 true |
-| DB에서 약속 cancelled | 200 `promiseStatus=cancelled`, 권한 모두 false, 제출 시각 밀리초 `+09:00` |
-| DB에서 세션 `expires_at` = 현재(탈퇴 상당) | 401 |
-| 설정 화면에서 `/me`만 500(Playwright route) 후 새로고침 | 대기 화면, 폴링 중 500 3회 동안 저장소 유지 → 차단 해제 후 약 5초(다음 폴링)에 설정 화면 복귀, 카운트다운 9:50(기준값 그대로 이어짐) |
-| 방장 등록 → DB에서 draft `created_at` −11분 → 다른 브라우저가 같은 링크로 새 방장 등록 → 처음 브라우저 새로고침 | 대기 화면, 카운트다운·설정 화면·10분 안내 없음, 새 약속 `/me` 401. 이전 약속 저장값은 남아 있지만 promiseId가 달라 쓰이지 않음, 폴링 후에도 대기 유지 |
-| 브라우저 콘솔 | 오류 없음 |
-| 정리 | 확인용 링크 3개와 딸린 약속·참여자·세션 삭제, 5개 테이블 스냅샷(행 수·md5) 시작 상태와 동일. dev 서버 종료, 3000 포트 비어 있음 |
+| 새 브라우저로 collecting 링크 | 등록 화면, 날짜 등 설정 값 없음, 가로 스크롤 없음, PIN `type=password`·`inputMode=numeric`·`autocomplete=off` |
+| 등록 | 도착 화면 "참여자1님", 방장 표시 없음 |
+| 같은 닉네임·다른 PIN으로 다른 브라우저 등록 | 자동 로그인 1회 → 401 → 중복 안내 → "이 닉네임으로 로그인하기" → 닉네임 채움·PIN 빈 로그인 화면. 틀린 PIN은 "닉네임 또는 PIN이 맞지 않아요", 맞는 PIN은 도착(다른 기기 로그인) |
+| 응답 유실: 등록 요청은 서버에 도달(201)시키고 응답을 끊은 뒤 쿠키도 지움 → 같은 값 재시도 | `NICKNAME_TAKEN` → 자동 로그인 1회 → 도착 |
+| 응답만 끊고 쿠키는 남은 경우(Playwright `route.fetch`가 쿠키를 저장) → 재시도 | `ALREADY_PARTICIPANT` → 재조회 → 도착(자동 로그인 0회) |
+| 등록 화면 "이미 참여하셨나요? 로그인" | 다른 기기 로그인 → 도착 |
+| DB 정원 = 현재 인원 | "참여 정원이 모두 찼어요" |
+| DB 마감 1초 전(collecting 유지) | 등록 → "응답 마감이 지났어요" → "이미 참여했다면 로그인" → 도착("응답이 마감된 약속이에요") |
+| 방장 완료 화면 새로고침 | 도착 화면 "확인방장님" + 방장 표시 |
+| 새 약속 설정 완료(collecting, 마감 전) 후 방장 새로고침(390px) | 도착 화면 "콜렉팅방장님" + 방장 표시, "이 약속에 참여했어요. 가능한 시간 입력은…" 문구와 입력 자리, 마감 문구 없음. `/me` host·collecting·`deadlinePassed` false·`canEditAvailability` true |
+| DB closed / cancelled | "응답이 마감된 약속이에요" + 로그인 버튼 / "취소된 약속이에요" |
+| draft 대기 화면 "방장이신가요? 로그인" | 등록 전환 없음. 틀린 PIN 오류, 폴링 3초 뒤에도 입력 유지, 맞는 PIN → 설정 화면(저장값 없어 카운트다운 숨김 + 10분 안내) |
+| PIN 노출 | 콘솔 0건, 요청 URL 0건, localStorage·sessionStorage 없음 |
+| 콘솔 오류 | 401·409 등 의도한 응답의 리소스 로드 오류만 |
+| 정리 | 확인용 링크 3개와 딸린 약속·참여자·세션 삭제, 5개 테이블 스냅샷 시작 상태와 동일. dev 서버 종료, 3000 포트 비어 있음 |
 
-미확인: 실제 휴대폰, 정확히 마감 시각 경계(단위 테스트로만), 인증과 재조회 사이 세션 소실(단위 테스트로만), 만료 draft에 `/me` 직접 호출.
+미확인: 실제 휴대폰(숫자 키패드 표시), 참여 기간 만료(`ACCESS_PERIOD_EXPIRED`)·참여 종료(`PARTICIPANT_CANCELLED`)·`DRAFT_EXPIRED` 로그인 화면(단위 테스트로만).
 
 ## 메모
 
-- `availabilitySubmittedAt` ↔ `participants.availability_submitted_at`(`Timestamptz(3)`, nullable). 스키마 변경 없음
-- 저장소 기준값은 방장 등록 화면으로 갈 때·다른 약속 값일 때·설정 완료·리셋 때만 지운다. 대기 화면으로 갈 때는 `/me` 일시 오류일 수 있어 남긴다(2026-11-06 브라우저 재확인)
-- 결정 기록: DECISION_CONFLICTS R-17(취소 약속 200을 위한 `allowCancelled`, cancelled 참여자 401, 표기, 화면 분기)
+- 결정 기록: DECISION_CONFLICTS R-18(닉네임 중복 판별, 실패 분기, 화면 결정, 마감 뒤 로그인, PIN 처리)
+- 화면용 순수 로직은 `lib/participate/`(브라우저에서도 import), 컴포넌트는 `components/participate/`
+- 탈퇴자(`PARTICIPANT_CANCELLED`)에게 다른 닉네임을 권하지 않는다 — 재참여 불가(MEMBER-11-01·02)
 
 ## 완료 이력
 
