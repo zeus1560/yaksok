@@ -24,25 +24,46 @@ describe("decideInviteView", () => {
     ).toBe("waiting");
   });
 
-  it("링크는 draft였지만 /me 시점에 collecting → 방장이어도 설정 화면이 아니라 링크 결과를 따른다", () => {
+  it("링크는 draft였지만 /me 시점에 collecting → 설정 화면이 아니라 참여 완료(/me가 더 최신)", () => {
     expect(
       decideInviteView("wait_setup", { ok: true, role: "host", promiseStatus: "collecting" }),
-    ).toBe("waiting");
+    ).toBe("arrived");
   });
 
   it("promiseId가 없어 /me를 부르지 않음 → 방장 등록", () => {
     expect(decideInviteView("register_host", null)).toBe("register");
   });
 
-  it.each<NextAction>(["join", "view_result", "cancelled"])(
-    "%s → 방장 여부와 무관하게 임시 참여 화면",
-    (nextAction) => {
-      expect(
-        decideInviteView(nextAction, { ok: true, role: "host", promiseStatus: "collecting" }),
-      ).toBe("join");
-      expect(decideInviteView(nextAction, { ok: false })).toBe("join");
+  it.each(["collecting", "closed", "confirmed"])(
+    "세션 있음(%s) → 방장·참여자 모두 참여 완료",
+    (promiseStatus) => {
+      const nextAction: NextAction = promiseStatus === "collecting" ? "join" : "view_result";
+      expect(decideInviteView(nextAction, { ok: true, role: "host", promiseStatus })).toBe(
+        "arrived",
+      );
+      expect(decideInviteView(nextAction, { ok: true, role: "member", promiseStatus })).toBe(
+        "arrived",
+      );
     },
   );
+
+  it("세션 없음: join → 참여자 등록, view_result → 마감 안내", () => {
+    expect(decideInviteView("join", { ok: false })).toBe("join");
+    expect(decideInviteView("view_result", { ok: false })).toBe("closed");
+  });
+
+  it("cancelled → 세션과 무관하게 취소 안내", () => {
+    expect(decideInviteView("cancelled", { ok: false })).toBe("cancelled");
+    expect(decideInviteView("cancelled", { ok: true, role: "host", promiseStatus: "cancelled" })).toBe(
+      "cancelled",
+    );
+  });
+
+  it("링크는 join인데 /me 시점에 취소됨 → 취소 안내", () => {
+    expect(decideInviteView("join", { ok: true, role: "member", promiseStatus: "cancelled" })).toBe(
+      "cancelled",
+    );
+  });
 });
 
 describe("setupCountdownBase", () => {
