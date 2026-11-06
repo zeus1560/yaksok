@@ -1,13 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { DRAFT_EXPIRY_MS } from "@/lib/member/link-status";
 import type { PromiseSession } from "@/lib/member/session-auth";
+import { refreshActiveSessions } from "@/lib/member/session-expiry";
 import {
   validateStartSettings,
   type SettingsViolation,
   type StartSettingsInput,
 } from "./start-settings";
-
-const SESSION_AFTER_DEADLINE_MS = 7 * 24 * 60 * 60 * 1000; // collecting 세션 = 마감 + 7일 (STATE-API-00)
 
 // session: 응답 시점의 요청자 세션 expires_at(지워졌으면 null)과 판정 시각. 쿠키 Max-Age 계산용
 type SessionState = { session: { expiresAt: Date | null; now: Date } };
@@ -32,8 +31,8 @@ export async function startCollecting(
   input: StartSettingsInput,
 ): Promise<StartCollectingResult> {
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`
-      SELECT id FROM promise_links WHERE id = ${auth.promise.promiseLinkId}::uuid FOR UPDATE`;
+    const [link] = await tx.$queryRaw<{ id: string; created_at: Date }[]>`
+      SELECT id, created_at FROM promise_links WHERE id = ${auth.promise.promiseLinkId}::uuid FOR UPDATE`;
     const [promise] = await tx.$queryRaw<PromiseRow[]>`
       SELECT id, status, created_at FROM promises WHERE id = ${auth.promise.id}::uuid FOR UPDATE`;
     const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
@@ -85,23 +84,27 @@ export async function startCollecting(
       select: { id: true },
     });
 
-    // active 참여자의 아직 유효한 세션만 연장한다. 만료됐거나 cancelled 참여자의 세션은 되살리지 않는다
-    const sessionExpiresAt = new Date(input.votingDeadlineAt.getTime() + SESSION_AFTER_DEADLINE_MS);
-    const extended = await tx.$queryRaw<{ id: string }[]>`
-      UPDATE participant_sessions AS s SET expires_at = ${sessionExpiresAt}
-      FROM participants AS p
-      WHERE s.participant_id = p.id
-        AND p.promise_id = ${promise.id}::uuid
-        AND p.status = 'active'
-        AND s.expires_at > ${now}
-      RETURNING s.id`;
-    const requesterExtended = extended.some((row) => row.id === auth.session.id);
+    // draft 세션(발급 + 24시간)을 새 상태의 링크 만료(collecting이므로 마감 + 7일)로 바꾼다.
+    // active 참여자의 아직 유효한 세션만. 만료됐거나 cancelled 참여자의 세션은 되살리지 않는다
+    const refreshed = await refreshActiveSessions(tx, {
+      promiseId: promise.id,
+      link: {
+        createdAt: link.created_at, // 약속이 있으면 링크도 있다(FK). 마감이 있어 기준으로 쓰이지는 않는다
+        promise: {
+          status: "collecting",
+          votingDeadlineAt: input.votingDeadlineAt,
+          confirmedStartAt: null,
+        },
+      },
+      now,
+    });
+    const requesterRefreshed = refreshed.sessionIds.includes(auth.session.id);
 
     return {
       kind: "ok",
       settings: input,
       session: {
-        expiresAt: requesterExtended ? sessionExpiresAt : auth.session.expiresAt,
+        expiresAt: requesterRefreshed ? refreshed.expiresAt : auth.session.expiresAt,
         now,
       },
     };

@@ -1,7 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 
 // 세션 (API_CONVENTIONS 5절). 토큰 원문은 쿠키로만 내려주고 DB에는 SHA-256 해시만 저장한다
-export const DRAFT_SESSION_TTL_SECONDS = 24 * 60 * 60; // draft에서 발급한 세션 (5.2)
+// draft에서 발급한 세션만 발급 시각 + 24시간이다 (5.2, R-10). 그 외 세션은 모두 링크 만료와 같은
+// accessExpiresAt(link-status.ts)을 쓴다. draft를 따로 두는 이유: draft에는 voting_deadline_at이 없어
+// 링크 만료 기준이 링크 발급 시각으로 떨어지는데, 10분 안에 설정하거나 삭제되는 상태라 그 값에 의미가 없다.
+// 모집 시작(STATE-API-02)이 이 세션들을 refreshActiveSessions(session-expiry.ts)로 마감 + 7일로 바꾼다
+export const DRAFT_SESSION_TTL_SECONDS = 24 * 60 * 60;
 
 export function generateSessionToken(): string {
   return randomBytes(32).toString("base64url");

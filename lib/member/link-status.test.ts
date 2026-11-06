@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  accessExpiresAt,
   DRAFT_EXPIRY_MS,
   LINK_EXPIRY_MS,
   linkExpiryBase,
@@ -65,6 +66,40 @@ describe("linkExpiryBase (MEMBER-01-02)", () => {
         link({ status: "collecting", votingDeadlineAt: newDeadline, confirmedStartAt: null }),
       ),
     ).toEqual(newDeadline);
+  });
+});
+
+describe("accessExpiresAt (draft를 뺀 세션 만료 = 링크 만료)", () => {
+  const deadline = new Date("2026-11-05T18:00:00+09:00");
+  const start = new Date("2026-11-10T19:00:00+09:00");
+  const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+
+  it("확정 약속은 confirmed_start_at + 7일", () => {
+    expect(
+      accessExpiresAt(
+        link({ status: "confirmed", votingDeadlineAt: deadline, confirmedStartAt: start }),
+      ),
+    ).toEqual(new Date("2026-11-17T19:00:00+09:00"));
+  });
+
+  it.each(["collecting", "closed"])("미확정(%s)은 voting_deadline_at + 7일", (status) => {
+    expect(accessExpiresAt(link({ status, votingDeadlineAt: deadline }))).toEqual(
+      new Date("2026-11-12T18:00:00+09:00"),
+    );
+  });
+
+  it("방장 등록 전·마감 없는 draft는 링크 발급 + 7일", () => {
+    expect(accessExpiresAt(link(null))).toEqual(at(LINK_CREATED, SEVEN_DAYS));
+    expect(accessExpiresAt(link({ status: "draft" }))).toEqual(at(LINK_CREATED, SEVEN_DAYS));
+  });
+
+  it("링크 정보 없이 약속 상태만 넘겨도 된다 (세션 일괄 갱신용 좁은 입력)", () => {
+    expect(
+      accessExpiresAt({
+        createdAt: LINK_CREATED,
+        promise: { status: "collecting", votingDeadlineAt: deadline, confirmedStartAt: null },
+      }),
+    ).toEqual(new Date("2026-11-12T18:00:00+09:00"));
   });
 });
 

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/prisma/generated/client";
-import { DRAFT_EXPIRY_MS, LINK_EXPIRY_MS, linkExpiryBase } from "./link-status";
+import { accessExpiresAt, DRAFT_EXPIRY_MS } from "./link-status";
 import { hashPin } from "./pin";
 import { generateSessionToken, hashSessionToken, sessionMaxAgeSeconds } from "./session";
 import { findActivePromiseSession } from "./session-auth";
@@ -152,20 +152,15 @@ export async function registerParticipant(
           throw isUniqueViolation(error) ? new NicknameTaken() : error;
         });
 
-      // 세션 만료 = 링크 만료와 같은 기준 시각 + 7일. collecting이므로 voting_deadline_at + 7일 (5.2)
-      const sessionExpiresAt = new Date(
-        linkExpiryBase({
-          inviteToken: "",
-          createdAt: promise.link_created_at,
-          promise: {
-            id: promise.id,
-            status: promise.status,
-            createdAt: promise.created_at,
-            votingDeadlineAt: promise.voting_deadline_at,
-            confirmedStartAt: promise.confirmed_start_at,
-          },
-        }).getTime() + LINK_EXPIRY_MS,
-      );
+      // 세션 만료 = 링크 만료. collecting이므로 voting_deadline_at + 7일 (5.2)
+      const sessionExpiresAt = accessExpiresAt({
+        createdAt: promise.link_created_at,
+        promise: {
+          status: promise.status,
+          votingDeadlineAt: promise.voting_deadline_at,
+          confirmedStartAt: promise.confirmed_start_at,
+        },
+      });
       await tx.participantSession.create({
         data: {
           participantId: participant.id,

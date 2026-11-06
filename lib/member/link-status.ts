@@ -33,12 +33,26 @@ export type LinkStatusBody = {
 
 export type LinkStatusResult = { kind: "expired" } | { kind: "ok"; body: LinkStatusBody };
 
+// 만료 계산에 필요한 값만. LinkWithPromise도 그대로 넘길 수 있고, 세션 일괄 갱신은 갱신 뒤 새 상태를 넘긴다
+export type AccessExpiryLink = {
+  createdAt: Date;
+  promise: Pick<LinkPromise, "status" | "votingDeadlineAt" | "confirmedStartAt"> | null;
+};
+
 // 링크 만료 기준 시각 (MEMBER-01-02). 재조율로 다시 모집하면 voting_deadline_at이 새 마감으로 바뀌어 있다
-export function linkExpiryBase(link: LinkWithPromise): Date {
+export function linkExpiryBase(link: AccessExpiryLink): Date {
   const promise = link.promise;
   if (!promise) return link.createdAt;
   if (promise.status === "confirmed" && promise.confirmedStartAt) return promise.confirmedStartAt;
   return promise.votingDeadlineAt ?? link.createdAt;
+}
+
+// 링크 만료 시각 = 로그인 가능 기간 끝 = draft를 뺀 모든 세션의 expires_at (R-11, R-13, C-10·C-11 잠정)
+// 링크 410(MEMBER-API-01), 로그인 410·세션 발급(MEMBER-API-04), 참여자 등록 세션(MEMBER-API-03),
+// 세션 일괄 갱신(session-expiry.ts)이 모두 이 함수 하나로 계산한다.
+// draft 세션은 기준이 달라(발급 + 24시간) 여기서 다루지 않는다 — session.ts DRAFT_SESSION_TTL_SECONDS 참고
+export function accessExpiresAt(link: AccessExpiryLink): Date {
+  return new Date(linkExpiryBase(link).getTime() + LINK_EXPIRY_MS);
 }
 
 const NEXT_ACTION: Record<Exclude<PromiseStatusView, "unclaimed">, NextAction> = {
@@ -66,7 +80,7 @@ function unclaimed(inviteToken: string, draftExpired: boolean): LinkStatusResult
 // 계산만 한다. 만료 draft의 삭제는 MEMBER-API-02가 잠금 후 수행한다 (STATE-02-02)
 export function resolveLinkStatus(link: LinkWithPromise, now: Date): LinkStatusResult {
   // 경계값: 기준 시각 + 7일 ≤ 판정 시각이면 만료
-  if (linkExpiryBase(link).getTime() + LINK_EXPIRY_MS <= now.getTime()) {
+  if (accessExpiresAt(link).getTime() <= now.getTime()) {
     return { kind: "expired" };
   }
 
