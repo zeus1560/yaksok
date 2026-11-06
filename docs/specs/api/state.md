@@ -156,7 +156,8 @@ draft는 `promises.created_at+10분`에 만료된다. GET 요청은 만료 여�
 #### **세션·보존 공통 계약**
 
 - collecting 세션은 `voting_deadline_at+7일`까지 유지한다. 세션·링크 만료는 `voting_deadline_at+7일`을 유지하며 조기 마감 때 갱신하지 않는다(DECISION_CONFLICTS C-11 잠정, 팀 확정 필요).
-- 마감·재조율에 따라 만료 시각을 연장할 때는 `status=active`인 참여자의 현재 유효한 세션만 갱신한다. 이미 만료됐거나 `status=cancelled`인 참여자의 세션은 다시 활성화하지 않는다.
+- 최종 일정 확정 때는 세션 만료를 `confirmed_start_at+7일`로 갱신한다(STATE-API-05, DECISION_CONFLICTS C-10 잠정, 팀 확정 필요).
+- 마감·재조율·확정에 따라 만료 시각을 바꿀 때는 `status=active`인 참여자의 현재 유효한 세션만 갱신한다. 이미 만료됐거나 `status=cancelled`인 참여자의 세션은 다시 활성화하지 않는다.
 - 세션 만료 후에도 링크 접근 기간이 남아 있고 약속이 cancelled가 아니면 닉네임·PIN으로 재로그인할 수 있다.
 - 약속 취소는 `promises.status`와 `promises.cancelled_at`을 변경하며 참여자의 `role`, `status`, `cancelled_at`은 보존한다. 참여자 탈퇴가 완료된 경우에는 해당 참여자의 `status=cancelled`, `cancelled_at=현재 시각`을 기록한다. 단, 후임자가 없는 마지막 방장의 요청은 참여자 탈퇴를 완료하지 않고 약속 취소로 전환한다.
 - 세션도 행 삭제 대신 `expires_at`을 현재 시각으로 바꿔 즉시 만료한다.
@@ -810,6 +811,7 @@ if (!response.ok) {
 | 400 | INVALID_REQUEST | UUID·JSON·쿼리·필수값 형식 오류 | 요청 형식을 확인해 주세요. |
 | 401 | UNAUTHENTICATED | 세션 없음·만료·해시 불일치 또는 참여자 비활성 | 다시 로그인해 주세요. |
 | 403 | FORBIDDEN | 다른 약속 소속 또는 방장 권한 부족 | 이 작업을 수행할 권한이 없습니다. |
+| 403 | INVALID_ORIGIN | `Origin` 헤더 없음 또는 서비스 도메인과 다름 (API_CONVENTIONS 7절, DECISION_CONFLICTS A-09) | 허용되지 않은 요청 출처입니다. |
 | 404 | PROMISE_NOT_FOUND | 약속 없음 | 약속을 찾을 수 없습니다. |
 | 409 | PROMISE_CANCELLED | 약속이 취소됨 | 취소된 약속입니다. |
 | 409 | INVALID_PROMISE_STATE | 이 API에서 허용하지 않는 약속 상태 | 현재 약속 상태에서는 요청할 수 없습니다. |
@@ -843,7 +845,17 @@ if (!response.ok) {
 5. active이며 제출 완료인 동일 참여자 중 필요한 모든 연속 30분 슬롯을 선택한 사람이 2명 이상인지 다시 검사한다. 방장은 집계하지만 방장 참석은 필수 조건이 아니다.
 6. 상위 5개에 없더라도 전체 유효 후보이면 허용한다. 유효하지 않거나 시간이 이미 지났으면 422 INVALID_CONFIRMATION_CANDIDATE로 거부하고 최신 후보 재조회를 안내한다.
 7. promises.confirmed_start_at=startAt과 status=confirmed를 함께 저장한다. endAt은 현재 duration_minutes로 계산한다. 제출 상태·참가 슬롯을 초기화하지 않는다.
-8. 응답 유실 시 STATE-API-01로 확정 결과를 확인한다. 이미 confirmed인 재요청은 409로 일관되게 처리하며 일정 교체를 실행하지 않는다. 일정 변경은 STATE-API-06으로 재조율한 뒤 다시 확정한다.
+8. 같은 트랜잭션에서 이 약속의 `status=active` 참여자 세션 중 아직 유효한 것만 `expires_at`을 `confirmed_start_at+7일`(확정 후 링크 만료와 같은 값)로 갱신한다. 만료됐거나 cancelled 참여자의 세션은 되살리지 않는다. 요청자 쿠키는 이 응답에서, 다른 기기 쿠키는 이후 세션 인증 응답에서 Max-Age를 갱신한다(DECISION_CONFLICTS C-10 잠정, 팀 확정 필요).
+9. 응답 유실 시 STATE-API-01로 확정 결과를 확인한다. 이미 confirmed인 재요청은 409로 일관되게 처리하며 일정 교체를 실행하지 않는다. 일정 변경은 STATE-API-06으로 재조율한 뒤 다시 확정한다.
+
+#### **구현 결정 (2026-11-07, DECISION_CONFLICTS R-23)**
+
+- 검사 순서: Origin 403 → promiseId 400 → 본문 400(JSON 객체 아님·`startAt` 없음·문자열 아님) → `startAt` 형식 422 `VALIDATION_FAILED`(`details.field: "startAt"`) → 404 → 409 `PROMISE_CANCELLED` → 401 → 403(다른 약속) → `promises` 행 잠금 → 잠금 후 cancelled 409 → 세션·참여자 재확인 401 → 최신 role이 host가 아니면 403 → 마감 지난 collecting이면 closed 저장 → 상태 409 → 후보 422 → 저장.
+- `startAt` 표기: `YYYY-MM-DDTHH:MM[:SS[.fff]]` + `Z` 또는 `±HH:MM`. 같은 절대 시각이면 오프셋과 무관하게 같은 후보다.
+- 후보 판정은 `lib/state/candidates.ts`의 판정 함수 하나를 STATE-API-10 `computeCandidates`와 함께 쓴다(`validateCandidateStart`). 판정 시각은 잠금 후 `clock_timestamp()`이고 시작 = 판정 시각이면 지난 것이다.
+- 마감 지난 collecting을 closed로 저장한 뒤 후보가 무효여서 422로 끝나도 closed 저장은 커밋한다(TIME-API-01이 마감 경과 시 closed를 커밋하고 409를 내는 것과 같음). 최신 role이 host가 아니면 closed 저장 전에 403으로 끝난다(방장이 아닌 요청은 상태를 바꾸지 않음).
+- 422 `INVALID_CONFIRMATION_CANDIDATE`는 이유를 구분해 응답하지 않는다. 상태 오류 메시지는 공통 헬퍼 문구다.
+- 응답 시각은 초 단위 `+09:00`이다.
 
 #### **코드 예제**
 
