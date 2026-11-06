@@ -1,11 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/prisma/generated/client";
-import {
-  DRAFT_EXPIRY_MS,
-  LINK_EXPIRY_MS,
-  linkExpiryBase,
-  type LinkWithPromise,
-} from "./link-status";
+import { accessExpiresAt, DRAFT_EXPIRY_MS, type LinkWithPromise } from "./link-status";
 import { hashPin, verifyPin } from "./pin";
 import {
   DRAFT_SESSION_TTL_SECONDS,
@@ -42,7 +37,7 @@ export type LoginResult =
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // 약속 상태로 로그인 가능 여부와 세션 만료를 정한다. PIN 검증보다 먼저 한다 (MEMBER-API-04)
-// 로그인 가능 기간 = 링크 유효 기간. 기준 시각은 MEMBER-API-01과 같은 linkExpiryBase를 쓴다
+// 로그인 가능 기간 = 링크 유효 기간. MEMBER-API-01과 같은 accessExpiresAt을 쓴다
 export function resolveLoginAccess(link: LinkWithPromise, now: Date): LoginAccess {
   const promise = link.promise;
   if (!promise) return { kind: "not_found" };
@@ -53,6 +48,7 @@ export function resolveLoginAccess(link: LinkWithPromise, now: Date): LoginAcces
     // 삭제는 잠금을 잡는 MEMBER-API-02·STATE-API-02가 한다 (STATE-02-02)
     if (promise.createdAt.getTime() + DRAFT_EXPIRY_MS <= now.getTime())
       return { kind: "draft_expired" };
+    // draft 세션만 기준이 다르다(발급 + 24시간, session.ts 참고)
     return {
       kind: "ok",
       sessionExpiresAt: new Date(now.getTime() + DRAFT_SESSION_TTL_SECONDS * 1000),
@@ -60,7 +56,7 @@ export function resolveLoginAccess(link: LinkWithPromise, now: Date): LoginAcces
   }
 
   // 확정된 약속은 confirmed_start_at 기준이라 마감 + 7일이 지나도 로그인할 수 있다
-  const sessionExpiresAt = new Date(linkExpiryBase(link).getTime() + LINK_EXPIRY_MS);
+  const sessionExpiresAt = accessExpiresAt(link);
   if (sessionExpiresAt.getTime() <= now.getTime()) return { kind: "expired" };
   return { kind: "ok", sessionExpiresAt };
 }

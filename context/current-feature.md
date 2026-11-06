@@ -1,70 +1,62 @@
-# 현재 기능: 약속 상태와 설정 조회 API (STATE-API-01)
+# 현재 기능: 세션·링크 만료 계산 통합 리팩터링
 
 ## 상태
 
-완료
+검토 중
 
 ## 스펙
 
-`context/features/014-promise-detail-api.md`
+`context/features/015-access-expiry-refactor.md`
 
 ## 목표
 
-결과 화면·방장 관리 화면이 쓸 `GET /api/v1/promises/{promiseId}`. 상태(effectiveStatus)·설정·draft 만료·확정 일정(`currentConfirmation`)을 돌려준다. 확정 구간 인원은 013 후보 계산과 같은 집계 함수로 센다. 화면·DB 스키마 변경 없음.
+"draft를 뺀 모든 세션 만료 = 링크 만료(`linkExpiryBase + 7일`)" 계산을 한 곳으로 모은다. STATE-API-04(조기 마감)·05(확정) 전 준비. API 응답·DB 스키마·화면 변경 없음.
 
 ## 수용 기준
 
-- [x] AC-1 active 참여자 200, draft는 현재 host만(그 외 403), 10분 지난 draft도 방장 200 + `draftExpired`, DB 변경 없음
-- [x] AC-2 마감 경과 collecting은 `promiseStatus: "closed"`만, DB 유지
-- [x] AC-3 settings 매핑(draft null, `HH:mm`, 24:00), `draftExpiresAt` = created_at + 10분, 초 단위 `+09:00`
-- [x] AC-4 confirmed만 `currentConfirmation`, endAt = 시작 + 현재 소요, 인원 = active·제출 완료 교집합, 과거·범위 밖도 계산
-- [x] AC-5 host이고 인원 < 2이면 `hostActionRequired`, 확정 상태 유지
-- [x] AC-6 400 → 404 → 409 취소(세션보다 우선) → 401 → 403 → 재확인 401 → draft 비방장 403
-- [x] AC-7 no-store, 인증 후 쿠키 갱신, 참여자 정보 비노출
-- [x] AC-8 후보 계산과 같은 집계 코드, TZ 무관
+- [x] AC-1 `accessExpiresAt` 하나로 링크 410·로그인 410·로그인 세션·참여자 등록 세션 계산
+- [x] AC-2 모집 시작 세션 갱신이 공통 헬퍼 `refreshActiveSessions`를 거침, SQL 조건·값 동일
+- [x] AC-3 7일 중복 상수(`SESSION_AFTER_DEADLINE_MS`) 제거
+- [x] AC-4 draft 세션 24시간을 따로 두는 이유를 주석·스펙에 기록
+- [x] AC-5 기존 테스트 기대값 변경 없이 전체 통과(3개 TZ), lint·typecheck·build 통과
+- [x] AC-6 개발 DB 결과가 리팩터링 전과 같음
+- [x] AC-7 C-10·C-11 잠정 결정과 만료 계산 위치 기록
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-상태조회-api` (`main` d160788에서 생성, 013 PR #18 병합 포함)
-- 시작 시 작업 트리: 깨끗함. 원격이 사라진(`gone`) 로컬 `ahn/` 브랜치 없음 → 삭제 없음. 원격이 남은 로컬 `ahn/` 브랜치 11개(가능시간제출-api·가능시간조회-api·내정보조회-api·로그인-api·링크조회-api·방장등록-api·시간입력·약속만들기-화면·참여자등록-api·참여화면·후보조회-api)는 그대로 둠
-- 첫 커밋은 013 완료 기록(스펙 013 상태, 완료 이력, feature-list)
-- 시작 전 확인: `promises.confirmed_start_at`(Timestamptz(3), CHECK `ck_promise_confirmed_start_at`)이 스키마에 있음 → 스키마 변경 없이 진행
+- 브랜치: `ahn/refactor-만료계산-통합` (`main` 1a28f9d에서 생성, 014 PR #19 병합 포함)
+- 시작 시 작업 트리: 깨끗함. 원격이 사라진(`gone`) 로컬 `ahn/` 브랜치 없음 → 삭제 없음. 원격이 남은 로컬 `ahn/` 브랜치 12개(014 `상태조회-api` 포함)는 그대로 둠
+- 첫 커밋은 014 완료 기록(스펙 014 상태, 완료 이력, feature-list)
 
 ## 검증 결과
 
-2026-11-06, Node.js 24
+2026-11-07, Node.js 24
 
-| 명령 | 결과 |
+| 단계 | 명령 | 결과 |
+| --- | --- | --- |
+| RED | `npx vitest run lib/member/link-status.test.ts -t "accessExpiresAt"` | 5건 실패 `TypeError: accessExpiresAt is not a function` |
+| GREEN | 같은 명령 | 5건 통과 |
+| REFACTOR | `npm run test` | 48 파일, 888 테스트 통과(기존 881 + `accessExpiresAt` 5 + `refreshActiveSessions` 2). 기존 테스트 파일·기대값 수정 없음. `TZ=UTC`·`TZ=America/Los_Angeles`로도 888건 통과 |
+| | `npm run lint` / `npm run typecheck` | 통과 |
+| | `npm run build` | 통과 (dev 서버 종료 후) |
+
+| 개발 DB 실제 호출 (리팩터링 전·후 같은 스크립트, 25개 항목 결과 동일) | 결과 |
 | --- | --- |
-| `npm run test` | 통과 — 47 파일, 881 테스트 (이번 73건: `lib/state/{promise-view,promise-detail}`·`promises/[promiseId]/route` 신규, `candidates`에 `countAvailableParticipants` 10건). `TZ=UTC`·`TZ=America/Los_Angeles`로도 881건 통과 |
-| `npm run lint` | 통과 |
-| `npm run typecheck` | 통과 |
-| `npm run build` | 통과 (dev 서버 종료 후). `ƒ /api/v1/promises/[promiseId]` 동적 |
+| 방장 등록·draft 로그인 | 201·200, Max-Age 86400, 세션 = 발급 + 24시간 |
+| 모집 시작 | 200, 방장 두 기기 세션 = 마감 + 7일(차이 0ms), 쿠키 Max-Age = DB 만료까지 남은 초 |
+| 만료된 방장 세션·cancelled 참여자의 유효 세션 | 모집 시작 뒤에도 `expires_at` 그대로 |
+| 참여자 등록·collecting 로그인 | 201·200, 세션 = 마감 + 7일, Max-Age 일치 |
+| 마감을 지금 − 7일 + 5분으로 | 링크 200, 로그인 200, 세션 = 새 마감 + 7일 |
+| 마감을 지금 − 7일 − 1분으로 | 링크 410 `LINK_EXPIRED`, 로그인 410 `ACCESS_PERIOD_EXPIRED` |
+| confirmed(DB 직접 설정, 확정 = 내일 정각) | 링크 200 confirmed, 로그인 200, 세션 = 확정 + 7일 |
+| 정리 | 실행마다 확인용 링크·약속·참여자·세션 삭제, 6개 테이블(`_prisma_migrations` 포함) 행 수·md5 시작 상태와 동일. 리팩터링 후 실행은 dev 서버를 `.next` 삭제 뒤 새로 띄워 한 번 더 돌림. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
 
-| 개발 DB 실제 호출 (dev 서버 + fetch, 35건 모두 통과) | 결과 |
-| --- | --- |
-| draft 방장 | 200, settings 각 값 null, `draftExpiresAt` = created_at + 10분(초 단위 `+09:00`), `draftExpired` false, 확정 null, no-store, 쿠키 갱신 |
-| created_at을 11분 전으로 조작 | 200 `draftExpired: true`, `promiseStatus: "draft"`. 조회 전후 약속 행(status·created_at 등) 동일 |
-| collecting (11-07~11-08·09:00~13:00·60분, 방장+A·B·C 제출) | 일반 참여자 200, settings 매핑 일치, 닉네임·슬롯 없음. 종료 1440으로 조작 시 `"24:00"` |
-| 마감 1분 전으로 조작 | 200 `promiseStatus: "closed"`, DB status는 collecting 유지 |
-| confirmed 11-07 10:00 (DB 직접 설정, C는 10:00만 가능) | 인원 3, 방장 `hostActionRequired` false, endAt 11:00 |
-| confirmed 11:00 (방장만 가능) | 인원 1 — 방장 true / 일반 참여자 false. 조회 뒤 DB status·`confirmed_start_at` 그대로 |
-| 소요 시간 90분으로 조작 | endAt 11:30, 인원 1(현재 소요 시간 기준) |
-| 확정 시각 11-01 10:00(과거·날짜 범위 밖, 슬롯 직접 삽입) | 인원 3 그대로 계산 |
-| 참여자 B 탈퇴(cancelled) | 인원 2, B 세션 401 |
-| 일시적으로 draft로 되돌림 | 일반 참여자 403 `FORBIDDEN`(쿠키 갱신), 방장 200 |
-| 쿠키 없음 / 다른 약속 세션 / 없는 약속 / 형식 오류 UUID | 401 / 403 `FORBIDDEN` / 404 `PROMISE_NOT_FOUND` / 400 `INVALID_REQUEST`, no-store |
-| cancelled — 쿠키 없음 / 방장 세션 / 다른 약속 세션 | 모두 409 `PROMISE_CANCELLED`, 설정 정보 없음 |
-| 정리 | 확인용 링크 2개와 딸린 약속 2·참여자 5·세션 5·슬롯 15 삭제, 6개 테이블(`_prisma_migrations` 포함) 행 수·md5 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
-
-미확인: 트랜잭션 안 재확인 401·약속 행 소실 404·역할이 인증 뒤 바뀐 경우는 단위 테스트로만 확인(방장 승계 API 없음), confirmed는 확정 API가 없어 DB 직접 설정으로만 재현, 동시 쓰기 중 스냅샷 일관성은 코드(REPEATABLE READ)로만.
+미확인: 확정 시 세션 갱신(C-10 A안)은 확정 API가 없어 `refreshActiveSessions` 단위 테스트로만 확인.
 
 ## 메모
 
-- 결정 기록: DECISION_CONFLICTS R-21(검사 순서·draft 비방장 403, 만료 draft 200, 409 상태 오류 경로 없음, 판정 시각, 표기, 확정 인원 집계), state.md STATE-API-01 구현 결정
-- `lib/state/candidates.ts`: `buildSlotIndex`·`countCommon`을 `computeCandidates`와 `countAvailableParticipants`가 같이 쓴다. 미래·범위·2명 필터는 `computeCandidates`에만
-- 에러 형식: STATE 명세와 공통 형식(`lib/api-error.ts`)이 같다
-
+- 결정 기록: DECISION_CONFLICTS C-10(A안)·C-11(B안) 잠정 — 팀 확정 필요. 명세 문구(5.2 표·state.md)는 04·05에서 수정
+- STATE-API-02 링크 잠금 쿼리가 `created_at`도 읽는다(잠금 대상·순서 동일)
 ## 완료 이력
 
 이후 기록은 오래된 것부터 최신 순서로 맨 아래에 추가한다. 기존 기록을 삭제하지 않는다.
