@@ -118,7 +118,7 @@ MEMBER-API-01 응답에 본인 정보를 담지 않는 이유가 이것이다.
 | draft에서 발급 | 발급 시점(DB 시각) + 24시간, 쿠키 Max-Age=86400 | 마감 시각이 아직 없음. **확정 (2026-11-04, DECISION_CONFLICTS R-10)** — 규칙 본문에는 없음 |
 | 모집 시작(draft → collecting) | 해당 약속의 `status=active` 참여자 세션 중 **아직 유효한 것만** `voting_deadline_at + 7일`로 갱신한다(만료됐거나 cancelled 참여자의 세션은 되살리지 않음, STATE-API-00·02). 요청자 쿠키는 그 응답에서, 다른 기기 쿠키는 이후 세션 인증 응답에서 Set-Cookie로 Max-Age를 갱신한다 | MEMBER-06-03 |
 | 마감 연장·단축 | 동일하게 모든 세션을 새 `voting_deadline_at + 7일`로 갱신한다. 단축이어도 세션을 끊지 않는다 — 마감 후 조회는 허용되기 때문 | STATE-06-02 |
-| 조기 마감 | 기준은 **실제 마감 처리 시각**이다. 설정돼 있던 `voting_deadline_at`이 아니라 `closed`로 전환된 시각 + 7일 | **[제안 — 규칙 본문에 없음]** |
+| 조기 마감 | 세션·링크 만료는 `voting_deadline_at + 7일`을 유지하며 조기 마감 때 갱신하지 않는다. `voting_deadline_at`도 덮어쓰지 않는다(STATE-API-04) | **C-11 잠정, 팀 확정 필요** |
 | 탈퇴·내보내기 | 해당 참여자의 모든 세션 expires_at을 현재 시각으로 변경해 즉시 만료한다(행은 삭제하지 않음). 이후 그 쿠키는 401 | MEMBER-10-03 |
 | draft 탈퇴, 10분 만료 | 세션 행 물리 삭제(약속과 함꼐 삭제됨) | ERD 10절 |
 
@@ -127,7 +127,7 @@ MEMBER-API-01 응답에 본인 정보를 담지 않는 이유가 이것이다.
 
 **만료 후 재로그인:** 로그인 가능 기간 = 링크 유효 기간(`linkExpiryBase + 7일`)이다. 이 기간이 지나면 **PIN 재인증도 거절한다**(MEMBER-API-04에서 410 `ACCESS_PERIOD_EXPIRED`). 7일은 "로그인 유지 기간"이 아니라 "본인 입력에 접근할 수 있는 기간"으로 해석한다. **확정 (2026-11-04, DECISION_CONFLICTS R-11).** 확정된 약속은 `confirmed_start_at` 기준이라 마감 + 7일이 지나도 로그인할 수 있다.
 
-**미결 (DECISION_CONFLICTS R-11):** 확정 시 기존 세션을 `confirmed_start_at + 7일`로 갱신하는 규칙(STATE 확정 API 담당)과, 조기 마감 시 세션 기준(실제 마감 처리 시각)과 링크 기준(`voting_deadline_at`)의 차이가 남아 있다.
+**미결 (DECISION_CONFLICTS R-11):** 확정 시 기존 세션을 `confirmed_start_at + 7일`로 갱신하는 규칙(STATE 확정 API 담당, C-10)이 남아 있다. 조기 마감 시 세션 기준과 링크 기준의 차이는 C-11 잠정안(둘 다 `voting_deadline_at + 7일`)으로 맞췄으며 팀 확정이 필요하다.
 
 ## 6. 중복 요청·응답 유실
 
