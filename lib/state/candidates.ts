@@ -2,7 +2,8 @@ import { isCalendarDate, seoulMidnight } from "@/lib/time/seoul";
 import { SLOT_MINUTES } from "@/lib/time/slots";
 
 // 공식 시간 후보 계산 (STATE-API-00 「후보 계산 계약」, ERD 7.1, RESULT-01-01·01-02·03-01·04-01·04-02·06-01·06-02)
-// DB를 읽지 않는 순수 함수다. 후보 조회(STATE-API-10)와 확정 직전 재검증(STATE-API-05)이 같은 함수를 쓴다
+// DB를 읽지 않는 순수 함수다. 후보 조회(STATE-API-10)와 확정 직전 재검증(STATE-API-05)이 같은 함수를 쓰고,
+// 확정 일정의 참석 가능 인원(STATE-API-01)도 같은 집계 기준(countAvailableParticipants)으로 센다
 // 시각은 epoch 밀리초와 서울 고정 오프셋으로만 다뤄 실행 기기의 시간대와 무관하다
 
 export type CandidateSettings = {
@@ -37,6 +38,7 @@ const SLOT_MS = SLOT_MINUTES * MINUTE_MS;
 // 4. 구간의 모든 30분 슬롯에 공통으로 가능한 같은 참여자 수(슬롯별 참여자 집합의 교집합 크기)
 // 5. 2명 이상만 후보. 방장도 한 명으로 세지만 방장 참석은 조건이 아니다
 // 6. 인원 내림차순 → 시작 시각 오름차순
+// 1·4는 countAvailableParticipants와 같은 색인(buildSlotIndex)·교집합(countCommon)을 쓴다. 2(미래)·3(범위) 거르기는 여기에만 있다
 export function computeCandidates(input: {
   settings: CandidateSettings;
   participants: readonly CandidateParticipant[];
@@ -45,31 +47,13 @@ export function computeCandidates(input: {
   const { settings, now } = input;
   assertSettings(settings);
 
-  const eligible = input.participants.filter(
-    (person) => person.status === "active" && person.submittedAt !== null,
-  );
-  if (eligible.length < MIN_CANDIDATE_PARTICIPANTS) return [];
-
-  // 슬롯 시작 시각 → 그 슬롯에 가능한 참여자 비트 집합. 참여자 i는 words[i >>> 5]의 (i & 31)번째 비트다
-  const words = Math.ceil(eligible.length / 32);
-  const masks = new Map<number, Uint32Array>();
-  eligible.forEach((person, index) => {
-    for (const slot of person.slots) {
-      const key = slot.getTime();
-      let mask = masks.get(key);
-      if (!mask) {
-        mask = new Uint32Array(words);
-        masks.set(key, mask);
-      }
-      mask[index >>> 5] |= 1 << (index & 31);
-    }
-  });
+  const index = buildSlotIndex(input.participants);
+  if (index.size < MIN_CANDIDATE_PARTICIPANTS) return [];
 
   const slotsPerCandidate = settings.durationMinutes / SLOT_MINUTES;
   const firstDay = seoulMidnight(settings.dateRangeStart).getTime();
   const lastDay = seoulMidnight(settings.dateRangeEnd).getTime();
   const nowMs = now.getTime();
-  const common = new Uint32Array(words);
   const candidates: Candidate[] = [];
 
   // 서울은 일광절약시간이 없어 날짜마다 24시간씩 더하면 다음 날 00:00이다
@@ -82,7 +66,7 @@ export function computeCandidates(input: {
       const start = day + minute * MINUTE_MS;
       if (start <= nowMs) continue;
 
-      const count = countCommon(masks, common, start, slotsPerCandidate);
+      const count = countCommon(index, start, slotsPerCandidate);
       if (count >= MIN_CANDIDATE_PARTICIPANTS) {
         candidates.push({
           startAt: new Date(start),
@@ -100,13 +84,55 @@ export function computeCandidates(input: {
   );
 }
 
+// 주어진 구간 하나(startAt ~ startAt + durationMinutes)의 공통 가능 인원 (STATE-API-01 currentConfirmation)
+// 집계 대상·교집합 기준은 computeCandidates와 같다. 다만 미래 시작·날짜 범위·하루 범위·2명 이상 조건은 보지 않는다
+// 확정 일정은 이미 지났을 수 있고, 확정 뒤 설정이 바뀌어 현재 범위 밖이어도 인원은 세야 하기 때문이다
+// startAt이 30분 경계가 아니면 맞는 슬롯이 없어 0이다
+export function countAvailableParticipants(input: {
+  participants: readonly CandidateParticipant[];
+  startAt: Date;
+  durationMinutes: number;
+}): number {
+  const { durationMinutes } = input;
+  if (
+    !Number.isInteger(durationMinutes) ||
+    durationMinutes < SLOT_MINUTES ||
+    durationMinutes % SLOT_MINUTES !== 0
+  ) {
+    throw new Error("소요 시간 값이 올바르지 않음");
+  }
+  const index = buildSlotIndex(input.participants);
+  if (index.size === 0) return 0;
+  return countCommon(index, input.startAt.getTime(), durationMinutes / SLOT_MINUTES);
+}
+
+// 집계 대상 참여자의 슬롯 색인. 슬롯 시작 시각 → 그 슬롯에 가능한 참여자 비트 집합
+// 참여자 i는 words[i >>> 5]의 (i & 31)번째 비트다. size는 집계 대상 인원
+type SlotIndex = { size: number; masks: Map<number, Uint32Array>; common: Uint32Array };
+
+function buildSlotIndex(participants: readonly CandidateParticipant[]): SlotIndex {
+  const eligible = participants.filter(
+    (person) => person.status === "active" && person.submittedAt !== null,
+  );
+  const words = Math.max(1, Math.ceil(eligible.length / 32));
+  const masks = new Map<number, Uint32Array>();
+  eligible.forEach((person, index) => {
+    for (const slot of person.slots) {
+      const key = slot.getTime();
+      let mask = masks.get(key);
+      if (!mask) {
+        mask = new Uint32Array(words);
+        masks.set(key, mask);
+      }
+      mask[index >>> 5] |= 1 << (index & 31);
+    }
+  });
+  return { size: eligible.length, masks, common: new Uint32Array(words) };
+}
+
 // start부터 slotCount개 연속 슬롯의 비트 집합을 모두 AND한 뒤 남은 비트 수. 중간에 비면 0
-function countCommon(
-  masks: Map<number, Uint32Array>,
-  common: Uint32Array,
-  start: number,
-  slotCount: number,
-): number {
+function countCommon(index: SlotIndex, start: number, slotCount: number): number {
+  const { masks, common } = index;
   const first = masks.get(start);
   if (!first) return 0;
   common.set(first);
