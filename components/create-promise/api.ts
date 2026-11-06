@@ -7,6 +7,7 @@ export type ApiFailure = {
   code: string | null;
   message: string | null;
   field: string | null;
+  details?: unknown; // 에러 응답의 details 원본 (예: TIME-API-01 버전 충돌)
 };
 
 export type ApiResult<T> = { ok: true; status: number; data: T } | ({ ok: false } & ApiFailure);
@@ -45,6 +46,7 @@ export async function callApi<T>(
     code: typeof body.code === "string" ? body.code : null,
     message: typeof body.message === "string" ? body.message : null,
     field: typeof details.field === "string" ? details.field : null,
+    details: body.details,
   };
 }
 
