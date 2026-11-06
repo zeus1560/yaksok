@@ -1386,6 +1386,13 @@ draft 폐기를 제외한 취소·탈퇴·내보내기에서는 관련 데이터
 9. 페이지 요청 사이에 시간·참여 데이터가 바뀌면 total·순서가 달라질 수 있다. calculatedAt을 반환하고 정해진 결과 스냅샷을 보장하지 않는다.
 10. 공식 후보 조회 응답에는 참여자별 슬롯·제출 여부·닉네임 목록을 포함하지 않는다.
 
+#### **구현 결정 (2026-11-06, DECISION_CONFLICTS R-20)**
+
+- 검사 순서: promiseId 400 → limit·offset 422(`details.field`) → 404 → 409 `PROMISE_CANCELLED` → 401 → 403 → 409 `INVALID_PROMISE_STATE`. limit·offset은 10진 정수 표기만 받는다.
+- 후보 시작은 계산 시각보다 뒤(시작 = 계산 시각이면 제외)다. 계산 시각은 읽기 트랜잭션(REPEATABLE READ, 잠금 없음)의 `now()` 하나다.
+- draft는 10분이 지났어도 409 `INVALID_PROMISE_STATE`(`promiseStatus: "draft"`)다.
+- 계산 함수는 `lib/state/candidates.ts`의 `computeCandidates`이며 STATE-API-05 확정 재검증에서 재사용한다.
+
 #### **코드 예제**
 
 ```javascript

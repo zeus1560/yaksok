@@ -22,6 +22,11 @@ export type SessionAuthResult =
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// 인증 전에 다른 입력(쿼리 등)을 검사해야 하는 API가 400을 먼저 내도록 같은 기준을 공개한다
+export function isPromiseIdFormat(promiseId: string): boolean {
+  return UUID.test(promiseId);
+}
+
 export function sessionCookieName(promiseId: string): string {
   return `ys_session_${promiseId}`;
 }
@@ -47,7 +52,7 @@ export async function authenticatePromiseSession(
   promiseId: string,
   options: { allowCancelled?: boolean } = {},
 ): Promise<SessionAuthResult> {
-  if (!UUID.test(promiseId)) return { kind: "invalid_request" };
+  if (!isPromiseIdFormat(promiseId)) return { kind: "invalid_request" };
 
   const [promise, [{ now }]] = await Promise.all([
     prisma.promise.findUnique({

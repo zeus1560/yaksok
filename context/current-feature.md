@@ -1,4 +1,4 @@
-# 현재 기능: 가능 시간 입력 화면 (내 시간 입력·모두의 시간·폴링 동기화)
+# 현재 기능: 공식 시간 후보 조회 API (STATE-API-10)
 
 ## 상태
 
@@ -6,31 +6,29 @@
 
 ## 스펙
 
-`context/features/012-availability-input-ui.md`
+`context/features/013-candidates-api.md`
 
 ## 목표
 
-도착 화면의 "시간 입력은 곧" 자리를 실제 입력 화면으로 바꾼다. 내 가능 시간 그리드와 제출(TIME-API-01), 모두의 가능 시간(TIME-API-02, 읽기 전용), 마감까지 남은 시간·제출 상태, 5초 폴링과 다른 기기 변경 동기화. API·DB 변경 없음.
+마감 후 방장이 고를 후보를 계산하는 `GET /api/v1/promises/{promiseId}/candidates`. 후보 계산은 API와 분리한 순수 함수(`lib/state/candidates.ts`)로 두어 STATE-API-05 확정 재검증에서 재사용한다. 화면·DB 스키마 변경 없음.
 
 ## 수용 기준
 
-- [x] AC-1 칸 범위(24:00 포함), 기기 시간대 무관(TZ=UTC·America/Los_Angeles 테스트)
-- [x] AC-2 지난 칸·남은 시간은 serverTime 기준, 지난 칸 회색·변경 불가, 슬롯은 시각 값 비교
-- [x] AC-3 데스크톱 드래그(첫 칸 반대 상태), 390px 탭 + 날짜 머리글 하루 토글, 스크롤 막지 않음, 그리드만 가로 스크롤·시각 열 고정
-- [x] AC-4 로컬 `{ v: 1, baseVersion, slots }`, 새로고침 복원, 제출 성공 시 삭제
-- [x] AC-5 폴링 버전 비교(폐기·안내/유지), 409 충돌은 details로 다시 그림
-- [x] AC-6 제출됨·수정 중 표시, 빈 선택 확인, 범위 밖 제외 안내, 제출 중 버튼 비활성
-- [x] AC-7 모두의 시간 색 농도·칸별 이름
-- [x] AC-8 5초 폴링, 숨김 중지·복귀 즉시, 마감 뒤에도 폴링, 드래그 중 반영 보류
-- [x] AC-9 closed·confirmed(`VOTING_CLOSED` 포함) 읽기 전용, 미제출 입력 안내 후 삭제
-- [x] AC-10 draft·cancelled·401 등 링크 재조회, 실패 분기 순수 함수와 코드별 테스트
-- [x] AC-11 응답 유실 후 재시도 200
+- [x] AC-1 active + 제출 시각 있는 참여자만 집계(탈퇴자·제출 해제자·빈 제출 제외)
+- [x] AC-2 30분 경계 시작 > 계산 시각, 같은 날짜 하루 범위 안(24:00 포함), 날짜 범위 전체
+- [x] AC-3 공통 가능 인원 = 슬롯별 참여자 집합 교집합(최솟값 2·교집합 1 사례 제외)
+- [x] AC-4 2명 이상, 방장 참석 불필요
+- [x] AC-5 인원 내림차순 → 시작 오름차순
+- [x] AC-6 limit 1~5·offset ≥ 0, total·hasMore·nextOffset, offset ≥ total 빈 배열, 후보 없음 200
+- [x] AC-7 400 → 422 → 404 → 409 취소(세션보다 우선) → 401 → 403 → 409 상태(details), 마감 경과 collecting은 계산만
+- [x] AC-8 no-store, 인증 후 쿠키 갱신, 참여자 정보 비노출
+- [x] AC-9 TZ 무관, 30명·3개월 계산 시간
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-시간입력` (`main` 86b3e1b에서 생성, 011 PR #16 병합 포함)
-- 시작 시 작업 트리: 깨끗함. 원격이 사라진(`gone`) 로컬 `ahn/` 브랜치 없음 → 삭제 없음. 원격이 남은 로컬 `ahn/` 브랜치 9개(가능시간제출-api·가능시간조회-api·내정보조회-api·로그인-api·링크조회-api·방장등록-api·약속만들기-화면·참여자등록-api·참여화면)는 그대로 둠
-- 첫 커밋은 011 완료 기록(스펙 011 상태, 완료 이력, feature-list)
+- 브랜치: `ahn/feat-후보조회-api` (`main` 7d3b520에서 생성, 012 PR #17 병합 포함)
+- 시작 시 작업 트리: 깨끗함. 원격이 사라진(`gone`) 로컬 `ahn/` 브랜치 없음 → 삭제 없음. 원격이 남은 로컬 `ahn/` 브랜치 10개(가능시간제출-api·가능시간조회-api·내정보조회-api·로그인-api·링크조회-api·방장등록-api·시간입력·약속만들기-화면·참여자등록-api·참여화면)는 그대로 둠
+- 첫 커밋은 012 완료 기록(스펙 012 상태, 완료 이력, feature-list)
 
 ## 검증 결과
 
@@ -38,41 +36,37 @@
 
 | 명령 | 결과 |
 | --- | --- |
-| `npm run test` | 통과 — 40 파일, 708 테스트 (이번 95건: `lib/availability/{grid,sync,heat,failure,poll}` 신규). `TZ=UTC`·`TZ=America/Los_Angeles`로도 708건 통과 |
+| `npm run test` | 통과 — 44 파일, 808 테스트 (이번 100건: `lib/state/{candidates,candidate-page,promise-candidates}`, `candidates/route` 신규). `TZ=UTC`·`TZ=America/Los_Angeles`로도 808건 통과 |
 | `npm run lint` | 통과 |
 | `npm run typecheck` | 통과 |
 | `npm run build` | 통과 (dev 서버 종료 후) |
 
-| 브라우저·개발 DB 확인 (Playwright + 로컬 Chromium, 데스크톱 1280px·모바일 390px) | 결과 |
-| --- | --- |
-| 데스크톱 드래그 11/7 09:00 → 11/8 10:30 | 8칸 선택, "입력 중 · 제출 전", localStorage `{"v":1,"baseVersion":0,"slots":[…+09:00]}`. 켜진 칸에서 시작한 드래그는 끄기로 통일(8 → 6) |
-| 새로고침 | 제출 전 입력 6칸 복원 |
-| 제출 → 다른 참여자(390px) 모두의 시간 | "제출했어요"·"제출됨", 로컬 삭제. 다른 브라우저에 약 2초 뒤 "가능 1명" 반영, 칸 선택 시 "가능 1/2명 · 확인방장 방장" |
-| 제출 후 칸 변경 / 되돌림 | "수정 중, 다시 제출 필요" / "제출됨" |
-| 같은 참여자 두 브라우저: 한쪽 제출 | 다른 쪽이 약 2.4초 뒤 "다른 곳에서 내용이 바뀌었어요", 로컬 삭제, 칸이 제출한 쪽과 같음 |
-| 다른 쪽이 폴링 전에 제출(조회 요청 차단) | 409 `AVAILABILITY_VERSION_CONFLICT` → 조회 없이 details로 다시 그림(제출한 쪽과 같음), "제출됨" |
-| 응답 유실(서버 200 후 브라우저 응답 끊음) → 다시 제출 | "저장하지 못했어요", 로컬 유지 → 재시도 200(version 4 그대로, DB도 4 — 중복 저장 없음) → "제출됨" |
-| 기기 시간대 Asia/Seoul·America/Los_Angeles·UTC | 칸 210개의 시각·날짜 라벨과 머리글 요약이 모두 같음 |
-| 390px | 페이지 scrollWidth 390(가로 넘침 없음). 탭 토글, 날짜 머리글 탭 하루 전체(30칸) 선택·해제. 그리드 위 터치 세로 스와이프 → 페이지 스크롤(482 → 717), 가로 스와이프 → 그리드만 가로 스크롤(0 → 90), 칸 변경 0, 시각 열 위치 고정 |
-| 빈 선택 제출 | "가능한 시간이 없다고 제출할까요?" 확인 → 취소 시 미제출 유지 → "없다고 제출" → "제출됨" |
-| DB 날짜 범위 시작 = 오늘(14:5x) | 오늘 09:00~14:30 칸 12개 회색·"지난 시간", 탭해도 변경 없음 |
-| 제출 시 마감 경과(조회 차단 + DB 마감 과거) | 409 `VOTING_CLOSED` → 읽기 전용, 제출 바 사라짐, "제출하지 않은 입력은 저장되지 않았어요", 로컬 삭제, DB closed 전환 |
-| DB 마감 25초 뒤(collecting 유지) | 카운트다운 0 → 다시 조회 → 약 24초 뒤 "응답이 마감됐어요"·미저장 안내, DB는 collecting 그대로, 칸 변경 불가, 마감 뒤에도 폴링 오류 없음 |
-| DB confirmed → collecting | "확정된 약속이에요" → 다시 입력 가능 |
-| DB draft / cancelled / 세션 삭제(401) | 링크 재조회 → 대기 화면 / "취소된 약속이에요" / 등록 화면 |
-| 홈 → 방장 등록 → 설정 → 완료 화면 "내 가능 시간 입력하기" | 같은 링크의 입력 화면("완료방장님의 가능 시간")으로 이동 |
-| `/availability` 3회 500(route) 후 해제 | 실패 동안 "연결이 불안정해요"만 표시. 내 칸·모두의 시간 라벨·칸 수·남은 시간·로컬 입력(baseVersion 1)·"수정 중, 다시 제출 필요"가 실패 전과 같음 → 해제 뒤 첫 200에서 안내가 사라지고 같은 값 유지 |
-| 탭 숨김(visibilityState 재정의 + visibilitychange) | 보일 때 6초 1회 → 숨김 16초 0회 → 복귀 4ms 뒤 1회 → 이후 5초 주기 재개 |
-| 콘솔 오류 | 의도한 409와 끊은 요청의 리소스 로드 오류만, pageerror 0건 |
-| 정리 | 1·2차 확인용 링크 2개와 딸린 약속·참여자·세션·슬롯 삭제, 5개 테이블 스냅샷 시작 상태와 동일. dev 서버 종료, 3000 포트 비어 있음 |
+계산 시간: 참여자 30명·2026-11-10~2027-02-10(93일)·00:00~24:00·전원 거의 전 칸 가능, 소요 30·120·720분 3회 계산과 데이터 생성 포함 테스트 1건 231ms(`TZ=America/Los_Angeles` 실행).
 
-미확인: 실제 휴대폰, Figma 시간 입력 화면 대조(이번 PR 범위 밖), 범위 밖 제외 안내(`droppedSlotCount ≥ 1` — 범위 변경 API가 없어 단위 테스트·코드로만).
+| 개발 DB 실제 호출 (dev 서버 + fetch, 약속 11-07~11-08·09:00~13:00·60분, 방장+참여자 5명) | 결과 |
+| --- | --- |
+| 데이터 | 방장·A·B·C 제출, D 제출 후 탈퇴(cancelled), E 제출 후 제출 해제(submitted_at NULL). 11-08 11:00·11:30은 슬롯별 2명이지만 교집합 1명, 11-08 12:00~13:00은 C + 제외 대상 D·E |
+| 마감 전 collecting | 409 `INVALID_PROMISE_STATE` details `{promiseStatus:"collecting", allowedStates:["closed"]}` |
+| 마감 시각을 1분 전으로 조작(DB collecting 유지) → 일반 참여자 A | 200 `promiseStatus:"closed"`, total 5: 11-08 10:00(4) → 11-07 09:30(3) → 11-07 09:00(2) → 11-07 10:00(2) → 11-08 10:30(2). 교집합 1명 구간·탈퇴자/제출 해제자 슬롯 구간 없음. 쿠키 갱신, no-store. 조회 후 DB status는 collecting 그대로 |
+| 방장 세션 / 제출 해제자 E(active) 세션 | 200 total 5 / 200 total 5 |
+| limit=2 → offset 2 → offset 4 → offset 5 → offset 99 | 2개 hasMore·next 2 → 2개 next 4 → 1개 false·null → 빈 배열 false·null → 빈 배열 false·null (total 5 유지) |
+| limit 0·6, offset -1·abc | 422 `VALIDATION_FAILED` `details.field` limit/offset |
+| 형식 오류 UUID / 없는 약속 | 400 `INVALID_REQUEST` / 404 `PROMISE_NOT_FOUND` |
+| 쿠키 없음 / 탈퇴자 D 세션 / 다른 약속 세션 | 401 / 401 / 403 `FORBIDDEN` |
+| 다른 약속(draft) 자기 세션 | 409 `INVALID_PROMISE_STATE` `promiseStatus:"draft"` |
+| 소요 시간 240분으로 조작 | 200 total 0, 빈 배열, hasMore false, nextOffset null |
+| DB closed / confirmed | 200 같은 5개 / 409 `promiseStatus:"confirmed"` |
+| cancelled — 쿠키 없음 / 다른 약속 세션 | 409 `PROMISE_CANCELLED` / 409 `PROMISE_CANCELLED` (세션보다 우선) |
+| 정리 | 확인용 링크 2개와 딸린 약속 2·참여자 7·세션 7·슬롯 33 삭제, 6개 테이블(`_prisma_migrations` 포함) 행 수·md5 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
+
+미확인: 10분 지난 draft 호출(단위 테스트도 상태값 draft로만 확인 — 판정에 생성 시각을 쓰지 않음), 트랜잭션 안 재확인 401·약속 행 소실 404는 단위 테스트로만 확인, 동시 쓰기 중 스냅샷 일관성은 코드(REPEATABLE READ)로만.
 
 ## 메모
 
-- 결정 기록: DECISION_CONFLICTS R-19(SWR 폴링, 로컬 키, 버전 비교·응답 유실 조용한 반영, 마감 처리, 실패 분기, 모바일 선택 방식)
-- 새 의존성 `swr@2.5.1`(TIME-10-04 확정 규칙)
-- 화면용 순수 로직은 `lib/availability/`, 컴포넌트는 `components/availability/`
+- 결정 기록: DECISION_CONFLICTS R-20(미래 경계, 계산 시각, draft 코드, 검사 순서, limit·offset 형식, 에러 형식, 겹치는 후보)
+- 에러 형식: STATE 명세 `{ code, message, details }`와 실제 공통 형식이 같다. 상태 오류 메시지만 공통 헬퍼 문구 사용
+- `session-auth.ts`에 `isPromiseIdFormat` 공개(동작 변화 없음)
+- STATE-API-05는 잠금 후 `clock_timestamp()`로 `computeCandidates`를 다시 부르고 결과에서 `startAt`이 같은 후보를 찾는다
 
 ## 완료 이력
 
@@ -165,3 +159,11 @@
 - 변경: `components/participate/participant-auth-card.tsx`(등록·로그인 카드, `NICKNAME_TAKEN` → 같은 값 로그인 1회 판별), `components/participate/arrived-card.tsx`(`/me` 기준 닉네임·방장 표시, 시간 입력 자리), `invite-flow.tsx`(등록·마감·취소 안내, draft 대기 화면 방장 로그인), 실패 분기 순수 함수 `lib/participate/failure.ts`, `invite-view.ts` 화면 종류 `join`·`arrived`·`closed`·`cancelled`. 문서: DECISION_CONFLICTS R-18 신설
 - 검증: Vitest 613건(이번 36건), lint·typecheck·build 통과. 브라우저(390px)에서 등록 → 도착, 닉네임 중복 → 로그인 전환, 응답 유실 두 경우(`NICKNAME_TAKEN` → 자동 로그인 / `ALREADY_PARTICIPANT` → 재조회), 다른 기기 로그인, 정원 초과·마감 경과·closed·cancelled 안내, 방장 새로고침 → 도착, draft 대기 화면 방장 로그인 → 설정, PIN 노출 없음. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
 - 남은 제한: 실제 휴대폰(숫자 키패드), `ACCESS_PERIOD_EXPIRED`·`PARTICIPANT_CANCELLED`·`DRAFT_EXPIRED` 로그인 화면은 단위 테스트로만 확인, PIN 분실·시도 제한 미결
+
+### 2026-11-06 — 가능 시간 입력 화면 (내 시간 입력·모두의 시간·폴링 동기화)
+
+- 스펙: `context/features/012-availability-input-ui.md`
+- 브랜치: `ahn/feat-시간입력` (PR #17 병합)
+- 변경: 도착 화면을 가능 시간 화면으로 교체 — `components/availability/*`(보드·내 그리드·모두의 그리드·제출 바), 화면용 순수 로직 `lib/availability/{grid,sync,heat,failure,poll}.ts`. 마우스 드래그 사각형 선택, 터치 탭 + 날짜 머리글 하루 토글, 로컬 임시 입력 `{ v: 1, baseVersion, slots }`, SWR 5초 폴링(새 의존성 `swr@2.5.1`)과 버전 비교, 409 충돌 details 반영, 마감·확정 읽기 전용, 실패 분기는 에러 코드 기준. 완료 화면 "내 가능 시간 입력하기" 연결. 문서: DECISION_CONFLICTS R-19 신설
+- 검증: Vitest 708건(이번 95건), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 브라우저(데스크톱 1280px·390px)에서 드래그·탭·하루 토글, 새로고침 복원, 다른 브라우저 반영, 두 기기 버전 비교·409 충돌, 응답 유실 재시도 200, 빈 선택 확인, 지난 칸, 마감 경과(`VOTING_CLOSED`·카운트다운 0), confirmed·draft·cancelled·401, 폴링 실패 유지·탭 숨김 중지 확인. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
+- 남은 제한: 실제 휴대폰, Figma 시간 입력 화면 대조, 범위 밖 제외 안내(`droppedSlotCount ≥ 1`)는 범위 변경 API가 없어 단위 테스트로만 확인
