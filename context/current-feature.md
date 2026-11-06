@@ -1,4 +1,4 @@
-# 현재 기능: 참여 경로 화면 (참여자 등록·로그인·도착)
+# 현재 기능: 가능 시간 입력 화면 (내 시간 입력·모두의 시간·폴링 동기화)
 
 ## 상태
 
@@ -6,30 +6,31 @@
 
 ## 스펙
 
-`context/features/011-participate-ui.md`
+`context/features/012-availability-input-ui.md`
 
 ## 목표
 
-링크로 들어온 사람이 닉네임·PIN으로 참여하거나 다른 기기에서 로그인하고, 등록·방장 등록 응답 유실을 같은 값으로 복구한다. 도착 화면은 `/me` 기준으로 닉네임·방장을 보여 주고 시간 입력(PR 3) 자리를 둔다. API·DB 변경 없음.
+도착 화면의 "시간 입력은 곧" 자리를 실제 입력 화면으로 바꾼다. 내 가능 시간 그리드와 제출(TIME-API-01), 모두의 가능 시간(TIME-API-02, 읽기 전용), 마감까지 남은 시간·제출 상태, 5초 폴링과 다른 기기 변경 동기화. API·DB 변경 없음.
 
 ## 수용 기준
 
-- [x] AC-1 세션 없는 collecting → 등록 화면, 등록 전 설정 값 비공개, 201 → 도착
-- [x] AC-2 로그인 전환·다른 기기 로그인, 401 비구분 문구
-- [x] AC-3 `NICKNAME_TAKEN` → 로그인 1회 판별(200 복구 / 401 안내 + 로그인 전환)
-- [x] AC-4 대기 화면 방장 로그인 → 설정 화면
-- [x] AC-5 도착 화면(`/me` 닉네임·방장 표시), 방장 새로고침도 도착
-- [x] AC-6 정원 초과·마감 경과·마감·취소 안내, 마감 뒤 로그인 진입점
-- [x] AC-7 에러 코드 기준 실패 분기 순수 함수와 코드별 테스트
-- [x] AC-8 PIN 노출 없음, 숫자 키패드·자동완성 끔, 요청 중 버튼 비활성
-- [x] AC-9 390px 한 열
+- [x] AC-1 칸 범위(24:00 포함), 기기 시간대 무관(TZ=UTC·America/Los_Angeles 테스트)
+- [x] AC-2 지난 칸·남은 시간은 serverTime 기준, 지난 칸 회색·변경 불가, 슬롯은 시각 값 비교
+- [x] AC-3 데스크톱 드래그(첫 칸 반대 상태), 390px 탭 + 날짜 머리글 하루 토글, 스크롤 막지 않음, 그리드만 가로 스크롤·시각 열 고정
+- [x] AC-4 로컬 `{ v: 1, baseVersion, slots }`, 새로고침 복원, 제출 성공 시 삭제
+- [x] AC-5 폴링 버전 비교(폐기·안내/유지), 409 충돌은 details로 다시 그림
+- [x] AC-6 제출됨·수정 중 표시, 빈 선택 확인, 범위 밖 제외 안내, 제출 중 버튼 비활성
+- [x] AC-7 모두의 시간 색 농도·칸별 이름
+- [x] AC-8 5초 폴링, 숨김 중지·복귀 즉시, 마감 뒤에도 폴링, 드래그 중 반영 보류
+- [x] AC-9 closed·confirmed(`VOTING_CLOSED` 포함) 읽기 전용, 미제출 입력 안내 후 삭제
+- [x] AC-10 draft·cancelled·401 등 링크 재조회, 실패 분기 순수 함수와 코드별 테스트
+- [x] AC-11 응답 유실 후 재시도 200
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-참여화면` (`main` 0068bf6에서 생성, 010 PR #15 병합 포함)
-- 시작 시 작업 트리: 깨끗함. 원격이 사라진(`gone`) 로컬 `ahn/` 브랜치 없음 → 삭제 없음
-- 선행 확인: `app/api/v1/promises/[promiseId]/{participants,auth/session,me}`, `components/create-promise/invite-flow.tsx` 모두 main에 있음
-- 첫 커밋은 010 완료 기록(스펙 010 상태, 완료 이력, feature-list)
+- 브랜치: `ahn/feat-시간입력` (`main` 86b3e1b에서 생성, 011 PR #16 병합 포함)
+- 시작 시 작업 트리: 깨끗함. 원격이 사라진(`gone`) 로컬 `ahn/` 브랜치 없음 → 삭제 없음. 원격이 남은 로컬 `ahn/` 브랜치 9개(가능시간제출-api·가능시간조회-api·내정보조회-api·로그인-api·링크조회-api·방장등록-api·약속만들기-화면·참여자등록-api·참여화면)는 그대로 둠
+- 첫 커밋은 011 완료 기록(스펙 011 상태, 완료 이력, feature-list)
 
 ## 검증 결과
 
@@ -37,36 +38,41 @@
 
 | 명령 | 결과 |
 | --- | --- |
-| `npm run test` | 통과 — 35 파일, 613 테스트 (이번 36건: `lib/participate/failure` 신규, `invite-view` 화면 결정 갱신) |
+| `npm run test` | 통과 — 40 파일, 708 테스트 (이번 95건: `lib/availability/{grid,sync,heat,failure,poll}` 신규). `TZ=UTC`·`TZ=America/Los_Angeles`로도 708건 통과 |
 | `npm run lint` | 통과 |
 | `npm run typecheck` | 통과 |
 | `npm run build` | 통과 (dev 서버 종료 후) |
 
-| 브라우저·개발 DB 확인 (Playwright + 로컬 Chromium, 참여자 화면 390px) | 결과 |
+| 브라우저·개발 DB 확인 (Playwright + 로컬 Chromium, 데스크톱 1280px·모바일 390px) | 결과 |
 | --- | --- |
-| 새 브라우저로 collecting 링크 | 등록 화면, 날짜 등 설정 값 없음, 가로 스크롤 없음, PIN `type=password`·`inputMode=numeric`·`autocomplete=off` |
-| 등록 | 도착 화면 "참여자1님", 방장 표시 없음 |
-| 같은 닉네임·다른 PIN으로 다른 브라우저 등록 | 자동 로그인 1회 → 401 → 중복 안내 → "이 닉네임으로 로그인하기" → 닉네임 채움·PIN 빈 로그인 화면. 틀린 PIN은 "닉네임 또는 PIN이 맞지 않아요", 맞는 PIN은 도착(다른 기기 로그인) |
-| 응답 유실: 등록 요청은 서버에 도달(201)시키고 응답을 끊은 뒤 쿠키도 지움 → 같은 값 재시도 | `NICKNAME_TAKEN` → 자동 로그인 1회 → 도착 |
-| 응답만 끊고 쿠키는 남은 경우(Playwright `route.fetch`가 쿠키를 저장) → 재시도 | `ALREADY_PARTICIPANT` → 재조회 → 도착(자동 로그인 0회) |
-| 등록 화면 "이미 참여하셨나요? 로그인" | 다른 기기 로그인 → 도착 |
-| DB 정원 = 현재 인원 | "참여 정원이 모두 찼어요" |
-| DB 마감 1초 전(collecting 유지) | 등록 → "응답 마감이 지났어요" → "이미 참여했다면 로그인" → 도착("응답이 마감된 약속이에요") |
-| 방장 완료 화면 새로고침 | 도착 화면 "확인방장님" + 방장 표시 |
-| 새 약속 설정 완료(collecting, 마감 전) 후 방장 새로고침(390px) | 도착 화면 "콜렉팅방장님" + 방장 표시, "이 약속에 참여했어요. 가능한 시간 입력은…" 문구와 입력 자리, 마감 문구 없음. `/me` host·collecting·`deadlinePassed` false·`canEditAvailability` true |
-| DB closed / cancelled | "응답이 마감된 약속이에요" + 로그인 버튼 / "취소된 약속이에요" |
-| draft 대기 화면 "방장이신가요? 로그인" | 등록 전환 없음. 틀린 PIN 오류, 폴링 3초 뒤에도 입력 유지, 맞는 PIN → 설정 화면(저장값 없어 카운트다운 숨김 + 10분 안내) |
-| PIN 노출 | 콘솔 0건, 요청 URL 0건, localStorage·sessionStorage 없음 |
-| 콘솔 오류 | 401·409 등 의도한 응답의 리소스 로드 오류만 |
-| 정리 | 확인용 링크 3개와 딸린 약속·참여자·세션 삭제, 5개 테이블 스냅샷 시작 상태와 동일. dev 서버 종료, 3000 포트 비어 있음 |
+| 데스크톱 드래그 11/7 09:00 → 11/8 10:30 | 8칸 선택, "입력 중 · 제출 전", localStorage `{"v":1,"baseVersion":0,"slots":[…+09:00]}`. 켜진 칸에서 시작한 드래그는 끄기로 통일(8 → 6) |
+| 새로고침 | 제출 전 입력 6칸 복원 |
+| 제출 → 다른 참여자(390px) 모두의 시간 | "제출했어요"·"제출됨", 로컬 삭제. 다른 브라우저에 약 2초 뒤 "가능 1명" 반영, 칸 선택 시 "가능 1/2명 · 확인방장 방장" |
+| 제출 후 칸 변경 / 되돌림 | "수정 중, 다시 제출 필요" / "제출됨" |
+| 같은 참여자 두 브라우저: 한쪽 제출 | 다른 쪽이 약 2.4초 뒤 "다른 곳에서 내용이 바뀌었어요", 로컬 삭제, 칸이 제출한 쪽과 같음 |
+| 다른 쪽이 폴링 전에 제출(조회 요청 차단) | 409 `AVAILABILITY_VERSION_CONFLICT` → 조회 없이 details로 다시 그림(제출한 쪽과 같음), "제출됨" |
+| 응답 유실(서버 200 후 브라우저 응답 끊음) → 다시 제출 | "저장하지 못했어요", 로컬 유지 → 재시도 200(version 4 그대로, DB도 4 — 중복 저장 없음) → "제출됨" |
+| 기기 시간대 Asia/Seoul·America/Los_Angeles·UTC | 칸 210개의 시각·날짜 라벨과 머리글 요약이 모두 같음 |
+| 390px | 페이지 scrollWidth 390(가로 넘침 없음). 탭 토글, 날짜 머리글 탭 하루 전체(30칸) 선택·해제. 그리드 위 터치 세로 스와이프 → 페이지 스크롤(482 → 717), 가로 스와이프 → 그리드만 가로 스크롤(0 → 90), 칸 변경 0, 시각 열 위치 고정 |
+| 빈 선택 제출 | "가능한 시간이 없다고 제출할까요?" 확인 → 취소 시 미제출 유지 → "없다고 제출" → "제출됨" |
+| DB 날짜 범위 시작 = 오늘(14:5x) | 오늘 09:00~14:30 칸 12개 회색·"지난 시간", 탭해도 변경 없음 |
+| 제출 시 마감 경과(조회 차단 + DB 마감 과거) | 409 `VOTING_CLOSED` → 읽기 전용, 제출 바 사라짐, "제출하지 않은 입력은 저장되지 않았어요", 로컬 삭제, DB closed 전환 |
+| DB 마감 25초 뒤(collecting 유지) | 카운트다운 0 → 다시 조회 → 약 24초 뒤 "응답이 마감됐어요"·미저장 안내, DB는 collecting 그대로, 칸 변경 불가, 마감 뒤에도 폴링 오류 없음 |
+| DB confirmed → collecting | "확정된 약속이에요" → 다시 입력 가능 |
+| DB draft / cancelled / 세션 삭제(401) | 링크 재조회 → 대기 화면 / "취소된 약속이에요" / 등록 화면 |
+| 홈 → 방장 등록 → 설정 → 완료 화면 "내 가능 시간 입력하기" | 같은 링크의 입력 화면("완료방장님의 가능 시간")으로 이동 |
+| `/availability` 3회 500(route) 후 해제 | 실패 동안 "연결이 불안정해요"만 표시. 내 칸·모두의 시간 라벨·칸 수·남은 시간·로컬 입력(baseVersion 1)·"수정 중, 다시 제출 필요"가 실패 전과 같음 → 해제 뒤 첫 200에서 안내가 사라지고 같은 값 유지 |
+| 탭 숨김(visibilityState 재정의 + visibilitychange) | 보일 때 6초 1회 → 숨김 16초 0회 → 복귀 4ms 뒤 1회 → 이후 5초 주기 재개 |
+| 콘솔 오류 | 의도한 409와 끊은 요청의 리소스 로드 오류만, pageerror 0건 |
+| 정리 | 1·2차 확인용 링크 2개와 딸린 약속·참여자·세션·슬롯 삭제, 5개 테이블 스냅샷 시작 상태와 동일. dev 서버 종료, 3000 포트 비어 있음 |
 
-미확인: 실제 휴대폰(숫자 키패드 표시), 참여 기간 만료(`ACCESS_PERIOD_EXPIRED`)·참여 종료(`PARTICIPANT_CANCELLED`)·`DRAFT_EXPIRED` 로그인 화면(단위 테스트로만).
+미확인: 실제 휴대폰, Figma 시간 입력 화면 대조(이번 PR 범위 밖), 범위 밖 제외 안내(`droppedSlotCount ≥ 1` — 범위 변경 API가 없어 단위 테스트·코드로만).
 
 ## 메모
 
-- 결정 기록: DECISION_CONFLICTS R-18(닉네임 중복 판별, 실패 분기, 화면 결정, 마감 뒤 로그인, PIN 처리)
-- 화면용 순수 로직은 `lib/participate/`(브라우저에서도 import), 컴포넌트는 `components/participate/`
-- 탈퇴자(`PARTICIPANT_CANCELLED`)에게 다른 닉네임을 권하지 않는다 — 재참여 불가(MEMBER-11-01·02)
+- 결정 기록: DECISION_CONFLICTS R-19(SWR 폴링, 로컬 키, 버전 비교·응답 유실 조용한 반영, 마감 처리, 실패 분기, 모바일 선택 방식)
+- 새 의존성 `swr@2.5.1`(TIME-10-04 확정 규칙)
+- 화면용 순수 로직은 `lib/availability/`, 컴포넌트는 `components/availability/`
 
 ## 완료 이력
 
@@ -151,3 +157,11 @@
 - 변경: `GET /api/v1/promises/[promiseId]/me`(Origin 검사 없음, no-store, 인증 후 모든 응답 쿠키 갱신), `lib/member/me.ts`(세션·참여자·약속·`clock_timestamp()`를 SQL 한 문장으로 재조회, 소속 대조), `lib/member/me-permissions.ts`(`isDeadlinePassed` 경계 = 마감 시각 포함, `computeMePermissions`), `session-auth.ts` `allowCancelled` 옵션(취소된 약속 200용, 기본 동작 그대로). 화면: `/p/[inviteToken]`이 링크 조회 후 `/me`로 draft 방장을 설정 화면으로 보내고, 그 외·`/me` 실패는 `nextAction`대로(`lib/create-promise/invite-view.ts`). 저장소는 같은 promiseId일 때만 카운트다운 기준값으로 쓰고, 없으면 "등록 후 10분 안에 설정을 마쳐야 합니다". 문서: DECISION_CONFLICTS R-17 신설, 009 완료 처리
 - 검증: Vitest 577건(이번 56건), lint·typecheck·build 통과. 브라우저에서 다른 브라우저 대기(`/me` 401), 저장소 삭제 후 설정 화면 복원·카운트다운 숨김·완료까지 진행, 완료 후 `/me` role=host, 다른 약속 쿠키 403·401, `/me` 500 동안 대기 → 해제 후 다음 폴링에서 설정 화면 복귀·카운트다운 이어짐, 만료 draft 뒤 새 방장 등록 시 처음 브라우저 대기 유지. 개발 DB로 마감 경과 `deadlinePassed` true·취소 약속 200·세션 만료 401. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
 - 남은 제한: 실제 휴대폰, 10분 지난 draft에 `/me` 직접 호출(200 draft, 명세에 410 없음), cancelled 참여자 응답은 C-07 팀 확인 대기
+
+### 2026-11-06 — 참여 경로 화면 (참여자 등록·로그인·도착)
+
+- 스펙: `context/features/011-participate-ui.md`
+- 브랜치: `ahn/feat-참여화면` (PR #16 병합)
+- 변경: `components/participate/participant-auth-card.tsx`(등록·로그인 카드, `NICKNAME_TAKEN` → 같은 값 로그인 1회 판별), `components/participate/arrived-card.tsx`(`/me` 기준 닉네임·방장 표시, 시간 입력 자리), `invite-flow.tsx`(등록·마감·취소 안내, draft 대기 화면 방장 로그인), 실패 분기 순수 함수 `lib/participate/failure.ts`, `invite-view.ts` 화면 종류 `join`·`arrived`·`closed`·`cancelled`. 문서: DECISION_CONFLICTS R-18 신설
+- 검증: Vitest 613건(이번 36건), lint·typecheck·build 통과. 브라우저(390px)에서 등록 → 도착, 닉네임 중복 → 로그인 전환, 응답 유실 두 경우(`NICKNAME_TAKEN` → 자동 로그인 / `ALREADY_PARTICIPANT` → 재조회), 다른 기기 로그인, 정원 초과·마감 경과·closed·cancelled 안내, 방장 새로고침 → 도착, draft 대기 화면 방장 로그인 → 설정, PIN 노출 없음. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
+- 남은 제한: 실제 휴대폰(숫자 키패드), `ACCESS_PERIOD_EXPIRED`·`PARTICIPANT_CANCELLED`·`DRAFT_EXPIRED` 로그인 화면은 단위 테스트로만 확인, PIN 분실·시도 제한 미결

@@ -34,7 +34,7 @@ type View =
   | { kind: "setup"; promiseId: string; localExpiresAt: number | null }
   | { kind: "done"; settings: StartedSettings }
   | { kind: "join"; promiseId: string }
-  | { kind: "arrived"; me: MyParticipation }
+  | { kind: "arrived"; promiseId: string; me: MyParticipation }
   | { kind: "closed"; promiseId: string }
   | { kind: "cancelled" }
   | { kind: "blocked"; promiseId: string; reason: BlockedReason }
@@ -84,7 +84,7 @@ async function lookup(inviteToken: string, notice: string | null = null): Promis
     case "join":
       return { kind: "join", promiseId: promiseId as string };
     case "arrived":
-      return { kind: "arrived", me: me as MyParticipation };
+      return { kind: "arrived", promiseId: promiseId as string, me: me as MyParticipation };
     case "closed":
       return { kind: "closed", promiseId: promiseId as string };
     case "cancelled":
@@ -180,7 +180,10 @@ export function InviteFlow({ inviteToken }: { inviteToken: string }) {
         />
       );
     case "done":
-      return <DoneCard inviteToken={inviteToken} settings={view.settings} />;
+      // 완료 → 내 가능 시간 입력: 링크 조회 + /me로 도착(입력) 화면을 연다
+      return (
+        <DoneCard inviteToken={inviteToken} settings={view.settings} onStartInput={afterAuth} />
+      );
     case "join":
       return (
         <ParticipantAuthCard
@@ -193,7 +196,15 @@ export function InviteFlow({ inviteToken }: { inviteToken: string }) {
         />
       );
     case "arrived":
-      return <ArrivedCard me={view.me} />;
+      // key: 다른 약속·참여자로 바뀌면 입력 상태를 새로 시작한다
+      return (
+        <ArrivedCard
+          key={`${view.promiseId}:${view.me.participantId}`}
+          promiseId={view.promiseId}
+          me={view.me}
+          onRelink={afterAuth}
+        />
+      );
     case "closed":
       return (
         <LoginBehindNotice

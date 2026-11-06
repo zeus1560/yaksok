@@ -22,9 +22,11 @@ function inviteUrlOf(inviteToken: string): string {
 export function DoneCard({
   inviteToken,
   settings,
+  onStartInput,
 }: {
   inviteToken: string;
   settings: StartedSettings;
+  onStartInput: () => void;
 }) {
   const [inviteUrl] = useState(() => inviteUrlOf(inviteToken));
   const [toast, setToast] = useState<string | null>(null);
@@ -94,12 +96,7 @@ export function DoneCard({
           <Button variant="secondary" onClick={copy}>
             초대 링크 복사
           </Button>
-          <Button disabled aria-describedby="input-soon">
-            내 가능 시간 입력하기
-          </Button>
-          <p id="input-soon" className="text-center text-xs text-sub">
-            곧 열려요
-          </p>
+          <Button onClick={onStartInput}>내 가능 시간 입력하기</Button>
         </div>
       </Card>
       <div
