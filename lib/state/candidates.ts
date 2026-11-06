@@ -28,9 +28,18 @@ export type Candidate = {
 
 export const MIN_CANDIDATE_PARTICIPANTS = 2; // RESULT-04-01 (R-04)
 
+// 후보가 아닌 이유 (STATE-API-05 422 INVALID_CONFIRMATION_CANDIDATE의 내부 구분. 응답에는 넣지 않는다)
+export type CandidateRejection =
+  | "not_future"
+  | "not_slot_boundary"
+  | "out_of_date_range"
+  | "out_of_daily_range"
+  | "too_few_participants";
+
 const MINUTE_MS = 60_000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
 const SLOT_MS = SLOT_MINUTES * MINUTE_MS;
+const SEOUL_OFFSET_MS = 9 * 60 * MINUTE_MS; // Asia/Seoul은 일광절약시간이 없다 (TIME-01-01)
 
 // 1. active이고 제출 시각이 있는 참여자만 센다. 탈퇴자(cancelled)의 보존 슬롯과 미제출자의 저장 슬롯은 빠진다
 // 2. 후보 시작은 날짜 범위 전체에서 한국 시간 30분 경계이고 시작 > now (지난 슬롯 판정 시작 ≤ now와 같은 경계, TIME-08-01)
@@ -38,42 +47,29 @@ const SLOT_MS = SLOT_MINUTES * MINUTE_MS;
 // 4. 구간의 모든 30분 슬롯에 공통으로 가능한 같은 참여자 수(슬롯별 참여자 집합의 교집합 크기)
 // 5. 2명 이상만 후보. 방장도 한 명으로 세지만 방장 참석은 조건이 아니다
 // 6. 인원 내림차순 → 시작 시각 오름차순
-// 1·4는 countAvailableParticipants와 같은 색인(buildSlotIndex)·교집합(countCommon)을 쓴다. 2(미래)·3(범위) 거르기는 여기에만 있다
+// 2~5의 판정은 evaluateStart 하나에만 있고, 확정 재검증(validateCandidateStart)도 같은 함수를 부른다.
+// 여기서는 날짜 범위·하루 범위 안의 30분 시작점을 차례로 넘길 뿐 걸러 내는 조건을 따로 두지 않는다
+// 1·4는 countAvailableParticipants와 같은 색인(buildSlotIndex)·교집합(countCommon)을 쓴다
 export function computeCandidates(input: {
   settings: CandidateSettings;
   participants: readonly CandidateParticipant[];
   now: Date;
 }): Candidate[] {
-  const { settings, now } = input;
-  assertSettings(settings);
+  const context = candidateContext(input);
+  if (context.index.size < MIN_CANDIDATE_PARTICIPANTS) return [];
 
-  const index = buildSlotIndex(input.participants);
-  if (index.size < MIN_CANDIDATE_PARTICIPANTS) return [];
-
-  const slotsPerCandidate = settings.durationMinutes / SLOT_MINUTES;
-  const firstDay = seoulMidnight(settings.dateRangeStart).getTime();
-  const lastDay = seoulMidnight(settings.dateRangeEnd).getTime();
-  const nowMs = now.getTime();
+  const { settings } = context;
   const candidates: Candidate[] = [];
 
   // 서울은 일광절약시간이 없어 날짜마다 24시간씩 더하면 다음 날 00:00이다
-  for (let day = firstDay; day <= lastDay; day += DAY_MS) {
+  for (let day = context.firstDay; day <= context.lastDay; day += DAY_MS) {
     for (
       let minute = settings.dailyStartMinute;
       minute + settings.durationMinutes <= settings.dailyEndMinute;
       minute += SLOT_MINUTES
     ) {
-      const start = day + minute * MINUTE_MS;
-      if (start <= nowMs) continue;
-
-      const count = countCommon(index, start, slotsPerCandidate);
-      if (count >= MIN_CANDIDATE_PARTICIPANTS) {
-        candidates.push({
-          startAt: new Date(start),
-          endAt: new Date(start + settings.durationMinutes * MINUTE_MS),
-          availableParticipantCount: count,
-        });
-      }
+      const verdict = evaluateStart(context, day + minute * MINUTE_MS);
+      if (verdict.ok) candidates.push(verdict.candidate);
     }
   }
 
@@ -82,6 +78,76 @@ export function computeCandidates(input: {
       b.availableParticipantCount - a.availableParticipantCount ||
       a.startAt.getTime() - b.startAt.getTime(),
   );
+}
+
+export type CandidateVerdict =
+  | { ok: true; candidate: Candidate }
+  | { ok: false; reason: CandidateRejection };
+
+// 확정 직전 재검증 (STATE-API-05 처리 순서 4·5·6). 시작 시각 하나가 computeCandidates 결과에 들어갈 후보인지 판정한다
+// computeCandidates와 같은 evaluateStart를 쓰므로 "후보 목록에 있다 ⇔ 통과"다. 순위(상위 5개)는 보지 않는다
+// now는 호출자가 잠금 후 읽은 clock_timestamp()
+export function validateCandidateStart(input: {
+  settings: CandidateSettings;
+  participants: readonly CandidateParticipant[];
+  now: Date;
+  startAt: Date;
+}): CandidateVerdict {
+  return evaluateStart(candidateContext(input), input.startAt.getTime());
+}
+
+type CandidateContext = {
+  settings: CandidateSettings;
+  index: SlotIndex;
+  firstDay: number; // 날짜 범위 첫날 서울 00:00 (epoch 밀리초)
+  lastDay: number; // 날짜 범위 마지막 날 서울 00:00
+  nowMs: number;
+};
+
+function candidateContext(input: {
+  settings: CandidateSettings;
+  participants: readonly CandidateParticipant[];
+  now: Date;
+}): CandidateContext {
+  const { settings } = input;
+  assertSettings(settings);
+  return {
+    settings,
+    index: buildSlotIndex(input.participants),
+    firstDay: seoulMidnight(settings.dateRangeStart).getTime(),
+    lastDay: seoulMidnight(settings.dateRangeEnd).getTime(),
+    nowMs: input.now.getTime(),
+  };
+}
+
+// 후보 시작점 하나의 판정 (위 2~5). 후보 조회와 확정이 함께 쓰는 유일한 판정 코드다
+// 서울 오프셋(+9시간)이 30분의 배수라 epoch 밀리초가 30분으로 나누어떨어지면 한국 시간 00·30분 경계다
+function evaluateStart(context: CandidateContext, start: number): CandidateVerdict {
+  const { settings, index } = context;
+  if (start <= context.nowMs) return { ok: false, reason: "not_future" };
+  if (!Number.isSafeInteger(start) || start % SLOT_MS !== 0) {
+    return { ok: false, reason: "not_slot_boundary" };
+  }
+
+  const day = Math.floor((start + SEOUL_OFFSET_MS) / DAY_MS) * DAY_MS - SEOUL_OFFSET_MS;
+  if (day < context.firstDay || day > context.lastDay) {
+    return { ok: false, reason: "out_of_date_range" };
+  }
+  const minute = (start - day) / MINUTE_MS;
+  if (minute < settings.dailyStartMinute || minute + settings.durationMinutes > settings.dailyEndMinute) {
+    return { ok: false, reason: "out_of_daily_range" };
+  }
+
+  const count = countCommon(index, start, settings.durationMinutes / SLOT_MINUTES);
+  if (count < MIN_CANDIDATE_PARTICIPANTS) return { ok: false, reason: "too_few_participants" };
+  return {
+    ok: true,
+    candidate: {
+      startAt: new Date(start),
+      endAt: new Date(start + settings.durationMinutes * MINUTE_MS),
+      availableParticipantCount: count,
+    },
+  };
 }
 
 // 주어진 구간 하나(startAt ~ startAt + durationMinutes)의 공통 가능 인원 (STATE-API-01 currentConfirmation)

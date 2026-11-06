@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeCandidates,
   countAvailableParticipants,
+  validateCandidateStart,
   type CandidateParticipant,
   type CandidateSettings,
 } from "./candidates";
@@ -471,5 +472,201 @@ describe("countAvailableParticipants (STATE-API-01 확정 구간 공통 가능 �
         }),
       ).toBe(candidate.availableParticipantCount);
     }
+  });
+});
+
+describe("validateCandidateStart (STATE-API-05 확정 재검증) — computeCandidates와 같은 판정", () => {
+  const MIN_MS = 60_000;
+  const DAY_MS = 24 * 60 * MIN_MS;
+
+  // 결정적 의사 난수 (mulberry32)
+  function rng(seed: number) {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  type Dataset = {
+    name: string;
+    settings: CandidateSettings;
+    participants: CandidateParticipant[];
+    now: Date;
+  };
+
+  // 날짜 범위 앞뒤 하루까지 30분 칸에 무작위로 가능 시간을 넣는다(범위 밖 저장 슬롯도 섞인다).
+  // 탈퇴자·미제출자도 섞고, now는 범위 전·첫날 하루 범위 도중(경계 아님)·정확히 경계·둘째 날 새벽에서 고른다
+  function dataset(seed: number): Dataset {
+    const random = rng(seed);
+    const pick = <T,>(values: T[]): T => values[Math.floor(random() * values.length)];
+    const startDay = pick(["2026-11-10", "2026-12-31", "2027-02-27"]);
+    const days = 1 + Math.floor(random() * 3);
+    const dailyStartMinute = pick([0, 9 * 60, 13 * 60 + 30, 22 * 60]);
+    const dailyEndMinute = pick(
+      [dailyStartMinute + 60, dailyStartMinute + 150, 24 * 60].filter((m) => m <= 24 * 60),
+    );
+    const durationMinutes = pick(
+      [30, 60, 90, 120].filter((d) => d <= dailyEndMinute - dailyStartMinute),
+    );
+    const first = at(`${startDay}T00:00:00+09:00`).getTime();
+    const endDay = new Date(first + (days - 1) * DAY_MS + 9 * 3600_000).toISOString().slice(0, 10);
+    const participants: CandidateParticipant[] = [];
+    const count = 2 + Math.floor(random() * 6);
+    for (let i = 0; i < count; i += 1) {
+      const slots: Date[] = [];
+      for (let t = first - DAY_MS; t < first + (days + 1) * DAY_MS; t += 30 * MIN_MS) {
+        if (random() < 0.55) slots.push(new Date(t));
+      }
+      const kind = random();
+      participants.push(
+        kind < 0.12
+          ? { status: "cancelled", submittedAt: SUBMITTED, slots }
+          : kind < 0.22
+            ? { status: "active", submittedAt: null, slots }
+            : { status: "active", submittedAt: SUBMITTED, slots },
+      );
+    }
+    const now = pick([
+      new Date(first - 3 * DAY_MS),
+      new Date(first + dailyStartMinute * MIN_MS + 45 * MIN_MS + 123),
+      new Date(first + dailyStartMinute * MIN_MS + 30 * MIN_MS),
+      new Date(first + DAY_MS + 7 * MIN_MS),
+    ]);
+    return {
+      name: `seed ${seed} (${startDay}~${endDay}, ${dailyStartMinute}~${dailyEndMinute}분, ${durationMinutes}분, ${count}명)`,
+      settings: {
+        dateRangeStart: startDay,
+        dateRangeEnd: endDay,
+        dailyStartMinute,
+        dailyEndMinute,
+        durationMinutes,
+      },
+      participants,
+      now,
+    };
+  }
+
+  const datasets = Array.from({ length: 40 }, (_, i) => dataset(i + 1));
+
+  it.each(datasets.map((d) => [d.name, d] as const))(
+    "%s: 후보 목록의 모든 후보는 통과하고, 목록에 없는 시작점은 모두 거부된다",
+    (_name, d) => {
+      const candidates = computeCandidates(d);
+      const byStart = new Map(candidates.map((c) => [c.startAt.getTime(), c]));
+
+      for (const candidate of candidates) {
+        expect(validateCandidateStart({ ...d, startAt: candidate.startAt })).toEqual({
+          ok: true,
+          candidate,
+        });
+      }
+
+      // 범위 앞뒤 하루까지 10분 간격(30분 경계 아닌 점 포함) + 각 점에서 1밀리초 어긋난 점
+      const first = at(`${d.settings.dateRangeStart}T00:00:00+09:00`).getTime();
+      const last = at(`${d.settings.dateRangeEnd}T00:00:00+09:00`).getTime();
+      for (let t = first - DAY_MS; t <= last + 2 * DAY_MS; t += 10 * MIN_MS) {
+        for (const start of [t, t + 1]) {
+          const verdict = validateCandidateStart({ ...d, startAt: new Date(start) });
+          const listed = byStart.get(start);
+          if (listed) expect(verdict).toEqual({ ok: true, candidate: listed });
+          else expect(verdict.ok).toBe(false);
+        }
+      }
+    },
+  );
+
+  it("40개 데이터 전체에서 거부 이유 다섯 가지가 모두 나오고 통과도 충분히 있다 (검사 범위 확인)", () => {
+    const seen = new Set<string>();
+    let accepted = 0;
+    for (const d of datasets) {
+      const first = at(`${d.settings.dateRangeStart}T00:00:00+09:00`).getTime();
+      const last = at(`${d.settings.dateRangeEnd}T00:00:00+09:00`).getTime();
+      for (let t = first - DAY_MS; t <= last + 2 * DAY_MS; t += 10 * MIN_MS) {
+        const verdict = validateCandidateStart({ ...d, startAt: new Date(t) });
+        if (verdict.ok) accepted += 1;
+        else seen.add(verdict.reason);
+      }
+    }
+    expect([...seen].sort()).toEqual([
+      "not_future",
+      "not_slot_boundary",
+      "out_of_daily_range",
+      "out_of_date_range",
+      "too_few_participants",
+    ]);
+    expect(accepted).toBeGreaterThan(100);
+  });
+
+  describe("후보 목록에 없는 시작점", () => {
+    // 2026-11-10 09:00~12:00, 60분. 1번 09:00~11:00, 2번 09:00~12:00, 3번 11:00~12:00
+    const base = {
+      settings: settings(),
+      participants: [
+        person(slotsOn("2026-11-10", "09:00", "09:30", "10:00", "10:30")),
+        person(slotsOn("2026-11-10", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30")),
+        person(slotsOn("2026-11-10", "11:00", "11:30")),
+      ],
+      now: at("2026-11-10T09:10:00+09:00"),
+    };
+
+    it("목록에는 09:30·10:00(2명)과 11:00(2명)이 있다", () => {
+      expect(summary(computeCandidates(base))).toEqual([
+        row("2026-11-10T09:30:00+09:00", "2026-11-10T10:30:00+09:00", 2),
+        row("2026-11-10T10:00:00+09:00", "2026-11-10T11:00:00+09:00", 2),
+        row("2026-11-10T11:00:00+09:00", "2026-11-10T12:00:00+09:00", 2),
+      ]);
+    });
+
+    it.each([
+      ["지난 시각 (09:00 < now)", "2026-11-10T09:00:00+09:00", "not_future"],
+      ["30분 경계 아님 (09:45)", "2026-11-10T09:45:00+09:00", "not_slot_boundary"],
+      ["초가 0이 아님 (10:00:01)", "2026-11-10T10:00:01+09:00", "not_slot_boundary"],
+      ["하루 범위를 넘는 구간 (11:30~12:30)", "2026-11-10T11:30:00+09:00", "out_of_daily_range"],
+      ["하루 범위 끝에서 시작 (12:00)", "2026-11-10T12:00:00+09:00", "out_of_daily_range"],
+      ["날짜 범위 밖 (다음 날)", "2026-11-11T10:00:00+09:00", "out_of_date_range"],
+      ["공통 1명 (10:30~11:30은 2번만)", "2026-11-10T10:30:00+09:00", "too_few_participants"],
+    ])("%s → 거부(%s)", (_n, start, reason) => {
+      expect(validateCandidateStart({ ...base, startAt: at(start) })).toEqual({ ok: false, reason });
+    });
+
+    it("시작 = now(30분 경계)는 지난 것으로 거부한다 (R-20)", () => {
+      const onBoundary = { ...base, now: at("2026-11-10T09:30:00+09:00") };
+      expect(validateCandidateStart({ ...onBoundary, startAt: at("2026-11-10T09:30:00+09:00") })).toEqual({
+        ok: false,
+        reason: "not_future",
+      });
+      expect(summary(computeCandidates(onBoundary))).not.toContain(
+        row("2026-11-10T09:30:00+09:00", "2026-11-10T10:30:00+09:00", 2),
+      );
+    });
+
+    it("같은 절대 시각이면 오프셋 표기와 무관하게 같은 판정", () => {
+      const a = validateCandidateStart({ ...base, startAt: at("2026-11-10T10:00:00+09:00") });
+      const b = validateCandidateStart({ ...base, startAt: at("2026-11-10T01:00:00Z") });
+      expect(a).toEqual(b);
+      expect(a.ok).toBe(true);
+    });
+
+    it("24:00 종료면 23:00 시작 60분 구간까지 허용, 23:30은 하루 범위 초과", () => {
+      const late = {
+        settings: settings({ dailyStartMinute: 22 * 60, dailyEndMinute: 24 * 60 }),
+        participants: [
+          person(slotsOn("2026-11-10", "23:00", "23:30")),
+          person(slotsOn("2026-11-10", "23:00", "23:30")),
+        ],
+        now: BEFORE_RANGE,
+      };
+      expect(validateCandidateStart({ ...late, startAt: at("2026-11-10T23:00:00+09:00") }).ok).toBe(
+        true,
+      );
+      expect(validateCandidateStart({ ...late, startAt: at("2026-11-10T23:30:00+09:00") })).toEqual({
+        ok: false,
+        reason: "out_of_daily_range",
+      });
+    });
   });
 });

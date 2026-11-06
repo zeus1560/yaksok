@@ -1,71 +1,61 @@
-# 현재 기능: 방장 마감 API (STATE-API-04)
+# 현재 기능: 최종 일정 확정 API (STATE-API-05)
 
 ## 상태
 
-완료
+검토 중
 
 ## 스펙
 
-`context/features/016-close-voting-api.md`
+`context/features/017-confirm-schedule-api.md`
 
 ## 목표
 
-방장이 collecting 약속을 마감 시각 전(조기 마감)이든 후든 closed로 바꾼다. 이미 closed면 변경 없이 200. C-11 잠정 B안 — 세션·링크 만료는 `voting_deadline_at + 7일` 그대로. API와 명세 문구만, 화면·DB 스키마 변경 없음.
+방장이 closed 약속의 유효 후보 하나를 확정한다. 후보 재검증은 후보 조회와 같은 판정 함수(`lib/state/candidates.ts`). 마감 지난 collecting은 closed를 먼저 저장. C-10 잠정 A안 — 확정과 같은 트랜잭션에서 active 참여자의 유효 세션만 `confirmed_start_at + 7일`. API와 명세 문구만, 화면·DB 스키마 변경 없음.
 
 ## 수용 기준
 
-- [x] AC-1 마감 전 조기 마감 → closed 200, 세션·`voting_deadline_at` 변경 없음
-- [x] AC-2 마감 경과 collecting → closed 200
-- [x] AC-3 이미 closed → 변경 없이 200, 병렬 2건 둘 다 200·변경 한 번
-- [x] AC-4 draft·confirmed 409 `INVALID_PROMISE_STATE`(allowedStates collecting·closed)
-- [x] AC-5 검사 순서(Origin → 400 → 404 → cancelled 409 → 401 → 403 → 잠금 후 재확인)
-- [x] AC-6 확정 시각·가능 시간·제출 기록 보존, 후보 저장 없음
-- [x] AC-7 마감이 먼저 잠금을 잡으면 동시 제출은 저장 없이 409
-- [x] AC-8 조기 마감 상태를 기존 API가 모두 closed로 다룸
-- [x] AC-9 no-store, 인증 후 모든 응답 쿠키 갱신
-- [x] AC-10 명세 문구 3곳·C-11 기록, test(3개 TZ)·lint·typecheck·build
+스펙 `context/features/017-confirm-schedule-api.md` AC-1~12 참고.
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-조기마감-api` (`main` 74ecbf1에서 생성, 015 PR #20 병합 포함)
-- 시작 시 작업 트리: 깨끗함. 원격이 사라진(`gone`) 로컬 `ahn/` 브랜치 없음 → 삭제 없음. 원격이 남은 로컬 `ahn/` 브랜치 13개(015 `refactor-만료계산-통합` 포함)는 그대로 둠
-- 첫 커밋은 015 완료 기록(스펙 015 상태, 완료 이력, feature-list)
+- 브랜치: `ahn/feat-일정확정-api` (`main` 60633e9에서 생성, 016 PR #21 병합 포함)
+- 시작 시 작업 트리: 깨끗함. 원격이 사라진(`gone`) 로컬 `ahn/` 브랜치 없음 → 삭제 없음. 원격이 남은 로컬 `ahn/` 브랜치 14개는 그대로 둠
+- 첫 커밋은 016 완료 기록(스펙 016 상태, 완료 이력, feature-list)
 
 ## 검증 결과
 
-2026-11-07, Node.js 24.20.0
+2026-11-07, Node.js 24
 
 | 단계 | 명령 | 결과 |
 | --- | --- | --- |
-| RED | `npx vitest run lib/state/close-voting.test.ts` (빈 구현: 항상 `{ kind: "ok", promiseStatus: auth.promise.status, changed: false }`) | 2건 실패, 둘 다 `AssertionError: expected { kind: 'ok', …(4) } to deeply equal { kind: 'ok', …(4) }` — 「collecting이고 마감 전이면 closed로 바꾼다」 기대 `promiseStatus: "closed"`·`changed: true` / 실제 `"collecting"`·`false`, 「이미 closed면 아무것도 바꾸지 않고 ok」 기대 `"closed"` / 실제 `"collecting"` |
+| RED | `npx vitest run lib/state/confirm-schedule.test.ts` (빈 구현: 항상 `{ kind: "invalid_state", promiseStatus: auth.promise.status, session: { expiresAt: auth.session.expiresAt, now: auth.now } }`) | 2건 실패. 「closed이고 유효 후보면 confirmed로 저장한다」 `AssertionError: expected { kind: 'invalid_state', …(2) } to deeply equal { kind: 'ok', …(3) }`(기대 `kind: "ok"`·startAt·endAt·세션 = 확정 + 7일 / 실제 `invalid_state`·`promiseStatus: "closed"`), 「공통 가능 1명인 시작점은 422 (저장 없음)」 `AssertionError: expected { kind: 'invalid_state', …(2) } to deeply equal { kind: 'invalid_candidate', …(2) }` |
 | GREEN | 같은 명령 | 2건 통과 |
-| REFACTOR | `npm run test` | 50 파일, 933 테스트 통과(기존 888 + `close-voting` 25 + 라우트 20). PowerShell `$env:TZ`로 `UTC`·`America/Los_Angeles`에서도 933건 통과(시작 시각이 각 시간대로 찍히는 것 확인 — Git Bash의 `TZ=America/Los_Angeles`는 Node에 적용되지 않아 쓰지 않음) |
+| REFACTOR | `npm run test` | 52 파일, 1050 테스트 통과(기존 933 + 이번 117: `confirm-schedule` 24, `candidates` 판정·전수 비교 52, 라우트 41). PowerShell `$env:TZ`로 `UTC`·`America/Los_Angeles`에서도 1050건 통과(시작 시각이 각 시간대로 찍힘) |
+| | 전수 비교 테스트 민감도 | `computeCandidates` 열거 조건을 `<=` → `<`로 바꾸면 28건 실패, 되돌린 뒤 통과 |
 | | `npm run lint` / `npm run typecheck` | 통과 |
-| | `npm run build` | 통과(dev 서버 없는 상태), `/api/v1/promises/[promiseId]/close` 동적 |
+| | `npm run build` | 통과(dev 서버 종료 후), `/api/v1/promises/[promiseId]/confirmation` 동적 |
 
-| 개발 DB 실제 호출 (스크립트 57개 항목, 2회 실행 — 2회째 전부 통과) | 결과 |
+| 개발 DB 실제 호출 (스크립트 57개 항목, 1회 실행 전부 통과) | 결과 |
 | --- | --- |
-| 조기 마감(마감 = 오늘 23:59, 참여자 3명·2명 제출) | 200 `{ promiseId, promiseStatus: "closed" }`, no-store, DB closed. `voting_deadline_at`·약속의 모든 세션 `expires_at`·슬롯·버전·제출 시각 그대로, 방장 세션 = 마감 + 7일, 쿠키 Max-Age = DB 만료까지 남은 초(차이 2초 이내) |
-| 중복 마감 | 200 closed, 행 `xmin` 그대로(다시 쓰지 않음), 데이터 그대로 |
-| 마감 경과(DB에서 마감을 1분 전으로) | 200 closed, 마감·세션 그대로 |
-| 일반 참여자 / Origin 없음 | 403 `FORBIDDEN`(쿠키 갱신, 상태 그대로) / 403 `INVALID_ORIGIN`(쿠키 없음) |
-| draft / 10분 지난 draft / confirmed | 409 `INVALID_PROMISE_STATE` details `{ promiseStatus, allowedStates: ["collecting","closed"] }`, draft 행 유지, confirmed·확정 시각 그대로 |
-| cancelled(쿠키 없이) | 409 `PROMISE_CANCELLED`, 쿠키 없음 |
-| 쿠키 없음·위조 / 다른 약속 세션 / 없는 약속 / 형식 오류 | 401 / 403 `FORBIDDEN` / 404 / 400, 모두 no-store |
-| 조기 마감 상태 일관성 | 링크 `closed`·`view_result`, `/me` 방장·참여자 `closed`·`canEditAvailability`·`canSubmit` false(`deadlinePassed`는 false), 제출 409 `VOTING_CLOSED`·저장 없음, 현황 `closed`, 후보 200(2개), 상태 조회 `closed`, 참여자 등록 409 `INVALID_PROMISE_STATE` |
-| 마감 먼저 잠금(내 연결로 행을 잡고 마감 → 1.5초 뒤 제출 → 해제) | 잠금 대기 2건(마감 쿼리 `transactionid`, 제출 쿼리 `tuple`) 확인 뒤 마감 200, 제출 409 `VOTING_CLOSED`, 슬롯·버전·제출 시각 그대로 |
-| 제출 먼저 잠금(반대 순서) | 제출 200(version 1 저장) → 마감 200, 최종 closed |
-| 잠금 조작 없는 마감·제출 병렬 5회 | 5회 모두 마감 200·제출 409·미저장(이 환경에서는 매번 마감이 먼저 잠금) |
-| 같은 방장 마감 2건 병렬(잠금 대기 2건 확인) | 둘 다 200 closed, `pg_stat_user_tables.n_tup_upd`(promises) +1. 잠금 조작 없는 병렬 2건도 둘 다 200 |
-| 정리 | 실행마다 확인용 링크·약속·참여자·세션·슬롯 삭제, 6개 테이블(`_prisma_migrations` 포함) 행 수·md5 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
-
-브라우저(Playwright + 로컬 Chromium, 390px, 코드 변경 없음): 조기 마감한 약속을 참여자로 열면 시간 입력 화면은 서버 응답 상태(`status: closed`) 기준으로 읽기 전용이 된다 — 카운트다운 없이 "응답이 마감됐어요"·"제출한 내용으로 마감"·안내 문구, 제출 버튼 없음, 내 그리드 120칸 비활성. 열려 있던 화면도 5초 폴링 뒤 같은 표시로 바뀐다. 다만 "마감 11/7(토) 23:59"처럼 **설정 마감 시각(미래)이 그대로 함께 표시**된다(실제 마감 시각과 다름, 이번 PR에서는 고치지 않음).
-
-1회째 실패 2건은 측정 문제였다: 마감·제출 잠금 확인에서 0.7초 간격이라 대기 1건만 잡힘(결과는 같았음) → 1.5초로, n_tup_upd가 +2 → 다른 백엔드 통계가 유휴 시 최대 10초 늦게 반영돼 직전 모집 시작 UPDATE가 섞임 → 전후 12초 대기. 2회째 모두 통과.
+| 상위 5개 밖 유효 후보(후보 15개 중 15위) | 200 `{ promiseId, promiseStatus: "confirmed", currentConfirmation: { startAt, endAt } }`, no-store, DB confirmed·`confirmed_start_at` 저장, 슬롯 56개·제출 4명 그대로 |
+| `+09:00` / 같은 시각 `Z` | 두 약속 모두 200, 응답 `currentConfirmation` 동일(`2026-11-10T10:00:00+09:00`), DB `confirmed_start_at` 동일 |
+| 지난 시각(그 외 유효)·30분 경계 아님·날짜 범위 밖(2명 가능)·하루 범위 초과(저장 슬롯 2명)·공통 1명 | 모두 422 `INVALID_CONFIRMATION_CANDIDATE`(쿠키 갱신), 약속 closed 그대로 |
+| 형식 오류 3종 / JSON 오류·startAt 없음·promiseId 형식 | 422 `VALIDATION_FAILED`(`field: startAt`, 쿠키 없음) / 400 |
+| 마감 전 collecting | 409 details `{ promiseStatus: "collecting", allowedStates: ["closed"] }`, DB 그대로 |
+| 이미 confirmed 재요청(다른 일정·같은 일정) | 둘 다 409, `confirmed_start_at` 그대로 |
+| 마감 지난 collecting 유효 후보 / 무효 후보 | 200 confirmed / 422, DB closed로 커밋·확정 없음·세션 그대로 |
+| 마감 지난 collecting에 일반 참여자 | 403, DB collecting 그대로 |
+| 일반 참여자 / Origin 없음 / cancelled(쿠키 없이) | 403 `FORBIDDEN`(쿠키 갱신) / 403 `INVALID_ORIGIN`(쿠키 없음) / 409 `PROMISE_CANCELLED`(쿠키 없음) |
+| 쿠키 없음·위조 / 다른 약속 세션 / 없는 약속 | 401 / 403 `FORBIDDEN` / 404 |
+| 세션 | 방장 2기기·참여자 2기기·다른 참여자 세션 = `confirmed_start_at + 7일`, 탈퇴 참여자·만료 세션 그대로. 요청자 Max-Age = 새 만료까지 남은 초, 방장 다른 기기(상태 조회)·참여자 다른 기기(`/me`) 다음 요청에서 Max-Age 갱신(차이 3초 이내). 탈퇴 참여자 세션은 401 |
+| 확정 후 연결 | 상태 조회 `currentConfirmation { startAt, endAt, availableParticipantCount: 2, hostActionRequired: false }`, 링크 조회 `confirmed`·`view_result`, `/me` `confirmed`, 후보 조회 409 `INVALID_PROMISE_STATE` |
+| 같은 방장 서로 다른 후보 병렬 2건 | 잠금 조작 없이: 200·409, DB = 200 응답 일정. 내 연결로 약속 행을 잡은 상태: 확정 쿼리 잠금 대기 2건 확인 → 해제 뒤 200·409(409 details `confirmed`) |
+| 정리 | 확인용 링크·약속·참여자·세션·슬롯 삭제, 6개 테이블(`_prisma_migrations` 포함) 행 수·md5 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
 
 ## 메모
 
-- C-11 잠정 B안 적용, EXCEPTION-06-01 ❗미결은 정하지 않고 DATABASE.md 506행(잠금 순서 직렬 처리)대로
+- C-10 잠정 A안 적용, 팀 확정 필요
+
 ## 완료 이력
 
 이후 기록은 오래된 것부터 최신 순서로 맨 아래에 추가한다. 기존 기록을 삭제하지 않는다.

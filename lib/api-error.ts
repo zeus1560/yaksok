@@ -25,6 +25,7 @@ export type ApiErrorCode =
   | "AVAILABILITY_VERSION_CONFLICT"
   | "INVALID_SLOT_FORMAT"
   | "SLOT_LIMIT_EXCEEDED"
+  | "INVALID_CONFIRMATION_CANDIDATE"
   | "INTERNAL_ERROR";
 
 export function apiError(
@@ -160,6 +161,15 @@ export function invalidSlotFormat(): Response {
 
 export function slotLimitExceeded(): Response {
   return apiError(422, "SLOT_LIMIT_EXCEEDED", "한 번에 저장할 수 있는 시간은 5,000칸까지입니다.");
+}
+
+// STATE-API-05 최종 일정 확정. 과거 시각·경계 위반·범위 초과·공통 가능 인원 2명 미만을 구분하지 않는다
+export function invalidConfirmationCandidate(): Response {
+  return apiError(
+    422,
+    "INVALID_CONFIRMATION_CANDIDATE",
+    "후보가 변경되었거나 유효하지 않습니다. 최신 후보를 확인해 주세요.",
+  );
 }
 
 export function internalError(): Response {
