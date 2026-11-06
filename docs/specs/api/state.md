@@ -155,7 +155,7 @@ draft는 `promises.created_at+10분`에 만료된다. GET 요청은 만료 여�
 
 #### **세션·보존 공통 계약**
 
-- collecting 세션은 `voting_deadline_at+7일`까지 유지한다. 조기 마감 시에는 실제 마감 처리 시각+7일로 갱신한다.
+- collecting 세션은 `voting_deadline_at+7일`까지 유지한다. 세션·링크 만료는 `voting_deadline_at+7일`을 유지하며 조기 마감 때 갱신하지 않는다(DECISION_CONFLICTS C-11 잠정, 팀 확정 필요).
 - 마감·재조율에 따라 만료 시각을 연장할 때는 `status=active`인 참여자의 현재 유효한 세션만 갱신한다. 이미 만료됐거나 `status=cancelled`인 참여자의 세션은 다시 활성화하지 않는다.
 - 세션 만료 후에도 링크 접근 기간이 남아 있고 약속이 cancelled가 아니면 닉네임·PIN으로 재로그인할 수 있다.
 - 약속 취소는 `promises.status`와 `promises.cancelled_at`을 변경하며 참여자의 `role`, `status`, `cancelled_at`은 보존한다. 참여자 탈퇴가 완료된 경우에는 해당 참여자의 `status=cancelled`, `cancelled_at=현재 시각`을 기록한다. 단, 후임자가 없는 마지막 방장의 요청은 참여자 탈퇴를 완료하지 않고 약속 취소로 전환한다.
@@ -681,12 +681,20 @@ if (!response.ok) {
 
 1. promiseId 형식과 약속 존재 여부를 확인한다. 약속이 cancelled이면 세션 인증보다 우선하여 `409 PROMISE_CANCELLED`를 반환한다. 그다음 세션 소속을 확인하고 약속 행을 잠근 뒤 취소 상태와 최신 active·host 권한을 다시 확인한다.
 2. 이미 closed라면 데이터 변경 없이 200으로 현재 closed 상태를 반환한다. 마감 요청 중복 처리는 새 제품 규칙을 추가하지 않는 기술 계약이다.
-3. collecting이라면 잠금 후 서버 시각으로 기한 판정을 수행한다. 이미 기한 도달이면 공통 마감, 기한 전이면 방장 조기 마감으로 closed를 저장한다. 세션 만료 시각을 실제 마감 처리 시각+7일로 변경할 때는 active 참여자의 현재 유효한 세션만 갱신하며, 이미 만료됐거나 cancelled 참여자에게 속한 세션은 다시 활성화하지 않는다.
+3. collecting이라면 잠금 후 서버 시각으로 기한 판정을 수행한다. 이미 기한 도달이면 공통 마감, 기한 전이면 방장 조기 마감으로 closed를 저장한다. 세션·링크 만료는 `voting_deadline_at+7일`을 유지하며 조기 마감 때 갱신하지 않는다. `voting_deadline_at`도 덮어쓰지 않는다(DECISION_CONFLICTS C-11 잠정, 팀 확정 필요).
 4. draft·confirmed는 `409 INVALID_PROMISE_STATE`, cancelled는 세션 인증 결과보다 우선하여 `409 PROMISE_CANCELLED`를 반환한다. 이번 요청에서 확정 시각·참가 입력·제출 기록을 삭제하거나 초기화하지 않는다.
 5. 후보는 저장하지 않고 후보 조회 API가 현재 데이터를 계산한다. 현재 ERD에 closedAt·closeReason 컬럼이 없으므로 해당 값을 저장된 마감 이력처럼 응답하지 않는다.
 6. 전원 제출 여부·후보 최소 인원은 마감의 선행 조건이 아니다.
 7. 화면은 현재 host이면서 collecting일 때만 마감 버튼을 보여주고 요청 중 비활성화한다. 마감 후에는 숨긴다. 재조율로 collecting이 된 뒤 다시 표시한다.
 8. 200 중복 처리는 같은 closed 상태에서의 재시도 계약이다. 다른 조율 회차를 가로지르는 지연 요청의 보호 정책은 EXCEPTION 영역에서 별도 다루며 요청 단위 멱등성까지 보장한다고 표현하지 않는다.
+
+#### **구현 결정 (2026-11-07, DECISION_CONFLICTS R-22)**
+
+- 검사 순서: Origin 403 → promiseId 400 → 404 → 409 `PROMISE_CANCELLED` → 401 → 403(다른 약속) → `promises` 행 잠금 → 잠금 후 cancelled 409 → 세션·참여자 재확인 401 → 최신 role이 host가 아니면 403 → 상태.
+- 링크를 잠그지 않는다(draft를 지우지 않음). 10분 지난 draft도 409 `INVALID_PROMISE_STATE`이며 삭제하지 않는다.
+- 조기 마감·공통 마감 모두 `status`만 closed로 바꾼다. 세션·`voting_deadline_at`은 바꾸지 않는다(C-11 잠정).
+- 본문은 읽지 않는다. 상태 오류 메시지는 공통 헬퍼 문구("현재 약속 상태에서는 요청할 수 없습니다.")다.
+- 가능 시간 제출과 같은 약속 행을 잠그므로 먼저 잠금을 잡은 요청이 이긴다(DATABASE.md 8.2). EXCEPTION-06-01은 미결로 둔다.
 
 #### **코드 예제**
 
