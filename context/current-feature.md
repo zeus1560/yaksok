@@ -1,4 +1,4 @@
-# 현재 기능: 공식 시간 후보 조회 API (STATE-API-10)
+# 현재 기능: 약속 상태와 설정 조회 API (STATE-API-01)
 
 ## 상태
 
@@ -6,29 +6,29 @@
 
 ## 스펙
 
-`context/features/013-candidates-api.md`
+`context/features/014-promise-detail-api.md`
 
 ## 목표
 
-마감 후 방장이 고를 후보를 계산하는 `GET /api/v1/promises/{promiseId}/candidates`. 후보 계산은 API와 분리한 순수 함수(`lib/state/candidates.ts`)로 두어 STATE-API-05 확정 재검증에서 재사용한다. 화면·DB 스키마 변경 없음.
+결과 화면·방장 관리 화면이 쓸 `GET /api/v1/promises/{promiseId}`. 상태(effectiveStatus)·설정·draft 만료·확정 일정(`currentConfirmation`)을 돌려준다. 확정 구간 인원은 013 후보 계산과 같은 집계 함수로 센다. 화면·DB 스키마 변경 없음.
 
 ## 수용 기준
 
-- [x] AC-1 active + 제출 시각 있는 참여자만 집계(탈퇴자·제출 해제자·빈 제출 제외)
-- [x] AC-2 30분 경계 시작 > 계산 시각, 같은 날짜 하루 범위 안(24:00 포함), 날짜 범위 전체
-- [x] AC-3 공통 가능 인원 = 슬롯별 참여자 집합 교집합(최솟값 2·교집합 1 사례 제외)
-- [x] AC-4 2명 이상, 방장 참석 불필요
-- [x] AC-5 인원 내림차순 → 시작 오름차순
-- [x] AC-6 limit 1~5·offset ≥ 0, total·hasMore·nextOffset, offset ≥ total 빈 배열, 후보 없음 200
-- [x] AC-7 400 → 422 → 404 → 409 취소(세션보다 우선) → 401 → 403 → 409 상태(details), 마감 경과 collecting은 계산만
-- [x] AC-8 no-store, 인증 후 쿠키 갱신, 참여자 정보 비노출
-- [x] AC-9 TZ 무관, 30명·3개월 계산 시간
+- [x] AC-1 active 참여자 200, draft는 현재 host만(그 외 403), 10분 지난 draft도 방장 200 + `draftExpired`, DB 변경 없음
+- [x] AC-2 마감 경과 collecting은 `promiseStatus: "closed"`만, DB 유지
+- [x] AC-3 settings 매핑(draft null, `HH:mm`, 24:00), `draftExpiresAt` = created_at + 10분, 초 단위 `+09:00`
+- [x] AC-4 confirmed만 `currentConfirmation`, endAt = 시작 + 현재 소요, 인원 = active·제출 완료 교집합, 과거·범위 밖도 계산
+- [x] AC-5 host이고 인원 < 2이면 `hostActionRequired`, 확정 상태 유지
+- [x] AC-6 400 → 404 → 409 취소(세션보다 우선) → 401 → 403 → 재확인 401 → draft 비방장 403
+- [x] AC-7 no-store, 인증 후 쿠키 갱신, 참여자 정보 비노출
+- [x] AC-8 후보 계산과 같은 집계 코드, TZ 무관
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-후보조회-api` (`main` 7d3b520에서 생성, 012 PR #17 병합 포함)
-- 시작 시 작업 트리: 깨끗함. 원격이 사라진(`gone`) 로컬 `ahn/` 브랜치 없음 → 삭제 없음. 원격이 남은 로컬 `ahn/` 브랜치 10개(가능시간제출-api·가능시간조회-api·내정보조회-api·로그인-api·링크조회-api·방장등록-api·시간입력·약속만들기-화면·참여자등록-api·참여화면)는 그대로 둠
-- 첫 커밋은 012 완료 기록(스펙 012 상태, 완료 이력, feature-list)
+- 브랜치: `ahn/feat-상태조회-api` (`main` d160788에서 생성, 013 PR #18 병합 포함)
+- 시작 시 작업 트리: 깨끗함. 원격이 사라진(`gone`) 로컬 `ahn/` 브랜치 없음 → 삭제 없음. 원격이 남은 로컬 `ahn/` 브랜치 11개(가능시간제출-api·가능시간조회-api·내정보조회-api·로그인-api·링크조회-api·방장등록-api·시간입력·약속만들기-화면·참여자등록-api·참여화면·후보조회-api)는 그대로 둠
+- 첫 커밋은 013 완료 기록(스펙 013 상태, 완료 이력, feature-list)
+- 시작 전 확인: `promises.confirmed_start_at`(Timestamptz(3), CHECK `ck_promise_confirmed_start_at`)이 스키마에 있음 → 스키마 변경 없이 진행
 
 ## 검증 결과
 
@@ -36,37 +36,34 @@
 
 | 명령 | 결과 |
 | --- | --- |
-| `npm run test` | 통과 — 44 파일, 808 테스트 (이번 100건: `lib/state/{candidates,candidate-page,promise-candidates}`, `candidates/route` 신규). `TZ=UTC`·`TZ=America/Los_Angeles`로도 808건 통과 |
+| `npm run test` | 통과 — 47 파일, 881 테스트 (이번 73건: `lib/state/{promise-view,promise-detail}`·`promises/[promiseId]/route` 신규, `candidates`에 `countAvailableParticipants` 10건). `TZ=UTC`·`TZ=America/Los_Angeles`로도 881건 통과 |
 | `npm run lint` | 통과 |
 | `npm run typecheck` | 통과 |
-| `npm run build` | 통과 (dev 서버 종료 후) |
+| `npm run build` | 통과 (dev 서버 종료 후). `ƒ /api/v1/promises/[promiseId]` 동적 |
 
-계산 시간: 참여자 30명·2026-11-10~2027-02-10(93일)·00:00~24:00·전원 거의 전 칸 가능, 소요 30·120·720분 3회 계산과 데이터 생성 포함 테스트 1건 231ms(`TZ=America/Los_Angeles` 실행).
-
-| 개발 DB 실제 호출 (dev 서버 + fetch, 약속 11-07~11-08·09:00~13:00·60분, 방장+참여자 5명) | 결과 |
+| 개발 DB 실제 호출 (dev 서버 + fetch, 35건 모두 통과) | 결과 |
 | --- | --- |
-| 데이터 | 방장·A·B·C 제출, D 제출 후 탈퇴(cancelled), E 제출 후 제출 해제(submitted_at NULL). 11-08 11:00·11:30은 슬롯별 2명이지만 교집합 1명, 11-08 12:00~13:00은 C + 제외 대상 D·E |
-| 마감 전 collecting | 409 `INVALID_PROMISE_STATE` details `{promiseStatus:"collecting", allowedStates:["closed"]}` |
-| 마감 시각을 1분 전으로 조작(DB collecting 유지) → 일반 참여자 A | 200 `promiseStatus:"closed"`, total 5: 11-08 10:00(4) → 11-07 09:30(3) → 11-07 09:00(2) → 11-07 10:00(2) → 11-08 10:30(2). 교집합 1명 구간·탈퇴자/제출 해제자 슬롯 구간 없음. 쿠키 갱신, no-store. 조회 후 DB status는 collecting 그대로 |
-| 방장 세션 / 제출 해제자 E(active) 세션 | 200 total 5 / 200 total 5 |
-| limit=2 → offset 2 → offset 4 → offset 5 → offset 99 | 2개 hasMore·next 2 → 2개 next 4 → 1개 false·null → 빈 배열 false·null → 빈 배열 false·null (total 5 유지) |
-| limit 0·6, offset -1·abc | 422 `VALIDATION_FAILED` `details.field` limit/offset |
-| 형식 오류 UUID / 없는 약속 | 400 `INVALID_REQUEST` / 404 `PROMISE_NOT_FOUND` |
-| 쿠키 없음 / 탈퇴자 D 세션 / 다른 약속 세션 | 401 / 401 / 403 `FORBIDDEN` |
-| 다른 약속(draft) 자기 세션 | 409 `INVALID_PROMISE_STATE` `promiseStatus:"draft"` |
-| 소요 시간 240분으로 조작 | 200 total 0, 빈 배열, hasMore false, nextOffset null |
-| DB closed / confirmed | 200 같은 5개 / 409 `promiseStatus:"confirmed"` |
-| cancelled — 쿠키 없음 / 다른 약속 세션 | 409 `PROMISE_CANCELLED` / 409 `PROMISE_CANCELLED` (세션보다 우선) |
-| 정리 | 확인용 링크 2개와 딸린 약속 2·참여자 7·세션 7·슬롯 33 삭제, 6개 테이블(`_prisma_migrations` 포함) 행 수·md5 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
+| draft 방장 | 200, settings 각 값 null, `draftExpiresAt` = created_at + 10분(초 단위 `+09:00`), `draftExpired` false, 확정 null, no-store, 쿠키 갱신 |
+| created_at을 11분 전으로 조작 | 200 `draftExpired: true`, `promiseStatus: "draft"`. 조회 전후 약속 행(status·created_at 등) 동일 |
+| collecting (11-07~11-08·09:00~13:00·60분, 방장+A·B·C 제출) | 일반 참여자 200, settings 매핑 일치, 닉네임·슬롯 없음. 종료 1440으로 조작 시 `"24:00"` |
+| 마감 1분 전으로 조작 | 200 `promiseStatus: "closed"`, DB status는 collecting 유지 |
+| confirmed 11-07 10:00 (DB 직접 설정, C는 10:00만 가능) | 인원 3, 방장 `hostActionRequired` false, endAt 11:00 |
+| confirmed 11:00 (방장만 가능) | 인원 1 — 방장 true / 일반 참여자 false. 조회 뒤 DB status·`confirmed_start_at` 그대로 |
+| 소요 시간 90분으로 조작 | endAt 11:30, 인원 1(현재 소요 시간 기준) |
+| 확정 시각 11-01 10:00(과거·날짜 범위 밖, 슬롯 직접 삽입) | 인원 3 그대로 계산 |
+| 참여자 B 탈퇴(cancelled) | 인원 2, B 세션 401 |
+| 일시적으로 draft로 되돌림 | 일반 참여자 403 `FORBIDDEN`(쿠키 갱신), 방장 200 |
+| 쿠키 없음 / 다른 약속 세션 / 없는 약속 / 형식 오류 UUID | 401 / 403 `FORBIDDEN` / 404 `PROMISE_NOT_FOUND` / 400 `INVALID_REQUEST`, no-store |
+| cancelled — 쿠키 없음 / 방장 세션 / 다른 약속 세션 | 모두 409 `PROMISE_CANCELLED`, 설정 정보 없음 |
+| 정리 | 확인용 링크 2개와 딸린 약속 2·참여자 5·세션 5·슬롯 15 삭제, 6개 테이블(`_prisma_migrations` 포함) 행 수·md5 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
 
-미확인: 10분 지난 draft 호출(단위 테스트도 상태값 draft로만 확인 — 판정에 생성 시각을 쓰지 않음), 트랜잭션 안 재확인 401·약속 행 소실 404는 단위 테스트로만 확인, 동시 쓰기 중 스냅샷 일관성은 코드(REPEATABLE READ)로만.
+미확인: 트랜잭션 안 재확인 401·약속 행 소실 404·역할이 인증 뒤 바뀐 경우는 단위 테스트로만 확인(방장 승계 API 없음), confirmed는 확정 API가 없어 DB 직접 설정으로만 재현, 동시 쓰기 중 스냅샷 일관성은 코드(REPEATABLE READ)로만.
 
 ## 메모
 
-- 결정 기록: DECISION_CONFLICTS R-20(미래 경계, 계산 시각, draft 코드, 검사 순서, limit·offset 형식, 에러 형식, 겹치는 후보)
-- 에러 형식: STATE 명세 `{ code, message, details }`와 실제 공통 형식이 같다. 상태 오류 메시지만 공통 헬퍼 문구 사용
-- `session-auth.ts`에 `isPromiseIdFormat` 공개(동작 변화 없음)
-- STATE-API-05는 잠금 후 `clock_timestamp()`로 `computeCandidates`를 다시 부르고 결과에서 `startAt`이 같은 후보를 찾는다
+- 결정 기록: DECISION_CONFLICTS R-21(검사 순서·draft 비방장 403, 만료 draft 200, 409 상태 오류 경로 없음, 판정 시각, 표기, 확정 인원 집계), state.md STATE-API-01 구현 결정
+- `lib/state/candidates.ts`: `buildSlotIndex`·`countCommon`을 `computeCandidates`와 `countAvailableParticipants`가 같이 쓴다. 미래·범위·2명 필터는 `computeCandidates`에만
+- 에러 형식: STATE 명세와 공통 형식(`lib/api-error.ts`)이 같다
 
 ## 완료 이력
 
@@ -167,3 +164,11 @@
 - 변경: 도착 화면을 가능 시간 화면으로 교체 — `components/availability/*`(보드·내 그리드·모두의 그리드·제출 바), 화면용 순수 로직 `lib/availability/{grid,sync,heat,failure,poll}.ts`. 마우스 드래그 사각형 선택, 터치 탭 + 날짜 머리글 하루 토글, 로컬 임시 입력 `{ v: 1, baseVersion, slots }`, SWR 5초 폴링(새 의존성 `swr@2.5.1`)과 버전 비교, 409 충돌 details 반영, 마감·확정 읽기 전용, 실패 분기는 에러 코드 기준. 완료 화면 "내 가능 시간 입력하기" 연결. 문서: DECISION_CONFLICTS R-19 신설
 - 검증: Vitest 708건(이번 95건), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 브라우저(데스크톱 1280px·390px)에서 드래그·탭·하루 토글, 새로고침 복원, 다른 브라우저 반영, 두 기기 버전 비교·409 충돌, 응답 유실 재시도 200, 빈 선택 확인, 지난 칸, 마감 경과(`VOTING_CLOSED`·카운트다운 0), confirmed·draft·cancelled·401, 폴링 실패 유지·탭 숨김 중지 확인. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
 - 남은 제한: 실제 휴대폰, Figma 시간 입력 화면 대조, 범위 밖 제외 안내(`droppedSlotCount ≥ 1`)는 범위 변경 API가 없어 단위 테스트로만 확인
+
+### 2026-11-06 — 공식 시간 후보 조회 API (STATE-API-10)
+
+- 스펙: `context/features/013-candidates-api.md`
+- 브랜치: `ahn/feat-후보조회-api` (PR #18 병합)
+- 변경: `GET /api/v1/promises/[promiseId]/candidates?limit&offset`(이 약속의 active 참여자, Origin 검사 없음, no-store, 인증 후 모든 응답 쿠키 갱신), 후보 계산 순수 함수 `lib/state/candidates.ts`(active + 제출자만, 30분 경계 시작 > 계산 시각, 같은 날짜 하루 범위 안, 슬롯별 참여자 비트 집합 교집합, 2명 이상, 인원 내림차순 → 시작 오름차순), `lib/state/candidate-page.ts`(limit 1~5·offset ≥ 0 10진 정수만, total·hasMore·nextOffset), `lib/state/promise-candidates.ts`(REPEATABLE READ 읽기 트랜잭션 하나·잠금 없음·계산 시각 `now()`), `session-auth.ts` `isPromiseIdFormat` 공개. 문서: DECISION_CONFLICTS R-20 신설, state.md STATE-API-10 구현 결정
+- 검증: Vitest 808건(이번 100건), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과, 30명·93일·00:00~24:00 계산 테스트 231ms. 개발 DB에서 마감 전 409, 마감 경과(DB collecting 유지)·closed 200 후보 5개(교집합 1명 구간·탈퇴자·제출 해제자 슬롯 제외), 페이지 이동·offset 초과, 422·400·404·401·403·draft 409·confirmed 409·cancelled 409(세션보다 우선), 후보 없음 200 확인. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
+- 남은 제한: 10분 지난 draft 호출·트랜잭션 안 재확인 401·약속 행 소실 404는 단위 테스트로만 확인, 동시 쓰기 중 스냅샷 일관성은 코드(REPEATABLE READ)로만, 겹치는 후보 묶기(RESULT-07-02 ❗미결)는 결과 화면 PR 몫

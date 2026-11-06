@@ -328,6 +328,14 @@ draft는 `promises.created_at+10분`에 만료된다. GET 요청은 만료 여�
 5. confirmed이면 `confirmed_start_at`과 계산한 종료 시각을 반환한다. 현재 active·제출 완료 참여자 중 확정 시간 전체에 가능한 인원을 다시 계산해 `availableParticipantCount`에 반환한다.
 6. 요청자가 host이고 확정 시간 참석 가능 인원이 2명 미만이면 `hostActionRequired=true`를 반환한다. 확정 상태와 `confirmed_start_at`은 변경하지 않는다.
 7. 본인의 role·제출 시각·세션 만료는 기존 MEMBER-API-05로 확인한다. 다른 참여자의 개별 슬롯은 포함하지 않는다.
+
+#### **구현 결정 (2026-11-06, DECISION_CONFLICTS R-21)**
+
+- 검사 순서: promiseId 400 → 404 → 409 `PROMISE_CANCELLED` → 401 → 403(다른 약속) → 트랜잭션 안 세션·참여자 재확인 401 → draft에서 현재 역할이 host가 아니면 403 `FORBIDDEN`.
+- 10분이 지난 draft도 방장에게 200과 `draftExpired: true`를 준다. 410 `DRAFT_EXPIRED`를 내지 않고 DB를 바꾸지 않는다.
+- 허용 상태가 cancelled 외 전부라 `409 INVALID_PROMISE_STATE`가 나가는 경로는 없다(알 수 없는 상태값은 500).
+- 판정 시각은 읽기 트랜잭션(REPEATABLE READ, 잠금 없음)의 `now()` 하나다. 시각 표기는 모두 초 단위 `+09:00`이다.
+- 확정 구간 인원은 `lib/state/candidates.ts`의 `countAvailableParticipants`로 후보 계산과 같은 기준으로 센다. 미래·날짜 범위·하루 범위 검사는 하지 않는다.
 8. 화면이 열려 있는 동안 이 API를 주기적으로 조회하고 이전 settings 객체와 최신 settings 객체를 비교해 설정 변경을 감지한다. 설정 전용 버전과 과거 변경 이력은 저장하지 않으므로 과거 범위 변경·삭제 슬롯 수를 임의 복원하는 changeNotice 필드는 반환하지 않는다.
 
 #### **코드 예제**

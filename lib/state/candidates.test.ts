@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeCandidates,
+  countAvailableParticipants,
   type CandidateParticipant,
   type CandidateSettings,
 } from "./candidates";
@@ -364,6 +365,111 @@ describe("computeCandidates (STATE-API-00 후보 계산 계약)", () => {
       }
       // 실측은 수십 ms 이하. CI 편차를 감안해 넉넉히 잡는다
       expect(elapsed).toBeLessThan(1000);
+    }
+  });
+});
+
+describe("countAvailableParticipants (STATE-API-01 확정 구간 공통 가능 인원)", () => {
+  const count = (participants: CandidateParticipant[], startAt: string, durationMinutes = 60) =>
+    countAvailableParticipants({ participants, startAt: at(startAt), durationMinutes });
+
+  it("교집합으로 센다: 슬롯 A에 1·2번, 슬롯 B에 2·3번이면 1명", () => {
+    expect(
+      count(
+        [
+          person(slotsOn("2026-11-10", "10:00")),
+          person(slotsOn("2026-11-10", "10:00", "10:30")),
+          person(slotsOn("2026-11-10", "10:30")),
+        ],
+        "2026-11-10T10:00:00+09:00",
+      ),
+    ).toBe(1);
+  });
+
+  it("active이고 제출 시각이 있는 참여자만: 탈퇴자·제출 해제자 슬롯은 빠진다", () => {
+    const full = slotsOn("2026-11-10", "10:00", "10:30");
+    expect(
+      count(
+        [
+          person(full),
+          person(full, { status: "cancelled" }),
+          person(full, { submittedAt: null }),
+          person([]),
+        ],
+        "2026-11-10T10:00:00+09:00",
+      ),
+    ).toBe(1);
+  });
+
+  it("2명 미만도 그대로 센다 (0·1명)", () => {
+    expect(count([], "2026-11-10T10:00:00+09:00")).toBe(0);
+    expect(count([person(slotsOn("2026-11-10", "10:00"))], "2026-11-10T10:00:00+09:00", 30)).toBe(
+      1,
+    );
+  });
+
+  it("미래 필터가 없다: 계산 시각과 무관하게 지난 구간도 센다", () => {
+    const full = slotsOn("2026-01-05", "10:00", "10:30");
+    expect(count([person(full), person(full)], "2026-01-05T10:00:00+09:00")).toBe(2);
+  });
+
+  it("범위 검사가 없다: 자정을 넘는 구간(23:30~00:30)도 슬롯만 맞으면 센다", () => {
+    const slots = [at("2026-11-10T23:30:00+09:00"), at("2026-11-11T00:00:00+09:00")];
+    expect(count([person(slots), person(slots)], "2026-11-10T23:30:00+09:00")).toBe(2);
+  });
+
+  it("구간의 마지막 슬롯이 없으면 그 사람은 빠진다", () => {
+    expect(
+      count(
+        [
+          person(slotsOn("2026-11-10", "10:00", "10:30", "11:00")),
+          person(slotsOn("2026-11-10", "10:00", "10:30")),
+        ],
+        "2026-11-10T10:00:00+09:00",
+        90,
+      ),
+    ).toBe(1);
+  });
+
+  it("30분 경계가 아닌 시작은 맞는 슬롯이 없어 0", () => {
+    const full = slotsOn("2026-11-10", "10:00", "10:30");
+    expect(count([person(full), person(full)], "2026-11-10T10:15:00+09:00")).toBe(0);
+  });
+
+  it("소요 시간이 30분 배수가 아니거나 30 미만이면 예외", () => {
+    expect(() => count([], "2026-11-10T10:00:00+09:00", 45)).toThrow();
+    expect(() => count([], "2026-11-10T10:00:00+09:00", 0)).toThrow();
+  });
+
+  it("33명 이상(비트 집합 2워드)도 정확히 센다", () => {
+    const full = slotsOn("2026-11-10", "10:00", "10:30");
+    const people = Array.from({ length: 40 }, (_, i) =>
+      person(i % 4 === 0 ? slotsOn("2026-11-10", "10:00") : full),
+    );
+    expect(count(people, "2026-11-10T10:00:00+09:00")).toBe(30);
+  });
+
+  it("computeCandidates의 각 후보 인원과 같은 값 (같은 기준)", () => {
+    const participants = [
+      person(slotsOn("2026-11-10", "09:00", "09:30", "10:00", "10:30")),
+      person(slotsOn("2026-11-10", "09:30", "10:00", "10:30", "11:00")),
+      person(slotsOn("2026-11-10", "10:00", "10:30", "11:00", "11:30")),
+      person(slotsOn("2026-11-10", "09:00", "10:00", "10:30"), { status: "cancelled" }),
+    ];
+    const candidates = computeCandidates({
+      settings: settings(),
+      participants,
+      now: BEFORE_RANGE,
+    });
+    expect(candidates.length).toBeGreaterThan(0);
+    for (const candidate of candidates) {
+      expect(
+        countAvailableParticipants({
+          participants,
+          startAt: candidate.startAt,
+          durationMinutes: 60,
+        }),
+      ).toBe(candidate.availableParticipantCount);
     }
   });
 });
