@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { refreshActiveSessions } from "./session-expiry";
+import { expireAllSessions, refreshActiveSessions } from "./session-expiry";
 
 const PROMISE_ID = "7c1b2f40-8f6a-4c21-9d55-0d3b1a7e9c42";
 const LINK_CREATED = new Date("2026-11-01T10:00:00+09:00");
@@ -54,5 +54,20 @@ describe("refreshActiveSessions (API_CONVENTIONS 5.2)", () => {
 
     expect(result).toEqual({ expiresAt: new Date("2026-11-27T19:00:00+09:00"), sessionIds: [] });
     expect(sqlOf(fake).values[0]).toEqual(new Date("2026-11-27T19:00:00+09:00"));
+  });
+});
+
+describe("expireAllSessions (STATE-API-07, 08 재사용 예정)", () => {
+  it("이 약속의 유효 세션을 참여자 상태와 관계없이 now로 만료한다. 행은 지우지 않는다", async () => {
+    const fake = fakeTx([{ id: "s-1" }, { id: "s-3" }]);
+    const result = await expireAllSessions(fake.tx, { promiseId: PROMISE_ID, now: NOW });
+
+    expect(result).toEqual({ sessionIds: ["s-1", "s-3"] });
+    const { sql, values } = sqlOf(fake);
+    expect(sql).toMatch(/UPDATE participant_sessions AS s SET expires_at = \?/);
+    expect(sql).toMatch(/p\.promise_id = \?::uuid/);
+    expect(sql).toMatch(/s\.expires_at > \?/);
+    expect(sql).not.toMatch(/p\.status|DELETE/);
+    expect(values).toEqual([NOW, PROMISE_ID, NOW]);
   });
 });

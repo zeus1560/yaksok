@@ -1038,6 +1038,16 @@ if (!response.ok) {
 7. 취소 후 재로그인·재조율·복원은 허용하지 않는다.
 8. 약속 취소 요청이 성공한 최초 요청에는 200 OK를 반환한다. 취소 트랜잭션 완료 후 동일 API를 포함한 일반 API를 다시 호출하면 세션 만료 여부와 관계없이 `409 PROMISE_CANCELLED`를 반환한다.
 
+#### **구현 결정 (2026-11-08, DECISION_CONFLICTS R-25)**
+
+- 검사 순서: Origin 403 → promiseId 400 → 404 → 409 `PROMISE_CANCELLED` → 401 → 403(다른 약속) → `promises` 행 잠금 → 잠금 후 cancelled 409 → 세션·참여자 재확인 401 → 최신 role이 host가 아니면 403 → 10분 지난 draft 410 → 저장.
+- 링크를 잠그지 않는다(draft를 지우지 않음). **10분 지난 draft는 취소하지 않고 410 `DRAFT_EXPIRED`**(삭제 없음) — 취소를 저장하면 다시 방장 등록이 가능해야 할 링크가 영구히 cancelled가 되기 때문이다. STATE-API-02의 410과 맞췄다. 명세 허용 상태에는 없는 판단이다.
+- 마감 지난 collecting도 closed를 거치지 않고 바로 cancelled로 저장한다(최종 상태가 같음).
+- 저장: `status='cancelled'`, `cancelled_at`=잠금 후 `clock_timestamp()` 한 문장. 같은 트랜잭션에서 이 약속의 세션 중 아직 유효한 것을 참여자 상태와 관계없이(탈퇴자 포함) `expires_at`=같은 시각으로 바꾼다(`expireAllSessions`). 이미 만료된 세션은 원래 만료 시각을 둔다(지난 시각을 뒤로 미루지 않음).
+- 응답 `cancelledAt`은 초 단위 `+09:00`, `message`는 "취소된 약속입니다.". 요청자 쿠키는 값을 비우고 Max-Age=0. 거절 응답(401·403·409·410)은 잠금 후 다시 읽은 세션 기준으로 쿠키를 갱신한다.
+- 본문은 읽지 않는다. 명세 에러 표의 409 `INVALID_PROMISE_STATE`·422는 나올 경우가 없다(cancelled 외 네 상태는 모두 허용, 본문 없음).
+- 확정·가능 시간 제출·마감과 같은 약속 행을 잠그므로 먼저 잠금을 잡은 요청이 이긴다. 취소가 먼저면 뒤 요청은 잠금 후 cancelled를 보고 저장 없이 409 `PROMISE_CANCELLED`.
+
 #### **보안 정보**
 
 - 약속별 HttpOnly 세션 쿠키 `ys_session_{promiseId}`를 사용하고 서버는 `session_token_hash`로 검증한다.

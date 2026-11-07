@@ -24,3 +24,22 @@ export async function refreshActiveSessions(
     RETURNING s.id`;
   return { expiresAt, sessionIds: rows.map((row) => row.id) };
 }
+
+// 약속 취소(STATE-API-07)처럼 이 약속의 세션을 모두 즉시 만료한다. 행은 지우지 않는다 (STATE-API-00 「세션·보존 공통 계약」)
+// - refreshActiveSessions와 달리 참여자 상태를 보지 않는다. cancelled 참여자에게 남은 유효 세션도 함께 만료한다
+// - now 기준 아직 유효한 세션만 expires_at = now로 바꾼다. 이미 만료된 세션은 그 시각을 그대로 둔다
+//   (지난 만료 시각을 뒤로 미루지 않는다. 어느 쪽이든 now 이후에는 쓸 수 없다)
+// - now는 잠금 후 판정 시각. 호출자가 약속 행을 FOR UPDATE로 잡은 트랜잭션 안에서 부른다
+export async function expireAllSessions(
+  tx: Pick<Prisma.TransactionClient, "$queryRaw">,
+  { promiseId, now }: { promiseId: string; now: Date },
+): Promise<{ sessionIds: string[] }> {
+  const rows = await tx.$queryRaw<{ id: string }[]>`
+    UPDATE participant_sessions AS s SET expires_at = ${now}
+    FROM participants AS p
+    WHERE s.participant_id = p.id
+      AND p.promise_id = ${promiseId}::uuid
+      AND s.expires_at > ${now}
+    RETURNING s.id`;
+  return { sessionIds: rows.map((row) => row.id) };
+}
