@@ -63,10 +63,12 @@ export function AvailabilityBoard({
   promiseId,
   me: myInfo,
   onRelink,
+  initialTab = "mine",
 }: {
   promiseId: string;
   me: MyParticipation;
   onRelink: () => void;
+  initialTab?: "mine" | "all"; // 390px 탭의 첫 선택. 마감 뒤 "모두의 시간 보기"는 all
 }) {
   const path = `/api/v1/promises/${encodeURIComponent(promiseId)}/availability`;
   const storageKey = draftStorageKey(promiseId, myInfo.participantId);
@@ -79,7 +81,7 @@ export function AvailabilityBoard({
     return parsed;
   });
   const [nowMs, setNowMs] = useState(0);
-  const [tab, setTab] = useState<"mine" | "all">("mine");
+  const [tab, setTab] = useState<"mine" | "all">(initialTab);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -299,12 +301,15 @@ export function AvailabilityBoard({
           {formatDuration(settings.durationMinutes)} · 참여 {snapshot.total}명
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
-          <span className="text-text">마감 {formatSeoulDateTime(snapshot.deadlineMs)}</span>
           {snapshot.status === "collecting" ? (
-            <Countdown snapshot={snapshot} onReached={revalidate} />
+            <>
+              <span className="text-text">마감 {formatSeoulDateTime(snapshot.deadlineMs)}</span>
+              <Countdown snapshot={snapshot} onReached={revalidate} />
+            </>
           ) : (
+            // 조기 마감(R-22)이면 설정 마감 시각이 아직 미래라 그 시각 대신 마감됐다는 사실만 보인다
             <span className="font-medium text-warn">
-              {snapshot.status === "confirmed" ? "확정된 약속이에요" : "응답이 마감됐어요"}
+              {snapshot.status === "confirmed" ? "응답 마감됨 · 확정된 약속이에요" : "응답 마감됨"}
             </span>
           )}
           <span

@@ -1,4 +1,4 @@
-# 현재 기능: 최종 일정 확정 API (STATE-API-05)
+# 현재 기능: 마감·후보·확정·결과 화면 (화면 PR 4)
 
 ## 상태
 
@@ -6,55 +6,54 @@
 
 ## 스펙
 
-`context/features/017-confirm-schedule-api.md`
+`context/features/018-result-ui.md`
 
 ## 목표
 
-방장이 closed 약속의 유효 후보 하나를 확정한다. 후보 재검증은 후보 조회와 같은 판정 함수(`lib/state/candidates.ts`). 마감 지난 collecting은 closed를 먼저 저장. C-10 잠정 A안 — 확정과 같은 트랜잭션에서 active 참여자의 유효 세션만 `confirmed_start_at + 7일`. API와 명세 문구만, 화면·DB 스키마 변경 없음.
+참여 뒤 화면이 상태 조회(STATE-API-01) 5초 폴링으로 시간 입력(collecting)·후보(closed)·결과(confirmed)를 고른다. 방장 마감(STATE-API-04)·후보 조회와 확정(STATE-API-10·05)·결과·초대 링크 복사, closed·confirmed 모두의 시간 읽기 전용, 012 이월 머리글 "응답 마감됨". API·DB 변경 없음.
 
 ## 수용 기준
 
-스펙 `context/features/017-confirm-schedule-api.md` AC-1~12 참고.
+스펙 `context/features/018-result-ui.md` AC-1~9 참고.
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-일정확정-api` (`main` 60633e9에서 생성, 016 PR #21 병합 포함)
-- 시작 시 작업 트리: 깨끗함. 원격이 사라진(`gone`) 로컬 `ahn/` 브랜치 없음 → 삭제 없음. 원격이 남은 로컬 `ahn/` 브랜치 14개는 그대로 둠
-- 첫 커밋은 016 완료 기록(스펙 016 상태, 완료 이력, feature-list)
+- 브랜치: `ahn/feat-결과화면` (`main` 3d2e063에서 생성, 017 PR #22 병합 포함)
+- 시작 시 작업 트리: 깨끗함. 원격이 사라진(`gone`) 로컬 `ahn/` 브랜치 없음 → 삭제 없음. 원격이 남은 로컬 `ahn/` 브랜치 15개는 그대로 둠
+- 첫 커밋은 017 완료 기록(스펙 017 상태, 완료 이력, feature-list)
 
 ## 검증 결과
 
-2026-11-07, Node.js 24
+2026-11-09, Node.js 24
 
 | 단계 | 명령 | 결과 |
 | --- | --- | --- |
-| RED | `npx vitest run lib/state/confirm-schedule.test.ts` (빈 구현: 항상 `{ kind: "invalid_state", promiseStatus: auth.promise.status, session: { expiresAt: auth.session.expiresAt, now: auth.now } }`) | 2건 실패. 「closed이고 유효 후보면 confirmed로 저장한다」 `AssertionError: expected { kind: 'invalid_state', …(2) } to deeply equal { kind: 'ok', …(3) }`(기대 `kind: "ok"`·startAt·endAt·세션 = 확정 + 7일 / 실제 `invalid_state`·`promiseStatus: "closed"`), 「공통 가능 1명인 시작점은 422 (저장 없음)」 `AssertionError: expected { kind: 'invalid_state', …(2) } to deeply equal { kind: 'invalid_candidate', …(2) }` |
+| RED | `npx vitest run lib/result/view.test.ts lib/result/failure.test.ts` (빈 구현: `decideRoomView`는 항상 `{ kind: "input", canClose: false }`, `classifyConfirmFailure`는 항상 `{ kind: "retry", message: "" }`) | 2건 실패. 「closed이고 방장이면 확정 버튼이 있는 후보 화면」 `AssertionError: expected { kind: 'input', canClose: false } to deeply equal { Object (kind, canConfirm) }`, 「확정 422 INVALID_CONFIRMATION_CANDIDATE면 안내 후 후보를 다시 조회」 `AssertionError: expected { kind: 'retry', message: '' } to deeply equal { kind: 'refetch_candidates', …(1) }` |
 | GREEN | 같은 명령 | 2건 통과 |
-| REFACTOR | `npm run test` | 52 파일, 1050 테스트 통과(기존 933 + 이번 117: `confirm-schedule` 24, `candidates` 판정·전수 비교 52, 라우트 41). PowerShell `$env:TZ`로 `UTC`·`America/Los_Angeles`에서도 1050건 통과(시작 시각이 각 시간대로 찍힘) |
-| | 전수 비교 테스트 민감도 | `computeCandidates` 열거 조건을 `<=` → `<`로 바꾸면 28건 실패, 되돌린 뒤 통과 |
+| REFACTOR | `npm run test` | 56 파일, 1123 테스트 통과(기존 1050 + 이번 73: `view` 13, `failure` 41, `format` 14, `poll-delay` 5 — 직전 요청 5초·6초면 다음 간격 최소 1초 포함). PowerShell `$env:TZ`로 `UTC`·`America/Los_Angeles`에서도 통과(1121건 시점에 실행, 이후 추가 2건은 시간대와 무관한 간격 계산) |
 | | `npm run lint` / `npm run typecheck` | 통과 |
-| | `npm run build` | 통과(dev 서버 종료 후), `/api/v1/promises/[promiseId]/confirmation` 동적 |
+| | `npm run build` | 통과(dev 서버 종료 후) |
 
-| 개발 DB 실제 호출 (스크립트 57개 항목, 1회 실행 전부 통과) | 결과 |
+| 브라우저 (Playwright + 로컬 Chromium, 방장 1280px·참여자 390px, 48개 항목 2회 실행 전부 통과) | 결과 |
 | --- | --- |
-| 상위 5개 밖 유효 후보(후보 15개 중 15위) | 200 `{ promiseId, promiseStatus: "confirmed", currentConfirmation: { startAt, endAt } }`, no-store, DB confirmed·`confirmed_start_at` 저장, 슬롯 56개·제출 4명 그대로 |
-| `+09:00` / 같은 시각 `Z` | 두 약속 모두 200, 응답 `currentConfirmation` 동일(`2026-11-10T10:00:00+09:00`), DB `confirmed_start_at` 동일 |
-| 지난 시각(그 외 유효)·30분 경계 아님·날짜 범위 밖(2명 가능)·하루 범위 초과(저장 슬롯 2명)·공통 1명 | 모두 422 `INVALID_CONFIRMATION_CANDIDATE`(쿠키 갱신), 약속 closed 그대로 |
-| 형식 오류 3종 / JSON 오류·startAt 없음·promiseId 형식 | 422 `VALIDATION_FAILED`(`field: startAt`, 쿠키 없음) / 400 |
-| 마감 전 collecting | 409 details `{ promiseStatus: "collecting", allowedStates: ["closed"] }`, DB 그대로 |
-| 이미 confirmed 재요청(다른 일정·같은 일정) | 둘 다 409, `confirmed_start_at` 그대로 |
-| 마감 지난 collecting 유효 후보 / 무효 후보 | 200 confirmed / 422, DB closed로 커밋·확정 없음·세션 그대로 |
-| 마감 지난 collecting에 일반 참여자 | 403, DB collecting 그대로 |
-| 일반 참여자 / Origin 없음 / cancelled(쿠키 없이) | 403 `FORBIDDEN`(쿠키 갱신) / 403 `INVALID_ORIGIN`(쿠키 없음) / 409 `PROMISE_CANCELLED`(쿠키 없음) |
-| 쿠키 없음·위조 / 다른 약속 세션 / 없는 약속 | 401 / 403 `FORBIDDEN` / 404 |
-| 세션 | 방장 2기기·참여자 2기기·다른 참여자 세션 = `confirmed_start_at + 7일`, 탈퇴 참여자·만료 세션 그대로. 요청자 Max-Age = 새 만료까지 남은 초, 방장 다른 기기(상태 조회)·참여자 다른 기기(`/me`) 다음 요청에서 Max-Age 갱신(차이 3초 이내). 탈퇴 참여자 세션은 401 |
-| 확정 후 연결 | 상태 조회 `currentConfirmation { startAt, endAt, availableParticipantCount: 2, hostActionRequired: false }`, 링크 조회 `confirmed`·`view_result`, `/me` `confirmed`, 후보 조회 409 `INVALID_PROMISE_STATE` |
-| 같은 방장 서로 다른 후보 병렬 2건 | 잠금 조작 없이: 200·409, DB = 200 응답 일정. 내 연결로 약속 행을 잡은 상태: 확정 쿼리 잠금 대기 2건 확인 → 해제 뒤 200·409(409 details `confirmed`) |
-| 정리 | 확인용 링크·약속·참여자·세션·슬롯 삭제, 6개 테이블(`_prisma_migrations` 포함) 행 수·md5 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
+| collecting | 방장에게만 "응답 마감하기", 머리글 "마감 {시각}" |
+| 마감 | 확인 창 → 요청 중 "마감하는 중…" 비활성(응답 1.2초 지연으로 확인) → 방장 바로 후보 화면, 참여자 마감 응답 후 1.9초·2.4초에 후보 화면(폴링 위상에 따라 다름) |
+| 후보 | 상위 5개·"3명 가능", 참여자는 확정 버튼 없이 "방장이 확정하면 여기에 표시돼요", 방장 더 보기 → 9개·더 보기 숨김 |
+| 조기 마감 머리글 | 모두의 시간 보기에서 "응답 마감됨", 설정 마감 시각 없음, 제출 버튼 없음, 390px는 모두의 시간 탭 먼저 |
+| 422 | 방장 불참 후보(D2 09:00, 참여자 2명) 확정 창에 방장 불참 안내 → DB에서 참여자 C의 그 구간 슬롯 2행 삭제 → 확정 → "후보가 바뀌었어요"·후보 처음부터 다시 조회(그 후보 사라짐) |
+| 응답 유실 | Playwright route로 서버 200 처리 후 응답 끊기 → "확정하지 못했어요" → 다시 확정 409 → 상태 조회 → 결과 화면, DB confirmed 1회·고른 후보와 같은 일정 |
+| 결과 | 참여자 화면이 결과 화면으로, "한국 시간 기준·함께 가능한 사람 3명", 초대 링크 복사(클립보드 = `http://localhost:3000/p/{token}`), 참여자 경고 없음 |
+| hostActionRequired | DB에서 확정 구간 참여자 B·C 슬롯 4행 삭제 → 방장에게 "지금 참석 가능한 사람이 2명 미만이에요"·1명, 참여자는 1명·경고 없음 |
+| confirmed 모두의 시간 | "응답 마감됨 · 확정된 약속이에요", 제출 버튼 없음, 확정 후 마감 버튼 없음 |
+| 390px | collecting·후보·모두의 시간(closed·confirmed)·결과에서 가로 스크롤 없음 |
+| 콘솔 | 예상 밖 오류 없음. 의도한 422·응답 끊기·409에 대한 브라우저 네트워크 로그 3건만 |
+| 폴링 | 보정 전 요청 간격 5.78초(SWR이 응답 뒤부터 셈) → 보정 후 5.01~5.02초, 요청 소요 0.74~1.45초. 탭 숨김 12초 동안 요청 0건, 복귀 10ms 뒤 조회, 500 11초 동안 "연결이 불안정해요"·마감 버튼 유지 → 복구 뒤 안내 사라짐 |
+| 정리 | 확인용 링크 5·약속 5·참여자 11·세션 11·슬롯 66행 삭제, 6개 테이블(`_prisma_migrations` 포함) 행 수·md5 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
 
 ## 메모
 
-- C-10 잠정 A안 적용, 팀 확정 필요
+- 다른 참여자 화면 전환은 "마감 뒤 처음 시작한 상태 조회"에서 일어난다. 최악은 5초 + 응답 시간(개발 DB 기준 0.7~1.5초)
+- RESULT-11-02(목록 밖 후보 확정) ❗미결은 요청과 API(AC-2)대로 더 보기 후보도 확정 가능 — 팀 확인 필요(R-24)
 
 ## 완료 이력
 
@@ -187,3 +186,11 @@
 - 변경: `POST /api/v1/promises/[promiseId]/close`(현재 active host, Origin 필수, 본문 없음, no-store, 인증 후 모든 응답 쿠키 갱신), `lib/state/close-voting.ts`(`promises`만 `FOR UPDATE`, 잠금 후 `clock_timestamp()`, 잠금 후 취소·세션·active·host 재확인, collecting은 조기·기한 경과 모두 `status='closed'`만 저장, 이미 closed면 변경 없이 200, draft·confirmed 409). C-11 잠정 B안 — 세션·`voting_deadline_at` 그대로. 문서: API_CONVENTIONS 5.2 조기 마감 행·미결 문단, state.md STATE-API-00 세션 계약·STATE-API-04 처리 순서 3, DECISION_CONFLICTS C-11 수정 위치
 - 검증: Vitest 933건(이번 45건), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 개발 DB 실제 호출 57개 항목 — 조기·기한 경과·중복 마감 200(세션·마감 시각 그대로), 403·409·401·404·400, 조기 마감 상태를 링크·`/me`·제출·현황·후보·상태 조회가 모두 closed로 다룸, 마감·제출 잠금 경쟁 두 방향, 같은 방장 병렬 마감 둘 다 200·변경 한 번. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
 - 남은 제한: C-11 B안·EXCEPTION-06-01 팀 확정 필요, 시간 입력 화면이 조기 마감 뒤에도 설정 마감 시각(미래)을 함께 표시함(화면 PR에서 처리), 마감 버튼 화면 없음
+
+### 2026-11-07 — 최종 일정 확정 API (STATE-API-05)
+
+- 스펙: `context/features/017-confirm-schedule-api.md`
+- 브랜치: `ahn/feat-일정확정-api` (PR #22 병합)
+- 변경: `POST /api/v1/promises/[promiseId]/confirmation`(현재 active host, Origin 필수, 본문 `{ startAt }`, no-store, 인증 후 모든 응답 쿠키 갱신), 후보 한 개 판정 `evaluateStart`를 `computeCandidates`와 확정 검증 `validateCandidateStart`가 공유(`lib/state/candidates.ts`), 시작 시각 형식 검증 `lib/state/confirm-input.ts`, `lib/state/confirm-schedule.ts`(`promises`만 `FOR UPDATE`, 잠금 후 `clock_timestamp()`·재확인, 마감 지난 collecting은 closed 먼저 저장, closed만 허용, `confirmed_start_at`·confirmed 함께 저장), 422 `INVALID_CONFIRMATION_CANDIDATE` 신설. C-10 잠정 A안 — 같은 트랜잭션에서 active 참여자의 유효 세션만 `confirmed_start_at + 7일`. 문서: API_CONVENTIONS 5.2 확정 행, state.md STATE-API-05 처리 순서, DECISION_CONFLICTS C-10
+- 검증: Vitest 1050건(이번 117건), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, 전수 비교 테스트 민감도 확인, lint·typecheck·build 통과. 개발 DB 실제 호출 57개 항목 — 상위 5개 밖 후보 200, 오프셋 표기 동일 결과, 무효 후보 422 5종, 409·403·401·404·400, 마감 지난 collecting closed 커밋, 세션 = 확정 + 7일(탈퇴·만료 세션 그대로), 확정 후 상태·링크·`/me`·후보 조회 연결, 병렬 확정 200·409. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
+- 남은 제한: C-10 A안 팀 확정 필요, 확정 화면 없음(018에서 구현)
