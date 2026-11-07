@@ -201,6 +201,7 @@ export function InviteFlow({ inviteToken }: { inviteToken: string }) {
         <ArrivedCard
           key={`${view.promiseId}:${view.me.participantId}`}
           promiseId={view.promiseId}
+          inviteToken={inviteToken}
           me={view.me}
           onRelink={afterAuth}
         />

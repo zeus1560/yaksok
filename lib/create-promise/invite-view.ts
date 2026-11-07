@@ -26,7 +26,8 @@ export function decideInviteView(nextAction: NextAction, me: MeOutcome | null): 
     // 세션이 있는 사람은 /me의 약속 상태로 정한다. 링크 조회와 /me 사이에 상태가 바뀌어도 /me가 더 최신이다
     if (me.promiseStatus === "draft") return me.role === "host" ? "setup" : "waiting";
     if (me.promiseStatus === "cancelled") return "cancelled";
-    return "arrived"; // collecting·closed·confirmed. 결과 화면은 이후 PR에서 나눈다
+    // collecting·closed·confirmed. 그 안의 입력·후보·결과 화면은 상태 조회로 나눈다(018 PromiseRoom)
+    return "arrived";
   }
   switch (nextAction) {
     case "register_host":
