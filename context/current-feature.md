@@ -1,4 +1,4 @@
-# 현재 기능: 마감·후보·확정·결과 화면 (화면 PR 4)
+# 현재 기능: 약속 취소 API (STATE-API-07)
 
 ## 상태
 
@@ -6,54 +6,49 @@
 
 ## 스펙
 
-`context/features/018-result-ui.md`
+`context/features/019-cancel-promise-api.md`
 
 ## 목표
 
-참여 뒤 화면이 상태 조회(STATE-API-01) 5초 폴링으로 시간 입력(collecting)·후보(closed)·결과(confirmed)를 고른다. 방장 마감(STATE-API-04)·후보 조회와 확정(STATE-API-10·05)·결과·초대 링크 복사, closed·confirmed 모두의 시간 읽기 전용, 012 이월 머리글 "응답 마감됨". API·DB 변경 없음.
+현재 active 방장이 draft·collecting·closed·confirmed 약속을 취소한다. `status=cancelled`·`cancelled_at`을 함께 저장하고 참여자·설정·슬롯·확정 일정은 보존, 이 약속의 모든 유효 세션을 즉시 만료(요청자 쿠키 Max-Age=0). 10분 지난 draft는 410. API만, 화면·DB 변경 없음.
 
 ## 수용 기준
 
-스펙 `context/features/018-result-ui.md` AC-1~9 참고.
+스펙 `context/features/019-cancel-promise-api.md` AC-1~8 참고.
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-결과화면` (`main` 3d2e063에서 생성, 017 PR #22 병합 포함)
-- 시작 시 작업 트리: 깨끗함. 원격이 사라진(`gone`) 로컬 `ahn/` 브랜치 없음 → 삭제 없음. 원격이 남은 로컬 `ahn/` 브랜치 15개는 그대로 둠
-- 첫 커밋은 017 완료 기록(스펙 017 상태, 완료 이력, feature-list)
+- 브랜치: `ahn/feat-약속취소-api` (`main` b1044ae에서 생성, 018 PR #23 병합 포함)
+- 시작 시 작업 트리: 깨끗함. 병합된 로컬 `ahn/feat-결과화면` 삭제(원격 브랜치는 남아 있어 `gone` 기준에는 걸리지 않았지만 PR #23 병합 확인 후 삭제). 원격이 남은 로컬 `ahn/` 브랜치 14개는 그대로 둠
+- 첫 커밋은 018 완료 기록(스펙 018 상태, 완료 이력, feature-list) — 스테이징해 둠
 
 ## 검증 결과
 
-2026-11-09, Node.js 24
+2026-11-08, Node.js 24
 
 | 단계 | 명령 | 결과 |
 | --- | --- | --- |
-| RED | `npx vitest run lib/result/view.test.ts lib/result/failure.test.ts` (빈 구현: `decideRoomView`는 항상 `{ kind: "input", canClose: false }`, `classifyConfirmFailure`는 항상 `{ kind: "retry", message: "" }`) | 2건 실패. 「closed이고 방장이면 확정 버튼이 있는 후보 화면」 `AssertionError: expected { kind: 'input', canClose: false } to deeply equal { Object (kind, canConfirm) }`, 「확정 422 INVALID_CONFIRMATION_CANDIDATE면 안내 후 후보를 다시 조회」 `AssertionError: expected { kind: 'retry', message: '' } to deeply equal { kind: 'refetch_candidates', …(1) }` |
+| RED | `npx vitest run lib/state/cancel-promise.test.ts` (빈 구현: 약속 행을 잠그고 시각만 읽은 뒤 아무것도 바꾸지 않고 `{ kind: "ok", promiseStatus: <현재 상태>, session: <기존 만료> }` 반환) | 2건 실패. 「collecting이면 cancelled로 바꾸고 모든 세션을 만료한다」 `AssertionError: expected { kind: 'ok', …(3) } to deeply equal { kind: 'ok', …(3) }` — `promiseStatus` 기대 `"cancelled"`·실제 `"collecting"`, `session.expiresAt` 기대 판정 시각·실제 기존 만료(2026-11-16). 「참여자의 role·status·cancelled_at과 슬롯·제출 기록·확정 시각은 바꾸지 않는다」 `AssertionError: expected 'SELECT status, created_at FROM promis…' to match /UPDATE promises SET status = 'cancell…/` |
 | GREEN | 같은 명령 | 2건 통과 |
-| REFACTOR | `npm run test` | 56 파일, 1123 테스트 통과(기존 1050 + 이번 73: `view` 13, `failure` 41, `format` 14, `poll-delay` 5 — 직전 요청 5초·6초면 다음 간격 최소 1초 포함). PowerShell `$env:TZ`로 `UTC`·`America/Los_Angeles`에서도 통과(1121건 시점에 실행, 이후 추가 2건은 시간대와 무관한 간격 계산) |
+| REFACTOR | `npm run test` | 58 파일, 1167 테스트 통과(기존 1123 + 이번 44: `cancel-promise` 27, `cancel/route` 16, `session-expiry` 1). PowerShell `$env:TZ`로 `UTC`·`America/Los_Angeles`에서도 1167건 통과(Git Bash `TZ=`는 Windows Node에 적용되지 않아 PowerShell로 다시 실행, 오프셋 0·480 확인) |
 | | `npm run lint` / `npm run typecheck` | 통과 |
-| | `npm run build` | 통과(dev 서버 종료 후) |
+| | `npm run build` | 통과(dev 서버 없는 상태, 라우트 목록에 `/api/v1/promises/[promiseId]/cancel`) |
 
-| 브라우저 (Playwright + 로컬 Chromium, 방장 1280px·참여자 390px, 48개 항목 2회 실행 전부 통과) | 결과 |
+| 개발 DB 실제 호출 (dev 서버, 100개 항목 전부 통과) | 결과 |
 | --- | --- |
-| collecting | 방장에게만 "응답 마감하기", 머리글 "마감 {시각}" |
-| 마감 | 확인 창 → 요청 중 "마감하는 중…" 비활성(응답 1.2초 지연으로 확인) → 방장 바로 후보 화면, 참여자 마감 응답 후 1.9초·2.4초에 후보 화면(폴링 위상에 따라 다름) |
-| 후보 | 상위 5개·"3명 가능", 참여자는 확정 버튼 없이 "방장이 확정하면 여기에 표시돼요", 방장 더 보기 → 9개·더 보기 숨김 |
-| 조기 마감 머리글 | 모두의 시간 보기에서 "응답 마감됨", 설정 마감 시각 없음, 제출 버튼 없음, 390px는 모두의 시간 탭 먼저 |
-| 422 | 방장 불참 후보(D2 09:00, 참여자 2명) 확정 창에 방장 불참 안내 → DB에서 참여자 C의 그 구간 슬롯 2행 삭제 → 확정 → "후보가 바뀌었어요"·후보 처음부터 다시 조회(그 후보 사라짐) |
-| 응답 유실 | Playwright route로 서버 200 처리 후 응답 끊기 → "확정하지 못했어요" → 다시 확정 409 → 상태 조회 → 결과 화면, DB confirmed 1회·고른 후보와 같은 일정 |
-| 결과 | 참여자 화면이 결과 화면으로, "한국 시간 기준·함께 가능한 사람 3명", 초대 링크 복사(클립보드 = `http://localhost:3000/p/{token}`), 참여자 경고 없음 |
-| hostActionRequired | DB에서 확정 구간 참여자 B·C 슬롯 4행 삭제 → 방장에게 "지금 참석 가능한 사람이 2명 미만이에요"·1명, 참여자는 1명·경고 없음 |
-| confirmed 모두의 시간 | "응답 마감됨 · 확정된 약속이에요", 제출 버튼 없음, 확정 후 마감 버튼 없음 |
-| 390px | collecting·후보·모두의 시간(closed·confirmed)·결과에서 가로 스크롤 없음 |
-| 콘솔 | 예상 밖 오류 없음. 의도한 422·응답 끊기·409에 대한 브라우저 네트워크 로그 3건만 |
-| 폴링 | 보정 전 요청 간격 5.78초(SWR이 응답 뒤부터 셈) → 보정 후 5.01~5.02초, 요청 소요 0.74~1.45초. 탭 숨김 12초 동안 요청 0건, 복귀 10ms 뒤 조회, 500 11초 동안 "연결이 불안정해요"·마감 버튼 유지 → 복구 뒤 안내 사라짐 |
-| 정리 | 확인용 링크 5·약속 5·참여자 11·세션 11·슬롯 66행 삭제, 6개 테이블(`_prisma_migrations` 포함) 행 수·md5 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
+| 상태별 취소 | draft(10분 이내)·collecting·closed·confirmed 각각 200, 본문 `{ promiseId, promiseStatus: "cancelled", cancelledAt, message }`, `cancelledAt` = DB `cancelled_at`(초 단위 `+09:00`), no-store, 요청자 쿠키 값 비움 + Max-Age=0 |
+| 보존 | 취소 전후 설정·참여자(role·status·cancelled_at·닉네임·PIN 해시·제출 시각·버전)·슬롯·`confirmed_start_at`·세션 행 수 동일 |
+| 세션 | 유효했던 세션(요청자·다른 기기 방장·참여자·탈퇴 처리한 참여자 C) 모두 `expires_at = cancelled_at`, 이미 만료된 세션은 원래 시각 유지, 행 삭제 없음 |
+| 취소 뒤 | 링크 조회 200 `nextAction: cancelled`(설정·참여자·결과 없음). 요청자·다른 기기 방장·참여자 B·쿠키 없음 4가지로 상태 조회·현황·후보·제출·마감·확정·설정 완료·취소 모두 409 `PROMISE_CANCELLED`(401 아님). 로그인(맞는·틀린 PIN)·참여자 등록 409 `PROMISE_CANCELLED`. `/me`는 4가지 모두 401(C-12). 링크 방장 등록은 409 `HOST_ALREADY_REGISTERED`(기존 동작) |
+| 오류 | 일반 참여자 403 `FORBIDDEN`(쿠키 갱신), Origin 없음 403 `INVALID_ORIGIN`, 쿠키 없음 401, 다른 약속 세션 403, 없는 약속 404, 형식 400 — 데이터 변경 없음. 재요청 409(쿠키 없음). 마감 지난 collecting(DB collecting) 200. 10분 1초 지난 draft 410 `DRAFT_EXPIRED`(행·세션 그대로, 링크 조회 `register_host`), 9분 50초 draft 200 → 링크 `cancelled` |
+| 동시성 | 다른 연결이 약속 행을 잠근 동안 요청을 0.5초 간격으로 보낸 뒤 해제: 취소 → 확정은 200·409 `PROMISE_CANCELLED`(`confirmed_start_at` NULL), 확정 → 취소는 둘 다 200(확정 일정 보존), 취소 → 제출은 200·409 `PROMISE_CANCELLED`(슬롯·버전 그대로), 제출 → 취소는 둘 다 200(제출 저장됨). 같은 방장 병렬 취소(잠금 대기 2건, 동시 발사 3건) 모두 200 정확히 1건·나머지 409 |
+| 정리 | 확인용 링크 15·약속 15·참여자 37·세션 43·슬롯 97행 삭제, 6개 테이블(`_prisma_migrations` 포함) 행 수·md5 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
 
 ## 메모
 
-- 다른 참여자 화면 전환은 "마감 뒤 처음 시작한 상태 조회"에서 일어난다. 최악은 5초 + 응답 시간(개발 DB 기준 0.7~1.5초)
-- RESULT-11-02(목록 밖 후보 확정) ❗미결은 요청과 API(AC-2)대로 더 보기 후보도 확정 가능 — 팀 확인 필요(R-24)
+- 10분 지난 draft는 취소하지 않고 410(사용자 지시, 명세 허용 상태와 다른 판단 — R-25)
+- 이미 만료된 세션은 만료 시각을 뒤로 미루지 않는다(R-25)
+- 취소 뒤 `/me` 401 — C-12 팀 결정 필요
 
 ## 완료 이력
 
@@ -194,3 +189,11 @@
 - 변경: `POST /api/v1/promises/[promiseId]/confirmation`(현재 active host, Origin 필수, 본문 `{ startAt }`, no-store, 인증 후 모든 응답 쿠키 갱신), 후보 한 개 판정 `evaluateStart`를 `computeCandidates`와 확정 검증 `validateCandidateStart`가 공유(`lib/state/candidates.ts`), 시작 시각 형식 검증 `lib/state/confirm-input.ts`, `lib/state/confirm-schedule.ts`(`promises`만 `FOR UPDATE`, 잠금 후 `clock_timestamp()`·재확인, 마감 지난 collecting은 closed 먼저 저장, closed만 허용, `confirmed_start_at`·confirmed 함께 저장), 422 `INVALID_CONFIRMATION_CANDIDATE` 신설. C-10 잠정 A안 — 같은 트랜잭션에서 active 참여자의 유효 세션만 `confirmed_start_at + 7일`. 문서: API_CONVENTIONS 5.2 확정 행, state.md STATE-API-05 처리 순서, DECISION_CONFLICTS C-10
 - 검증: Vitest 1050건(이번 117건), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, 전수 비교 테스트 민감도 확인, lint·typecheck·build 통과. 개발 DB 실제 호출 57개 항목 — 상위 5개 밖 후보 200, 오프셋 표기 동일 결과, 무효 후보 422 5종, 409·403·401·404·400, 마감 지난 collecting closed 커밋, 세션 = 확정 + 7일(탈퇴·만료 세션 그대로), 확정 후 상태·링크·`/me`·후보 조회 연결, 병렬 확정 200·409. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
 - 남은 제한: C-10 A안 팀 확정 필요, 확정 화면 없음(018에서 구현)
+
+### 2026-11-08 — 마감·후보·확정·결과 화면 (화면 PR 4)
+
+- 스펙: `context/features/018-result-ui.md`
+- 브랜치: `ahn/feat-결과화면` (PR #23 병합)
+- 변경: 참여 뒤 화면이 상태 조회(STATE-API-01) 5초 폴링(요청 시작 간격 보정, 탭 숨김 중지)으로 시간 입력(collecting)·후보(closed)·결과(confirmed)를 고른다(`components/result/promise-room.tsx`). 방장 전용 마감 버튼(STATE-API-04), 후보 상위 5개 + 더 보기·방장 확정 버튼·방장 불참 안내(STATE-API-10·05), 결과 화면(한국 시간·공통 가능 인원·초대 링크 복사·방장에게 `hostActionRequired` 경고), closed·confirmed 모두의 시간 읽기 전용과 머리글 "응답 마감됨"(012 이월). 화면용 순수 로직 `lib/result/{view,failure,format,poll-delay}.ts`, 실패 분기는 에러 코드 기준. API·DB 변경 없음. 문서: DECISION_CONFLICTS R-24 신설
+- 검증: Vitest 1123건(이번 73건), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 브라우저(Playwright + 로컬 Chromium, 방장 1280px·참여자 390px) 48개 항목 2회 — 마감·후보·더 보기·확정·422 후보 재조회·응답 유실 후 409 → 결과 화면·`hostActionRequired`·초대 링크 복사·폴링 간격 5.01~5.02초·탭 숨김 중지·500 동안 마지막 값 유지·390px 가로 스크롤 없음. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
+- 남은 제한: 실제 휴대폰, RESULT-11-02(목록 밖 후보 확정) 팀 확인 필요(R-24), 재조율·취소·탈퇴 버튼 없음
