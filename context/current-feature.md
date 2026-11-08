@@ -2,7 +2,7 @@
 
 ## 상태
 
-검토 중
+완료
 
 ## 스펙
 
@@ -197,3 +197,11 @@
 - 변경: 참여 뒤 화면이 상태 조회(STATE-API-01) 5초 폴링(요청 시작 간격 보정, 탭 숨김 중지)으로 시간 입력(collecting)·후보(closed)·결과(confirmed)를 고른다(`components/result/promise-room.tsx`). 방장 전용 마감 버튼(STATE-API-04), 후보 상위 5개 + 더 보기·방장 확정 버튼·방장 불참 안내(STATE-API-10·05), 결과 화면(한국 시간·공통 가능 인원·초대 링크 복사·방장에게 `hostActionRequired` 경고), closed·confirmed 모두의 시간 읽기 전용과 머리글 "응답 마감됨"(012 이월). 화면용 순수 로직 `lib/result/{view,failure,format,poll-delay}.ts`, 실패 분기는 에러 코드 기준. API·DB 변경 없음. 문서: DECISION_CONFLICTS R-24 신설
 - 검증: Vitest 1123건(이번 73건), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 브라우저(Playwright + 로컬 Chromium, 방장 1280px·참여자 390px) 48개 항목 2회 — 마감·후보·더 보기·확정·422 후보 재조회·응답 유실 후 409 → 결과 화면·`hostActionRequired`·초대 링크 복사·폴링 간격 5.01~5.02초·탭 숨김 중지·500 동안 마지막 값 유지·390px 가로 스크롤 없음. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
 - 남은 제한: 실제 휴대폰, RESULT-11-02(목록 밖 후보 확정) 팀 확인 필요(R-24), 재조율·취소·탈퇴 버튼 없음
+
+### 2026-11-08 — 약속 취소 API (STATE-API-07)
+
+- 스펙: `context/features/019-cancel-promise-api.md`
+- 브랜치: `ahn/feat-약속취소-api` (PR #24 병합)
+- 변경: `POST /api/v1/promises/[promiseId]/cancel`(현재 active host, Origin 필수, 본문 읽지 않음, no-store), `lib/state/cancel-promise.ts`(`promises`만 `FOR UPDATE`, 잠금 후 `clock_timestamp()`·재확인, `status='cancelled'`·`cancelled_at` 한 문장 저장, 설정·참여자·슬롯·확정 일정 보존, 10분 지난 draft 410 `DRAFT_EXPIRED`), 세션 일괄 만료 `expireAllSessions`(`lib/member/session-expiry.ts`, 참여자 상태와 관계없이 유효 세션만 `expires_at`=취소 시각), 요청자 쿠키 Max-Age=0. 문서: state.md STATE-API-07 구현 결정, API_CONVENTIONS 5.2 취소 행, DECISION_CONFLICTS R-25 신설·C-12 신규
+- 검증: Vitest 1167건(이번 44건), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 개발 DB 실제 호출 100개 항목 — 네 상태 취소 200, 보존 항목 전후 동일, 유효 세션만 만료(이미 만료된 세션 그대로), 취소 뒤 세션 API·로그인·참여자 등록 409 `PROMISE_CANCELLED`·링크 `cancelled`·`/me` 401(C-12), 403·401·404·400·410, 취소·확정·제출 잠금 경쟁 두 방향, 같은 방장 병렬 취소 200 1건. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
+- 남은 제한: 취소 뒤 `/me` 401(C-12) 팀 결정 필요, 10분 지난 draft 410(R-25)은 명세 밖 판단, 취소 버튼 화면 없음
