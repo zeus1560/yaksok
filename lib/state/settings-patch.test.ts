@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { applySettingsPatch, parseReopenSettings, parseSettingsPatch } from "./settings-patch";
+import {
+  applySettingsPatch,
+  parseReopenSettings,
+  parseSettingsPatch,
+  parseSettingsUpdate,
+  validateCollectingChange,
+} from "./settings-patch";
 
 const DEADLINE = "2026-11-09T18:00:00+09:00";
 
@@ -100,5 +106,48 @@ describe("applySettingsPatch", () => {
       durationMinutes: 30,
       votingDeadlineAt: new Date(DEADLINE),
     });
+  });
+});
+
+describe("parseSettingsUpdate (STATE-API-03)", () => {
+  it("한 필드만 있어도 받는다. 마감은 필수가 아니다", () => {
+    expect(parseSettingsUpdate({ durationMinutes: 90 })).toEqual({ durationMinutes: 90 });
+    expect(parseSettingsUpdate({ participantLimit: 8, extra: true })).toEqual({ participantLimit: 8 });
+  });
+
+  it.each([
+    ["빈 객체", {}],
+    ["모르는 필드만", { title: "x" }],
+    ["null", null],
+    ["배열", []],
+    ["null 필드", { votingDeadlineAt: null }],
+    ["부분 dailyTimeRange", { dailyTimeRange: { startTime: "09:00" } }],
+  ])("%s → null(400)", (_n, body) => {
+    expect(parseSettingsUpdate(body)).toBeNull();
+  });
+});
+
+describe("validateCollectingChange (STATE-API-03 모집 중 규칙)", () => {
+  const before = { participantLimit: 5, votingDeadlineAt: new Date(DEADLINE) };
+
+  it("정원 증가·같은 값, 마감 연장·같은 값, 해당 필드 없음은 통과", () => {
+    expect(validateCollectingChange(before, { participantLimit: 6 })).toBeNull();
+    expect(validateCollectingChange(before, { participantLimit: 5 })).toBeNull();
+    expect(validateCollectingChange(before, { votingDeadlineAt: new Date(Date.parse(DEADLINE) + 1) })).toBeNull();
+    expect(validateCollectingChange(before, { votingDeadlineAt: new Date(DEADLINE) })).toBeNull();
+    expect(validateCollectingChange(before, { durationMinutes: 30 })).toBeNull();
+  });
+
+  it("정원 감소 → CAPACITY_DECREASE_NOT_ALLOWED", () => {
+    expect(validateCollectingChange(before, { participantLimit: 4 })).toMatchObject({
+      field: "participantLimit",
+      code: "CAPACITY_DECREASE_NOT_ALLOWED",
+    });
+  });
+
+  it("마감 1ms 단축 → DEADLINE_SHORTEN_NOT_ALLOWED", () => {
+    expect(
+      validateCollectingChange(before, { votingDeadlineAt: new Date(Date.parse(DEADLINE) - 1) }),
+    ).toMatchObject({ field: "votingDeadlineAt", code: "DEADLINE_SHORTEN_NOT_ALLOWED" });
   });
 });

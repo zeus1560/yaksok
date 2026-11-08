@@ -1,5 +1,4 @@
 import {
-  capacityBelowActiveCount,
   forbidden,
   internalError,
   invalidOrigin,
@@ -7,8 +6,8 @@ import {
   invalidRequest,
   promiseCancelled,
   promiseNotFound,
+  settingsViolation,
   unauthenticated,
-  validationFailed,
 } from "@/lib/api-error";
 import {
   authenticatePromiseSession,
@@ -69,11 +68,7 @@ async function handle(
       case "invalid_state":
         return reply(invalidPromiseState(result.promiseStatus, ["closed", "confirmed"]));
       case "validation_failed":
-        return reply(
-          result.violation.code === "CAPACITY_BELOW_ACTIVE_COUNT"
-            ? capacityBelowActiveCount()
-            : validationFailed(result.violation.field, result.violation.message),
-        );
+        return reply(settingsViolation(result.violation));
       case "ok":
         return reply(
           Response.json({

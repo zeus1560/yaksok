@@ -550,8 +550,9 @@ if (!response.ok) {
 | 404 | PROMISE_NOT_FOUND | 약속 없음 | — |
 | 409 | PROMISE_CANCELLED | 약속이 취소됨 | — |
 | 409 | INVALID_PROMISE_STATE | 현재 상태에서 허용되지 않는 요청 | — |
-| 422 | CAPACITY_DECREASE_NOT_ALLOWED | 모집 중 정원 감소 | — |
-| 422 | DEADLINE_SHORTEN_NOT_ALLOWED | 모집 중 마감 단축 | — |
+| 422 | CAPACITY_DECREASE_NOT_ALLOWED | 모집 중 정원 감소 | 모집 중에는 정원을 줄일 수 없습니다. |
+| 422 | DEADLINE_SHORTEN_NOT_ALLOWED | 모집 중 마감 단축 | 모집 중에는 응답 마감을 앞당길 수 없습니다. |
+| 422 | CAPACITY_BELOW_ACTIVE_COUNT | 정원이 현재 active 인원보다 작음 (구현 추가, R-27) | 정원은 현재 참여 인원보다 적을 수 없습니다. |
 | 422 | VALIDATION_FAILED | 값이 비즈니스 규칙을 위반 | — |
 | 500 | INTERNAL_ERROR | 서버 오류 | — |
 
@@ -570,6 +571,16 @@ if (!response.ok) {
 7. 범위를 바꾸지 않고 소요 시간만 변경하거나 정원·마감만 변경한 경우 슬롯·제출 상태·버전을 유지하고 필요한 후보 계산만 새 설정으로 수행한다. 설정 전용 버전은 두지 않으며 참여자 화면은 STATE-API-01의 settings 전체를 주기적으로 비교한다.
 8. 마감을 연장할 때는 active 참여자의 현재 유효한 세션만 새 `votingDeadlineAt+7일`로 갱신한다. 이미 만료됐거나 cancelled 참여자의 세션은 다시 활성화하지 않는다.
 9. 현재 ERD에는 변경 이력 테이블이 없으므로 과거 changeNotice를 영구 저장하지 않는다. `changeImpact`는 이번 요청의 계산 결과다.
+
+#### **구현 결정 (2026-11-09, DECISION_CONFLICTS R-27)**
+
+- 검사 순서: Origin 403 → promiseId 400 → 본문 400(JSON·필드 형식, **아는 필드가 하나도 없는 빈 요청**) → 404 → 409 `PROMISE_CANCELLED`(세션보다 우선) → 401 → 403(다른 약속) → `promises` 행 잠금 → 잠금 후 cancelled 409 → 세션·참여자 재확인 401 → 최신 role이 host가 아니면 403 → 허용 상태 → 설정 검증 422 → 저장. 잠금·재확인·범위 정리 단계는 STATE-API-06과 같은 코드(`lib/state/settings-change.ts`)를 쓴다.
+- 허용 상태: 마감 전 collecting만. 잠금 후 마감 시각 이상(경계 포함)이면 closed를 저장하고 409 `INVALID_PROMISE_STATE` `details.promiseStatus="closed"`(저장은 유지). draft(10분 경과와 관계없이)·closed·confirmed도 409, `details.allowedStates=["collecting"]`.
+- 요청: 필드 형식은 STATE-API-02와 같다(`null`·시작/종료 중 하나만 보낸 범위·오프셋 없는 마감은 400). 모르는 필드는 무시한다.
+- 검증 순서: ① 기존 값과 합친 설정을 STATE-API-02·06과 같은 `validateStartSettings`로 검증 — 정원 2~30, 정원 < active 인원은 422 `CAPACITY_BELOW_ACTIVE_COUNT`(06과 같은 코드), 날짜 범위 종료는 오늘부터 3개월(R-07, 노션 원문의 "최대 90일"이 아님), 시작 날짜 하한(오늘 이후, R-12)은 **`dateRange`를 보낸 경우에만**, 하루 범위·소요 시간, 마감은 판정 시각 이후이면서 (바뀐) 마지막 날짜 00:00 이전. ② 모집 중 규칙 — 정원이 기존보다 작으면 422 `CAPACITY_DECREASE_NOT_ALLOWED`, 마감이 기존보다 이르면 422 `DEADLINE_SHORTEN_NOT_ALLOWED`. **같은 값은 변경 없음으로 허용**한다. 그래서 정원 감소이면서 active 인원보다 작으면 `CAPACITY_BELOW_ACTIVE_COUNT`, 과거 시각으로 단축하면 `VALIDATION_FAILED`가 먼저 나온다. 범위를 줄여 기존 마감이 새 마지막 날짜 00:00 이후가 되면 마감을 앞당길 수 없으므로 422 `VALIDATION_FAILED` `field=votingDeadlineAt`.
+- 범위 변경: STATE-API-06과 같은 `planRangeChange`(R-26) — 정리 대상은 active 참여자만, 「선택 가능」 추가 칸은 판정 시각 이후 시작 칸만.
+- 저장: 설정 컬럼만 한 번에(`status`는 바꾸지 않음). 마감이 기존보다 늦을 때만 같은 트랜잭션에서 `refreshActiveSessions`(collecting, 새 마감).
+- 응답 `settings`는 STATE-API-01과 같은 함수로 만든다(`24:00`, 마감 초 단위 `+09:00`). `changeImpact.rangeChanged`는 날짜·하루 범위 중 하나라도 값이 바뀐 경우, `candidateRecalculationRequired`는 범위 또는 소요 시간이 바뀐 경우(후보는 저장하지 않고 조회 때 계산하므로 안내용). 거절 응답(401·403·409·422)은 잠금 후 다시 읽은 세션 기준으로 쿠키를 갱신한다.
 
 #### **보안 정보**
 

@@ -72,20 +72,35 @@ export function buildPromiseView(input: {
     promiseStatus: effectivePromiseStatus(promise.status, promise.votingDeadlineAt, now),
     draftExpiresAt: draftExpiresAt ? toSeoulIsoString(draftExpiresAt) : null,
     draftExpired: draftExpiresAt !== null && draftExpiresAt.getTime() <= now.getTime(),
-    settings: {
-      participantLimit: promise.participantLimit,
-      dateRange: { startDate: promise.dateRangeStart, endDate: promise.dateRangeEnd },
-      dailyTimeRange: {
-        startTime:
-          promise.dailyStartMinute === null ? null : minuteToTime(promise.dailyStartMinute),
-        // 1440은 "24:00"
-        endTime: promise.dailyEndMinute === null ? null : minuteToTime(promise.dailyEndMinute),
-      },
-      durationMinutes: promise.durationMinutes,
-      votingDeadlineAt:
-        promise.votingDeadlineAt === null ? null : toSeoulIsoString(promise.votingDeadlineAt),
-    },
+    settings: buildSettingsView(promise),
     currentConfirmation: buildConfirmation(input),
+  };
+}
+
+// settings 객체 표기. STATE-API-03 응답도 같은 함수로 만든다(화면이 STATE-API-01 settings와 비교하므로 표기가 같아야 한다)
+export function buildSettingsView(
+  promise: Pick<
+    PromiseViewRow,
+    | "participantLimit"
+    | "dateRangeStart"
+    | "dateRangeEnd"
+    | "dailyStartMinute"
+    | "dailyEndMinute"
+    | "durationMinutes"
+    | "votingDeadlineAt"
+  >,
+): PromiseViewBody["settings"] {
+  return {
+    participantLimit: promise.participantLimit,
+    dateRange: { startDate: promise.dateRangeStart, endDate: promise.dateRangeEnd },
+    dailyTimeRange: {
+      startTime: promise.dailyStartMinute === null ? null : minuteToTime(promise.dailyStartMinute),
+      // 1440은 "24:00"
+      endTime: promise.dailyEndMinute === null ? null : minuteToTime(promise.dailyEndMinute),
+    },
+    durationMinutes: promise.durationMinutes,
+    votingDeadlineAt:
+      promise.votingDeadlineAt === null ? null : toSeoulIsoString(promise.votingDeadlineAt),
   };
 }
 

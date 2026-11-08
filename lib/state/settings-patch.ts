@@ -3,10 +3,11 @@ import {
   parseDateRangeField,
   parseDeadlineField,
   parseNumberField,
+  type SettingsViolation,
   type StartSettingsInput,
 } from "./start-settings";
 
-// STATE-API-06 재조율(이후 STATE-API-03 설정 변경)의 부분 설정 요청. 생략한 필드는 기존 값을 유지한다
+// STATE-API-06 재조율·STATE-API-03 모집 중 설정 변경의 부분 설정 요청. 생략한 필드는 기존 값을 유지한다
 // 필드 형식은 STATE-API-02와 같은 파서로 본다. 범위 규칙(422)은 합친 뒤 validateStartSettings가 본다
 export type SettingsPatch = {
   participantLimit?: number;
@@ -65,6 +66,40 @@ export function parseReopenSettings(body: unknown): ReopenInput | null {
   const patch = parseSettingsPatch(body);
   if (!patch?.votingDeadlineAt) return null;
   return { ...patch, votingDeadlineAt: patch.votingDeadlineAt };
+}
+
+// STATE-API-03: 한 필드 이상 필요하다. 아는 필드가 하나도 없으면(빈 객체·모르는 필드만) 400
+export function parseSettingsUpdate(body: unknown): SettingsPatch | null {
+  const patch = parseSettingsPatch(body);
+  if (!patch || Object.keys(patch).length === 0) return null;
+  return patch;
+}
+
+// STATE-API-03 모집 중에만 붙는 규칙. 공통 규칙(validateStartSettings)을 통과한 뒤 본다
+// - 정원은 증가만(같은 값은 변경 없음으로 허용)
+// - 마감은 연장만. 같은 값은 변경 없음으로 허용하고 세션도 갱신하지 않는다
+export function validateCollectingChange(
+  before: { participantLimit: number; votingDeadlineAt: Date },
+  patch: SettingsPatch,
+): SettingsViolation | null {
+  if (patch.participantLimit !== undefined && patch.participantLimit < before.participantLimit) {
+    return {
+      field: "participantLimit",
+      message: "모집 중에는 정원을 줄일 수 없습니다.",
+      code: "CAPACITY_DECREASE_NOT_ALLOWED",
+    };
+  }
+  if (
+    patch.votingDeadlineAt !== undefined &&
+    patch.votingDeadlineAt.getTime() < before.votingDeadlineAt.getTime()
+  ) {
+    return {
+      field: "votingDeadlineAt",
+      message: "모집 중에는 응답 마감을 앞당길 수 없습니다.",
+      code: "DEADLINE_SHORTEN_NOT_ALLOWED",
+    };
+  }
+  return null;
 }
 
 // 보낸 값만 덮어쓴 전체 설정. 검증은 이 결과로 한다
