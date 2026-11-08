@@ -117,7 +117,7 @@ MEMBER-API-01 응답에 본인 정보를 담지 않는 이유가 이것이다.
 | --- | --- | --- |
 | draft에서 발급 | 발급 시점(DB 시각) + 24시간, 쿠키 Max-Age=86400 | 마감 시각이 아직 없음. **확정 (2026-11-04, DECISION_CONFLICTS R-10)** — 규칙 본문에는 없음 |
 | 모집 시작(draft → collecting) | 해당 약속의 `status=active` 참여자 세션 중 **아직 유효한 것만** `voting_deadline_at + 7일`로 갱신한다(만료됐거나 cancelled 참여자의 세션은 되살리지 않음, STATE-API-00·02). 요청자 쿠키는 그 응답에서, 다른 기기 쿠키는 이후 세션 인증 응답에서 Set-Cookie로 Max-Age를 갱신한다 | MEMBER-06-03 |
-| 마감 연장·단축 | 동일하게 모든 세션을 새 `voting_deadline_at + 7일`로 갱신한다. 단축이어도 세션을 끊지 않는다 — 마감 후 조회는 허용되기 때문 | STATE-06-02 |
+| 마감 연장(모집 중 설정 변경) | 설정 변경과 같은 트랜잭션에서 해당 약속의 `status=active` 참여자 세션 중 **아직 유효한 것만** 새 `voting_deadline_at + 7일`로 갱신한다(만료됐거나 cancelled 참여자의 세션은 되살리지 않음). 마감을 바꾸지 않은 설정 변경(같은 값 포함)은 갱신하지 않는다. 모집 중 마감 단축은 422 `DEADLINE_SHORTEN_NOT_ALLOWED`로 거절하므로 단축 때 세션 규칙은 없다. 요청자 쿠키는 그 응답에서, 다른 기기 쿠키는 이후 세션 인증 응답에서 갱신한다 | STATE-API-03, R-27 (기존 "연장·단축 모두 모든 세션 갱신" 문구를 03 명세에 맞춤) |
 | 조기 마감 | 세션·링크 만료는 `voting_deadline_at + 7일`을 유지하며 조기 마감 때 갱신하지 않는다. `voting_deadline_at`도 덮어쓰지 않는다(STATE-API-04) | **C-11 잠정, 팀 확정 필요** |
 | 최종 일정 확정(closed → confirmed) | 확정과 같은 트랜잭션에서 해당 약속의 `status=active` 참여자 세션 중 **아직 유효한 것만** `confirmed_start_at + 7일`로 갱신한다(만료됐거나 cancelled 참여자의 세션은 되살리지 않음, STATE-API-05). 요청자 쿠키는 그 응답에서, 다른 기기 쿠키는 이후 세션 인증 응답에서 Set-Cookie로 Max-Age를 갱신한다. 조기 마감 뒤 마감 시각보다 이른 일정으로 확정하면 만료가 앞당겨질 수 있다 | **C-10 잠정, 팀 확정 필요** |
 | 재조율(closed·confirmed → collecting) | 재조율과 같은 트랜잭션에서 해당 약속의 `status=active` 참여자 세션 중 **아직 유효한 것만** 새 `voting_deadline_at + 7일`로 갱신한다(만료됐거나 cancelled 참여자의 세션은 되살리지 않음). confirmed에서 재조율하면 `confirmed_start_at + 7일`보다 짧아질 수 있다. 요청자 쿠키는 그 응답에서, 다른 기기 쿠키는 이후 세션 인증 응답에서 갱신한다 | STATE-API-06, R-26, **C-10 잠정** |

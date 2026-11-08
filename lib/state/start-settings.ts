@@ -22,12 +22,13 @@ export type StartSettingsInput = {
 export type StartSettingsField =
   "participantLimit" | "dateRange" | "dailyTimeRange" | "durationMinutes" | "votingDeadlineAt";
 
-// code: VALIDATION_FAILED가 아닌 전용 코드를 쓰는 API가 구분하는 값. 정원 < active 인원만 해당한다
-// (STATE-API-06 422 CAPACITY_BELOW_ACTIVE_COUNT. STATE-API-02는 draft라 active가 방장 1명뿐이어서 나오지 않는다)
+// code: VALIDATION_FAILED가 아닌 전용 코드를 쓰는 API가 구분하는 값
+// - CAPACITY_BELOW_ACTIVE_COUNT: 정원 < active 인원 (STATE-API-06·03. STATE-API-02는 draft라 active가 방장 1명뿐이어서 나오지 않는다)
+// - CAPACITY_DECREASE_NOT_ALLOWED·DEADLINE_SHORTEN_NOT_ALLOWED: 모집 중 설정 변경(STATE-API-03)만. settings-patch.ts가 낸다
 export type SettingsViolation = {
   field: StartSettingsField;
   message: string;
-  code?: "CAPACITY_BELOW_ACTIVE_COUNT";
+  code?: "CAPACITY_BELOW_ACTIVE_COUNT" | "CAPACITY_DECREASE_NOT_ALLOWED" | "DEADLINE_SHORTEN_NOT_ALLOWED";
 };
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;

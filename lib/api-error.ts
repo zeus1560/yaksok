@@ -27,6 +27,8 @@ export type ApiErrorCode =
   | "SLOT_LIMIT_EXCEEDED"
   | "INVALID_CONFIRMATION_CANDIDATE"
   | "CAPACITY_BELOW_ACTIVE_COUNT"
+  | "CAPACITY_DECREASE_NOT_ALLOWED"
+  | "DEADLINE_SHORTEN_NOT_ALLOWED"
   | "INTERNAL_ERROR";
 
 export function apiError(
@@ -173,7 +175,7 @@ export function invalidConfirmationCandidate(): Response {
   );
 }
 
-// STATE-API-06 재조율. 정원이 현재 active 인원보다 작다 (2~30 범위 밖은 VALIDATION_FAILED)
+// STATE-API-06 재조율·STATE-API-03 설정 변경. 정원이 현재 active 인원보다 작다 (2~30 범위 밖은 VALIDATION_FAILED)
 export function capacityBelowActiveCount(): Response {
   return apiError(
     422,
@@ -181,6 +183,41 @@ export function capacityBelowActiveCount(): Response {
     "정원은 현재 참여 인원보다 적을 수 없습니다.",
     { field: "participantLimit" },
   );
+}
+
+// STATE-API-03 모집 중 정원 감소
+export function capacityDecreaseNotAllowed(): Response {
+  return apiError(422, "CAPACITY_DECREASE_NOT_ALLOWED", "모집 중에는 정원을 줄일 수 없습니다.", {
+    field: "participantLimit",
+  });
+}
+
+// STATE-API-03 모집 중 마감 단축
+export function deadlineShortenNotAllowed(): Response {
+  return apiError(
+    422,
+    "DEADLINE_SHORTEN_NOT_ALLOWED",
+    "모집 중에는 응답 마감을 앞당길 수 없습니다.",
+    { field: "votingDeadlineAt" },
+  );
+}
+
+// 설정 검증 결과(start-settings.ts SettingsViolation)를 422 응답으로. 전용 코드가 없으면 VALIDATION_FAILED
+export function settingsViolation(violation: {
+  field: string;
+  message: string;
+  code?: "CAPACITY_BELOW_ACTIVE_COUNT" | "CAPACITY_DECREASE_NOT_ALLOWED" | "DEADLINE_SHORTEN_NOT_ALLOWED";
+}): Response {
+  switch (violation.code) {
+    case "CAPACITY_BELOW_ACTIVE_COUNT":
+      return capacityBelowActiveCount();
+    case "CAPACITY_DECREASE_NOT_ALLOWED":
+      return capacityDecreaseNotAllowed();
+    case "DEADLINE_SHORTEN_NOT_ALLOWED":
+      return deadlineShortenNotAllowed();
+    default:
+      return validationFailed(violation.field, violation.message);
+  }
 }
 
 export function internalError(): Response {
