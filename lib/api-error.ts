@@ -26,6 +26,7 @@ export type ApiErrorCode =
   | "INVALID_SLOT_FORMAT"
   | "SLOT_LIMIT_EXCEEDED"
   | "INVALID_CONFIRMATION_CANDIDATE"
+  | "CAPACITY_BELOW_ACTIVE_COUNT"
   | "INTERNAL_ERROR";
 
 export function apiError(
@@ -169,6 +170,16 @@ export function invalidConfirmationCandidate(): Response {
     422,
     "INVALID_CONFIRMATION_CANDIDATE",
     "후보가 변경되었거나 유효하지 않습니다. 최신 후보를 확인해 주세요.",
+  );
+}
+
+// STATE-API-06 재조율. 정원이 현재 active 인원보다 작다 (2~30 범위 밖은 VALIDATION_FAILED)
+export function capacityBelowActiveCount(): Response {
+  return apiError(
+    422,
+    "CAPACITY_BELOW_ACTIVE_COUNT",
+    "정원은 현재 참여 인원보다 적을 수 없습니다.",
+    { field: "participantLimit" },
   );
 }
 

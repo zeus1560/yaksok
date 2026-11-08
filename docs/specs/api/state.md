@@ -962,6 +962,16 @@ if (!response.ok) {
 8. `status=collecting`과 새 마감을 저장한다. 빈자리가 있으면 정원을 바꾸지 않아도 신규 참여를 허용한다.
 9. active 참여자의 현재 유효한 세션만 새 `votingDeadlineAt+7일`로 갱신한다. 이미 만료됐거나 cancelled 참여자에게 속한 세션은 다시 활성화하지 않는다.
 
+#### **구현 결정 (2026-11-08, DECISION_CONFLICTS R-26)**
+
+- 검사 순서: Origin 403 → promiseId 400 → 본문 400(JSON·필드 형식, `votingDeadlineAt` 누락) → 404 → 409 `PROMISE_CANCELLED`(세션보다 우선) → 401 → 403(다른 약속) → `promises` 행 잠금 → 잠금 후 cancelled 409 → 세션·참여자 재확인 401 → 최신 role이 host가 아니면 403 → 허용 상태 확인 → 설정 검증 422 → 저장.
+- 허용 상태: closed·confirmed, **마감 시각이 지난 collecting**(잠금 후 closed를 먼저 저장하고 진행 — 뒤에서 422가 나도 closed 저장은 남는다, STATE-API-05와 같음). 마감 전 collecting·draft(10분 경과 여부와 관계없이, 삭제 없음)는 409 `INVALID_PROMISE_STATE` `details.allowedStates=["closed","confirmed"]`. 같은 방장의 병렬 재조율은 두 번째가 잠금 후 collecting을 보고 409.
+- 요청: `votingDeadlineAt` 필수, 나머지는 생략하면 유지. 필드 형식은 STATE-API-02와 같다(마감은 오프셋 필수). `null`·시작/종료 중 하나만 보낸 범위는 400, 모르는 필드는 무시.
+- 검증: 기존 값과 합친 설정을 STATE-API-02와 같은 함수로 검증한다 — 정원 2~30 정수, 날짜 범위 종료는 한국 시간 오늘부터 3개월 이내(R-07, 노션 원문의 "90일"이 아님), 하루 범위 30분 경계, 소요 시간 30분 배수·하루 범위 이하, 마감은 판정 시각보다 뒤이면서 마지막 날짜 00:00보다 앞. **시작 날짜 하한(오늘 이후, R-12)은 `dateRange`를 보낸 경우에만** 본다(생략해 유지하면 이미 지난 시작일이어도 재조율 가능). 정원 < active 인원은 422 `CAPACITY_BELOW_ACTIVE_COUNT` `{ field: "participantLimit" }`, 그 밖은 422 `VALIDATION_FAILED` `{ field }`. 실패하면 아무것도 저장하지 않는다.
+- 범위 변경 계산(순수 함수 `lib/state/range-change.ts`, STATE-API-03 공용): A·B는 날짜 × 하루 범위의 30분 칸. B 밖의 기존 슬롯만 삭제(지난 슬롯도 범위 밖이면 삭제). B−A 중 시작이 판정 시각보다 뒤인 칸이 하나라도 있으면 확대·이동 — 모든 active 참여자 제출 해제·버전 +1(미제출자 포함). 아니면 슬롯이 실제로 지워진 참여자만 버전 +1. **정리 대상은 active 참여자만**이고 탈퇴(cancelled) 참여자의 슬롯·제출·버전은 그대로 둔다(집계에서 이미 제외되고 기록 보존 원칙과 맞춤).
+- 저장: 설정·`voting_deadline_at`·`status='collecting'`·`confirmed_start_at=NULL`(closed여도 NULL로 쓴다, 값은 원래 NULL) 한 번에. 같은 트랜잭션에서 `refreshActiveSessions`에 collecting·새 마감을 넘긴다.
+- 응답 `changeImpact`: `hasAddedSelectableSlots`, `submissionsReset`(= 앞의 값), `removedSlotCount`(삭제한 슬롯 행 수), `versionChangedParticipantCount`, `confirmationCleared`(재조율 전 상태가 confirmed). 거절 응답(401·403·409·422)은 잠금 후 다시 읽은 세션 기준으로 쿠키를 갱신한다.
+
 #### **보안 정보**
 
 - 약속별 HttpOnly 세션 쿠키 `ys_session_{promiseId}`를 사용하고 서버는 `session_token_hash`로 검증한다.
