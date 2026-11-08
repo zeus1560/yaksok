@@ -2,7 +2,7 @@
 
 ## 상태
 
-검토 중
+완료
 
 ## 스펙
 
@@ -208,3 +208,11 @@
 - 변경: `POST /api/v1/promises/[promiseId]/cancel`(현재 active host, Origin 필수, 본문 읽지 않음, no-store), `lib/state/cancel-promise.ts`(`promises`만 `FOR UPDATE`, 잠금 후 `clock_timestamp()`·재확인, `status='cancelled'`·`cancelled_at` 한 문장 저장, 설정·참여자·슬롯·확정 일정 보존, 10분 지난 draft 410 `DRAFT_EXPIRED`), 세션 일괄 만료 `expireAllSessions`(`lib/member/session-expiry.ts`, 참여자 상태와 관계없이 유효 세션만 `expires_at`=취소 시각), 요청자 쿠키 Max-Age=0. 문서: state.md STATE-API-07 구현 결정, API_CONVENTIONS 5.2 취소 행, DECISION_CONFLICTS R-25 신설·C-12 신규
 - 검증: Vitest 1167건(이번 44건), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 개발 DB 실제 호출 100개 항목 — 네 상태 취소 200, 보존 항목 전후 동일, 유효 세션만 만료(이미 만료된 세션 그대로), 취소 뒤 세션 API·로그인·참여자 등록 409 `PROMISE_CANCELLED`·링크 `cancelled`·`/me` 401(C-12), 403·401·404·400·410, 취소·확정·제출 잠금 경쟁 두 방향, 같은 방장 병렬 취소 200 1건. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
 - 남은 제한: 취소 뒤 `/me` 401(C-12) 팀 결정 필요, 10분 지난 draft 410(R-25)은 명세 밖 판단, 취소 버튼 화면 없음
+
+### 2026-11-08 — 재조율 시작 API (STATE-API-06)
+
+- 스펙: `context/features/020-reopen-promise-api.md`
+- 브랜치: `ahn/feat-재조율-api` (PR #25 병합)
+- 변경: `POST /api/v1/promises/[promiseId]/reopen`(현재 active host, Origin 필수, no-store, 인증 후 모든 응답 쿠키 갱신), `lib/state/reopen-promise.ts`(`promises`만 `FOR UPDATE`, 잠금 후 `clock_timestamp()`·재확인, closed·confirmed·마감 지난 collecting(closed 먼저 저장) 허용, 확정 해제·범위 밖 슬롯 삭제·제출 해제·버전·설정·collecting·세션 새 마감 + 7일을 한 트랜잭션으로), 범위 변경 계산 순수 함수 `lib/state/range-change.ts`(03 공용), 부분 요청 파싱·합치기 `lib/state/settings-patch.ts`, `validateStartSettings` `checkStartDateFloor` 옵션(`dateRange`를 보낸 경우만 시작 날짜 하한), 422 `CAPACITY_BELOW_ACTIVE_COUNT` 신설, `isSlotInRange`(`filterSlots`와 공유). 문서: state.md STATE-API-06 구현 결정, API_CONVENTIONS 5.2 재조율 행, DECISION_CONFLICTS R-26 신설·X-05·C-10
+- 검증: Vitest 1256건(이번 89건), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 개발 DB 실제 호출 66개 항목 — 상태별 200, 확대·축소·이동·하루 범위·소요 시간만·마감만의 슬롯·제출·버전, 확정 해제와 세션(C-10 짧아짐 확인), 재조율 뒤 상태·링크·`/me`·후보·제출 연결, 422·409·403·401·404·400, 재조율·확정 잠금 경쟁 두 방향, 같은 방장 병렬 재조율 200 1건. 브라우저에서 버전 오른 참여자의 "다른 곳에서 내용이 바뀌었어요"·로컬 입력 폐기 확인. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
+- 남은 제한: X-05(closed 재조율)·C-10(confirmed 재조율 시 세션 단축) 팀 확인 필요, 재조율 버튼 화면 없음
