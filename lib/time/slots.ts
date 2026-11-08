@@ -41,9 +41,21 @@ function seoulMinuteOfDay(ms: number): number {
   return ((minutes % DAY_MINUTES) + DAY_MINUTES) % DAY_MINUTES;
 }
 
+// 슬롯이 설정 범위 안인지 (ERD 5.1): 한국 날짜가 범위 안이고 시작 ≥ 하루 시작, 시작 + 30분 ≤ 하루 종료.
+// 24:00 종료면 23:30 슬롯은 그날의 마지막 칸이다. 시각(과거·미래)은 보지 않는다
+export function isSlotInRange(ms: number, range: SlotRange): boolean {
+  const day = seoulDateOf(new Date(ms));
+  const minute = seoulMinuteOfDay(ms);
+  return (
+    day >= range.startDate &&
+    day <= range.endDate &&
+    minute >= range.dailyStartMinute &&
+    minute + SLOT_MINUTES <= range.dailyEndMinute
+  );
+}
+
 // 지난 슬롯(시작 ≤ now)은 무시하고 세지 않는다 (TIME-08-01, ERD 5.2).
-// 미래 슬롯은 한국 날짜가 범위 안이고 시작 ≥ 하루 시작, 시작 + 30분 ≤ 하루 종료일 때만 남긴다 (ERD 5.1)
-// 24:00 종료면 23:30 슬롯은 그날의 마지막 칸이다. slots는 오름차순, 중복 없음
+// 미래 슬롯은 범위 안일 때만 남긴다. slots는 오름차순, 중복 없음
 export function filterSlots(
   slots: number[],
   range: SlotRange,
@@ -53,14 +65,7 @@ export function filterSlots(
   let droppedSlotCount = 0;
   for (const ms of slots) {
     if (ms <= now.getTime()) continue;
-    const day = seoulDateOf(new Date(ms));
-    const minute = seoulMinuteOfDay(ms);
-    const inRange =
-      day >= range.startDate &&
-      day <= range.endDate &&
-      minute >= range.dailyStartMinute &&
-      minute + SLOT_MINUTES <= range.dailyEndMinute;
-    if (inRange) kept.push(ms);
+    if (isSlotInRange(ms, range)) kept.push(ms);
     else droppedSlotCount += 1;
   }
   return { kept, droppedSlotCount };

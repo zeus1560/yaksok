@@ -201,7 +201,11 @@ describe("startCollecting (STATE-API-02)", () => {
     tx.participant.count.mockResolvedValueOnce(9); // 정원 8 < active 9
     expect(await startCollecting(AUTH, INPUT)).toEqual({
       kind: "validation_failed",
-      violation: { field: "participantLimit", message: expect.any(String) },
+      violation: {
+        field: "participantLimit",
+        message: expect.any(String),
+        code: "CAPACITY_BELOW_ACTIVE_COUNT", // 라우트는 STATE-API-02에서 이 값을 보지 않고 VALIDATION_FAILED로 응답
+      },
       session: { expiresAt: SESSION_EXPIRES, now: NOW },
     });
     expect(tx.promise.update).not.toHaveBeenCalled();

@@ -1,26 +1,26 @@
-# 현재 기능: 약속 취소 API (STATE-API-07)
+# 현재 기능: 재조율 시작 API (STATE-API-06)
 
 ## 상태
 
-완료
+검토 중
 
 ## 스펙
 
-`context/features/019-cancel-promise-api.md`
+`context/features/020-reopen-promise-api.md`
 
 ## 목표
 
-현재 active 방장이 draft·collecting·closed·confirmed 약속을 취소한다. `status=cancelled`·`cancelled_at`을 함께 저장하고 참여자·설정·슬롯·확정 일정은 보존, 이 약속의 모든 유효 세션을 즉시 만료(요청자 쿠키 Max-Age=0). 10분 지난 draft는 410. API만, 화면·DB 변경 없음.
+현재 active 방장이 closed·confirmed(마감 지난 collecting 포함) 약속을 새 마감과 함께 collecting으로 다시 연다. 설정 검증은 STATE-API-02 재사용, 범위 변경 계산은 STATE-API-03과 공유할 순수 함수로, 확정 해제·범위 밖 슬롯 삭제·제출 해제·버전·세션 갱신을 한 트랜잭션으로. API만, 화면·DB 변경 없음.
 
 ## 수용 기준
 
-스펙 `context/features/019-cancel-promise-api.md` AC-1~8 참고.
+스펙 `context/features/020-reopen-promise-api.md` AC-1~9 참고.
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-약속취소-api` (`main` b1044ae에서 생성, 018 PR #23 병합 포함)
-- 시작 시 작업 트리: 깨끗함. 병합된 로컬 `ahn/feat-결과화면` 삭제(원격 브랜치는 남아 있어 `gone` 기준에는 걸리지 않았지만 PR #23 병합 확인 후 삭제). 원격이 남은 로컬 `ahn/` 브랜치 14개는 그대로 둠
-- 첫 커밋은 018 완료 기록(스펙 018 상태, 완료 이력, feature-list) — 스테이징해 둠
+- 브랜치: `ahn/feat-재조율-api` (`main` fa37871에서 생성, 019 PR #24 병합 포함)
+- 시작 시 작업 트리: 깨끗함. 원격이 사라진 로컬 `ahn/` 브랜치 없음(원격이 남은 로컬 `ahn/` 브랜치 16개는 그대로 둠)
+- 첫 커밋은 019 완료 기록(스펙 019 상태, 완료 이력, feature-list) — 스테이징해 둠
 
 ## 검증 결과
 
@@ -28,27 +28,30 @@
 
 | 단계 | 명령 | 결과 |
 | --- | --- | --- |
-| RED | `npx vitest run lib/state/cancel-promise.test.ts` (빈 구현: 약속 행을 잠그고 시각만 읽은 뒤 아무것도 바꾸지 않고 `{ kind: "ok", promiseStatus: <현재 상태>, session: <기존 만료> }` 반환) | 2건 실패. 「collecting이면 cancelled로 바꾸고 모든 세션을 만료한다」 `AssertionError: expected { kind: 'ok', …(3) } to deeply equal { kind: 'ok', …(3) }` — `promiseStatus` 기대 `"cancelled"`·실제 `"collecting"`, `session.expiresAt` 기대 판정 시각·실제 기존 만료(2026-11-16). 「참여자의 role·status·cancelled_at과 슬롯·제출 기록·확정 시각은 바꾸지 않는다」 `AssertionError: expected 'SELECT status, created_at FROM promis…' to match /UPDATE promises SET status = 'cancell…/` |
+| RED | `npx vitest run lib/state/reopen-promise.test.ts` (빈 구현: 약속 행을 잠그고 시각만 읽은 뒤 아무것도 바꾸지 않고 `{ kind: "ok", changeImpact: 전부 false/0 }` 반환. 테스트는 메모리 가짜 DB의 끝 상태를 본다) | 2건 실패. 「범위를 넓히면 모든 active 참여자의 제출을 해제하고 버전을 올린다」 `AssertionError: expected { …(11) } to match object { status: 'collecting', …(3) }` — `status` 기대 `"collecting"`·실제 `"closed"`, `date_range_end` 기대 `"2026-11-13"`·실제 `"2026-11-12"`, `voting_deadline_at` 기대 새 마감·실제 기존 마감. 「축소만 하면 제출은 유지하고 슬롯이 지워진 참여자만 버전을 올린다」 같은 메시지 — `status` `closed`, `date_range_end` `"2026-11-12"`(기대 `"2026-11-11"`) |
 | GREEN | 같은 명령 | 2건 통과 |
-| REFACTOR | `npm run test` | 58 파일, 1167 테스트 통과(기존 1123 + 이번 44: `cancel-promise` 27, `cancel/route` 16, `session-expiry` 1). PowerShell `$env:TZ`로 `UTC`·`America/Los_Angeles`에서도 1167건 통과(Git Bash `TZ=`는 Windows Node에 적용되지 않아 PowerShell로 다시 실행, 오프셋 0·480 확인) |
+| REFACTOR | `npm run test` | 62 파일, 1256 테스트 통과(기존 1167 + 이번 89: `reopen-promise` 33, `range-change` 15, `settings-patch` 18, `reopen/route` 21, `start-settings` 2). 기존 기대값 수정 1곳(`start-collecting.test.ts` 정원 위반 결과에 `code` 추가). PowerShell `$env:TZ`로 `UTC`(오프셋 0)·`America/Los_Angeles`(480)에서도 1256건 통과 |
 | | `npm run lint` / `npm run typecheck` | 통과 |
-| | `npm run build` | 통과(dev 서버 없는 상태, 라우트 목록에 `/api/v1/promises/[promiseId]/cancel`) |
+| | `npm run build` | 통과, 라우트 목록에 `/api/v1/promises/[promiseId]/reopen`. 첫 실행은 이전부터 떠 있던 `next dev`가 있는 상태였고, 그 서버를 종료한 뒤(3000 포트 비어 있음) 다시 실행해 통과 |
 
-| 개발 DB 실제 호출 (dev 서버, 100개 항목 전부 통과) | 결과 |
+| 개발 DB 실제 호출 (dev 서버, 66개 항목 전부 통과) | 결과 |
 | --- | --- |
-| 상태별 취소 | draft(10분 이내)·collecting·closed·confirmed 각각 200, 본문 `{ promiseId, promiseStatus: "cancelled", cancelledAt, message }`, `cancelledAt` = DB `cancelled_at`(초 단위 `+09:00`), no-store, 요청자 쿠키 값 비움 + Max-Age=0 |
-| 보존 | 취소 전후 설정·참여자(role·status·cancelled_at·닉네임·PIN 해시·제출 시각·버전)·슬롯·`confirmed_start_at`·세션 행 수 동일 |
-| 세션 | 유효했던 세션(요청자·다른 기기 방장·참여자·탈퇴 처리한 참여자 C) 모두 `expires_at = cancelled_at`, 이미 만료된 세션은 원래 시각 유지, 행 삭제 없음 |
-| 취소 뒤 | 링크 조회 200 `nextAction: cancelled`(설정·참여자·결과 없음). 요청자·다른 기기 방장·참여자 B·쿠키 없음 4가지로 상태 조회·현황·후보·제출·마감·확정·설정 완료·취소 모두 409 `PROMISE_CANCELLED`(401 아님). 로그인(맞는·틀린 PIN)·참여자 등록 409 `PROMISE_CANCELLED`. `/me`는 4가지 모두 401(C-12). 링크 방장 등록은 409 `HOST_ALREADY_REGISTERED`(기존 동작) |
-| 오류 | 일반 참여자 403 `FORBIDDEN`(쿠키 갱신), Origin 없음 403 `INVALID_ORIGIN`, 쿠키 없음 401, 다른 약속 세션 403, 없는 약속 404, 형식 400 — 데이터 변경 없음. 재요청 409(쿠키 없음). 마감 지난 collecting(DB collecting) 200. 10분 1초 지난 draft 410 `DRAFT_EXPIRED`(행·세션 그대로, 링크 조회 `register_host`), 9분 50초 draft 200 → 링크 `cancelled` |
-| 동시성 | 다른 연결이 약속 행을 잠근 동안 요청을 0.5초 간격으로 보낸 뒤 해제: 취소 → 확정은 200·409 `PROMISE_CANCELLED`(`confirmed_start_at` NULL), 확정 → 취소는 둘 다 200(확정 일정 보존), 취소 → 제출은 200·409 `PROMISE_CANCELLED`(슬롯·버전 그대로), 제출 → 취소는 둘 다 200(제출 저장됨). 같은 방장 병렬 취소(잠금 대기 2건, 동시 발사 3건) 모두 200 정확히 1건·나머지 409 |
-| 정리 | 확인용 링크 15·약속 15·참여자 37·세션 43·슬롯 97행 삭제, 6개 테이블(`_prisma_migrations` 포함) 행 수·md5 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
+| 준비 | 링크 발급 → 방장 등록 → 모집 시작(11-10~11-12, 09:00~12:00, 60분) → B·C·D 등록 → 방장·B·D 제출(C 미제출) → B 두 번째 세션 만료·D 탈퇴(DB, 08 미구현) → 조기 마감 |
+| 상태별 200 | closed·confirmed·마감 지난 collecting(DB collecting) 각각 200 `{ promiseId, promiseStatus: "collecting", currentConfirmation: null, changeImpact }`, no-store, 요청자 쿠키 Max-Age = 새 마감 + 7일 |
+| 슬롯 변경 | 확대(11-13까지): 방장·B·C 제출 해제·버전 +1(C 0 → 1), 슬롯 유지 / 축소(11-11까지): 제출 유지, 11-12 슬롯이 지워진 방장만 버전 +1, `removedSlotCount` 1 / 이동(11-11~11-13): 11-10 슬롯 삭제 + 전원 해제 / 하루 범위 축소(10:00~): 09:00 슬롯 있던 방장만 +1 / 하루 범위 확대(~13:00): 전원 해제 / 소요 시간만·마감만: 슬롯·제출·버전 그대로, `changeImpact` 전부 false·0. 모든 경우 탈퇴 D의 슬롯·제출·버전 그대로 |
+| 확정 해제·세션 | confirmed 재조율: `confirmed_start_at` NULL, `confirmationCleared: true`, 입력 보존, 방장 세션 확정 + 7일(11-18 10:00) → 새 마감 + 7일(11-16 20:00)로 **짧아짐**(C-10). 모든 경우 active 참여자 유효 세션만 갱신, B의 만료 세션·D 세션 그대로 |
+| 재조율 뒤 다른 API | 상태 조회 collecting·`currentConfirmation` null·새 범위, 링크 조회 `join`, `/me` `canEditAvailability`·`canSubmit` true·제출 시각 null, 후보 조회 409 `INVALID_PROMISE_STATE`, 옛 버전 제출 409 `AVAILABILITY_VERSION_CONFLICT`(현재 2·미제출), 새 버전 제출 200(11-13 저장, 11-14 범위 밖 `droppedSlotCount` 1) |
+| 오류 | 정원 2 < active 3 → 422 `CAPACITY_BELOW_ACTIVE_COUNT`(쿠키 갱신), 과거 마감·마감 = 마지막 날 00:00·정원 31·종료 2027-02-09(3개월 초과)·보낸 시작일 어제 → 422 `VALIDATION_FAILED` — 422 뒤 약속·참여자·슬롯·세션 그대로. 종료 2027-02-08 200(R-07). `dateRange` 생략 + 기존 시작일 11-01(지남) 200. 마감 지난 collecting + 422는 closed만 저장. 마감 전 collecting 409·draft 409(`allowedStates` closed·confirmed), cancelled 409 `PROMISE_CANCELLED`(쿠키 없음·만료 쿠키 모두), 일반 참여자 403 `FORBIDDEN`(쿠키 갱신), Origin 없음 403 `INVALID_ORIGIN`, 쿠키 없음 401, 없는 약속 404, 마감 없음·JSON 아님·promiseId 형식 400 |
+| 동시성 | 다른 연결이 약속 행을 잠근 동안 0.5초 간격으로 보낸 뒤 해제: 재조율 → 확정은 200·409 `INVALID_PROMISE_STATE`(collecting, 확정 없음), 확정 → 재조율은 둘 다 200(재조율이 확정 해제). 같은 방장 병렬 재조율(잠금 대기 2건, 동시 발사 3건) 200 정확히 1건·나머지 409, 버전은 한 번만 증가 |
+| 브라우저 (Playwright + 로컬 Chromium 1243, 1280px, 코드 변경 없음) | B가 11-12 09:00을 로컬로 고름(`baseVersion` 1 저장) → 화면을 떠난 사이 마감 → 재조율(확대) → 다시 들어오면 "다른 곳에서 내용이 바뀌었어요. 최신 내용으로 다시 그렸어요." 표시, 로컬 저장소 키 삭제, 11-12 09:00 불가능·11-11 10:00 가능(서버 값), 11/13 열 표시. 참고: 화면을 띄운 채 마감하면 시간 입력 보드가 내려가 로컬 입력은 남고, 재조율 뒤 보드가 다시 열릴 때 같은 안내와 함께 폐기됨 |
+| 정리 | 확인용 링크 21·약속 21·참여자 81·세션 101·슬롯 137행(DB 확인) + 브라우저 확인 링크 2·약속 2 삭제, 6개 테이블(`_prisma_migrations` 포함) 행 수·md5 두 번 모두 시작 상태와 동일 |
 
 ## 메모
 
-- 10분 지난 draft는 취소하지 않고 410(사용자 지시, 명세 허용 상태와 다른 판단 — R-25)
-- 이미 만료된 세션은 만료 시각을 뒤로 미루지 않는다(R-25)
-- 취소 뒤 `/me` 401 — C-12 팀 결정 필요
+- 사용자 지시로 정한 것: closed 재조율 허용(X-05), 날짜 범위는 R-07(노션 "90일" 아님), `dateRange`를 보낸 경우에만 시작 날짜 하한 검사
+- 이번 구현 판단(R-26): 슬롯 정리·버전·제출 해제는 active 참여자만, 「선택 가능」 추가 칸은 판정 시각 이후 시작 칸만, 마감 지난 collecting은 closed 먼저 저장, draft는 10분 경과와 관계없이 409
+- confirmed 재조율 시 세션이 짧아질 수 있음 — C-10 팀 결정 필요
+- 포트 3000의 `next dev`(PID 408, 시작 16:44)는 이번 작업 전부터 떠 있던 프로세스로, 이 서버가 작업 트리 코드를 바로 반영해 개발 DB·브라우저 확인에 썼다. 확인 후 사용자 요청으로 종료(PID 408·21176과 하위 프로세스), 3000 포트·yaksok `next` 프로세스 없음 확인 후 build 재실행 통과(다른 프로젝트 `hintcheck`의 `next dev`는 그대로 둠)
 
 ## 완료 이력
 

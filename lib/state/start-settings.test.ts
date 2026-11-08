@@ -102,6 +102,23 @@ describe("validateStartSettings (422 규칙)", () => {
     expect(field({ participantLimit: 2 }, { activeCount: 3 })).toBe("participantLimit");
   });
 
+  it("정원 < active 인원만 전용 코드 CAPACITY_BELOW_ACTIVE_COUNT, 2~30 범위 밖은 코드 없음", () => {
+    expect(check({ participantLimit: 2 }, { activeCount: 3 })?.code).toBe("CAPACITY_BELOW_ACTIVE_COUNT");
+    expect(check({ participantLimit: 1 }, { activeCount: 3 })?.code).toBeUndefined();
+    expect(check({ participantLimit: 31 }, { activeCount: 3 })?.code).toBeUndefined();
+  });
+
+  it("checkStartDateFloor=false면 지난 시작 날짜를 허용하고 나머지 규칙은 그대로 본다 (재조율 기존 범위 유지)", () => {
+    const keep = (overrides: Partial<StartSettingsInput>) =>
+      validateStartSettings(input(overrides), { now: NOW, activeCount: 1, checkStartDateFloor: false });
+    expect(keep({ startDate: "2026-10-01" })).toBeNull();
+    expect(keep({ startDate: "2026-11-21" })?.field).toBe("dateRange"); // 시작 > 종료
+    expect(keep({ startDate: "2026-10-01", endDate: "2027-02-05" })?.field).toBe("dateRange"); // 3개월 초과
+    expect(
+      keep({ startDate: "2026-10-01", endDate: "2026-11-09" })?.field, // 마감(11-09 18:00) ≥ 마지막 날 00:00
+    ).toBe("votingDeadlineAt");
+  });
+
   it("시작 날짜: 어제는 거절, 오늘은 허용 (서울 날짜 기준)", () => {
     expect(field({ startDate: "2026-11-03" })).toBe("dateRange");
     expect(field({ startDate: "2026-11-04" })).toBeUndefined();
