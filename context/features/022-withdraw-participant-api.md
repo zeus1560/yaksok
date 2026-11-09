@@ -3,7 +3,7 @@
 ## 식별자와 상태
 
 - 스펙 ID: `022-withdraw-participant-api`
-- 상태: 검토 중
+- 상태: 완료
 
 ## 근거
 

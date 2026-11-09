@@ -2,7 +2,7 @@
 
 ## 상태
 
-검토 중
+완료
 
 ## 스펙
 
@@ -250,3 +250,11 @@ active 참여자 본인이 약속에서 나간다. draft 방장은 초안 폐기
 - 변경: `PATCH /api/v1/promises/[promiseId]/settings`(현재 active host, Origin 필수, no-store, 인증 후 모든 응답 쿠키 갱신), `lib/state/update-settings.ts`(collecting 유지, 정원 증가만·마감 연장만 422 `CAPACITY_DECREASE_NOT_ALLOWED`·`DEADLINE_SHORTEN_NOT_ALLOWED` 신설, 마감 연장 때만 세션 새 마감 + 7일), 재조율과 잠금·재확인·마감 경과 closed 저장·설정 합치기·범위 정리·설정 저장을 공유하는 `lib/state/settings-change.ts`(같은 SQL·같은 순서), `parseSettingsUpdate`·`validateCollectingChange`, `settingsViolation`·`buildSettingsView` 공유. 문서: state.md STATE-API-03 구현 결정·에러 표, API_CONVENTIONS 5.2 마감 연장 행, DECISION_CONFLICTS R-27 신설
 - 검증: Vitest 1336건(이번 80건, 기존 기대값 수정 없음), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 개발 DB 실제 호출 90개 항목 — 정원·마감·범위(축소·확대·이동·하루 범위·소요 시간만·같은 값) 끝 상태, 변경 뒤 제출 버전 충돌, 마감 경과 409·closed 저장, 409·403·401·404·400·422, 제출·축소 잠금 경쟁 세 방향·같은 방장 병렬. 재조율 확인 스크립트 66개 항목 회귀 통과. 브라우저 32개 항목(버전 오른 참여자 안내·로컬 입력 폐기, 머리글 갱신). 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
 - 남은 제한: 정원 증가만·마감 연장만(TIME-14-03·04 ❗미결) 팀 확인 필요, 범위가 줄어도 버전이 그대로인 참여자의 로컬 입력이 "선택 N칸"에 세어짐(화면 PR 몫), 설정 변경 화면 없음
+
+### 2026-11-09 — 본인 탈퇴와 자동 승계 API (STATE-API-08)
+
+- 스펙: `context/features/022-withdraw-participant-api.md`
+- 브랜치: `ahn/feat-탈퇴-api` (PR #27 병합)
+- 변경: `DELETE /api/v1/promises/[promiseId]/participants/me`(active 참여자 본인, Origin 필수, 본문 없음, no-store, 성공 응답 요청자 쿠키 Max-Age=0), `lib/state/withdraw-participant.ts`(모든 분기 `promise_links` → `promises` `FOR UPDATE`, 잠금 후 `clock_timestamp()`·약속 없음 404·cancelled 409·세션·active 401·최신 role 재확인, draft 방장 폐기(링크 보존)·draft 일반 참여자 403, 마감 지난 collecting closed 먼저 저장, 일반 탈퇴·본인 세션만 만료, 먼저 들어온 active 참여자에게 자동 승계(옛 방장 member·cancelled 먼저), 후임 없으면 약속 취소), 공용화: `lib/member/draft-discard.ts` `deleteDraftPromise`(방장 등록·설정 완료와 공유), `markPromiseCancelled`(취소 API와 공유), `expireParticipantSessions`(`session-expiry.ts`). 문서: state.md STATE-API-08 구현 결정, API_CONVENTIONS 5.2 탈퇴 행, DECISION_CONFLICTS R-28 신설·C-12
+- 검증: Vitest 1380건(이번 44건, 기존 기대값 수정 없음), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 개발 DB 실제 호출 102개 항목 — 네 분기 끝 상태, 탈퇴자 정원·닉네임·로그인·집계 처리, 후임 방장 권한 API 전부, 후임 없는 방장 = 취소 API 끝 상태, 마감 경과 closed 저장, draft 폐기 뒤 링크 재등록, 403·401·404·400·409, 동시성(잠금 대기열)·R-22 점검 표. 브라우저 6개 항목(코드 변경 없음). 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
+- 남은 제한: C-07(탈퇴자 세션 401·로그인 403)·C-12(후임 없는 방장 탈퇴 뒤 `/me` 401) 팀 확인 필요, 후임 방장이 열어 둔 화면은 새로고침해야 방장 버튼이 나타남(화면 PR 몫), 탈퇴 버튼 화면 없음
