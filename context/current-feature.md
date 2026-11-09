@@ -2,7 +2,7 @@
 
 ## 상태
 
-검토 중
+완료
 
 ## 스펙
 
@@ -251,3 +251,11 @@
 - 변경: `DELETE /api/v1/promises/[promiseId]/participants/[participantId]`(현재 active host, Origin 필수, 본문 없음, no-store, 인증 후 모든 응답 쿠키 갱신), `lib/member/remove-participant.ts`(`lockPromiseAsHost` 재사용·`promises`만 잠금, collecting·마감 전만, 본인 409 `CANNOT_REMOVE_SELF`, 대상 없음·다른 약속 404 `PARTICIPANT_NOT_FOUND`, 이미 cancelled면 변경 없이 200, 마감 경과는 참여자 등록과 같이 상태 유지 409 `DEADLINE_PASSED`, cancelled 409 `PROMISE_CANCELLED` 세션보다 우선), 대상 처리 `cancelParticipant`(`lib/member/participant-cancel.ts`, 본인 탈퇴와 공유 — 대상 cancelled + 대상 세션만 만료). 문서: member.md MEMBER-API-08 요청 헤더·에러 표·구현 결정, API_CONVENTIONS 5.2 탈퇴·내보내기 행, DECISION_CONFLICTS R-30 신설·A-02 해결
 - 검증: Vitest 1462건(이번 50건, 탈퇴 기대값 수정 없음), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 개발 DB 실제 호출 73개 항목 — 200 끝 상태(대상만 cancelled·대상 세션 2개만 만료·데이터 보존), 재요청 무변경, 409·403·401·404·400, 상태별 거절, 마감 경과 상태 유지, 내보낸 뒤 정원·닉네임·로그인 403·세션 401·집계 제외, 동시성(잠금 대기열) 7가지 순서. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
 - 남은 제한: STATE-API-09 5번(마감 경과 closed 저장)과 MEMBER-API-03·08의 차이·C-07 팀 확인 필요, 내보내기 버튼·명단 화면 없음
+
+### 2026-11-10 — 로그아웃 API (MEMBER-API-07)
+
+- 스펙: `context/features/025-logout-api.md`
+- 브랜치: `ahn/feat-로그아웃-api` (PR #30 병합)
+- 변경: `DELETE /api/v1/promises/[promiseId]/auth/session[?allDevices=true|false]`(같은 경로 POST 옆에 추가, Origin 필수, 본문 없음, no-store), `lib/member/logout.ts`(`logoutSession` — 쿠키 세션 행 물리 삭제, allDevices=true는 유효 세션일 때만 같은 참여자 전체 삭제, 행 없음·만료·탈퇴자·취소된 약속도 204·쿠키 Max-Age=0, 다른 약속 세션 403·삭제 없음, 공통 세션 인증 미사용·잠금 없음·조회와 삭제 한 트랜잭션 / `parseAllDevices` — `true`·`false` 한 개만). 참여자·슬롯·제출 상태 보존. 문서: member.md MEMBER-API-07 에러 표·보안 정보·구현 결정, MEMBER-API-05 비고, API_CONVENTIONS 5.2 로그아웃 행, DECISION_CONFLICTS R-31 신설·R-30 끝 문구·A-09 07 완료
+- 검증: Vitest 1509건(이번 47건, POST 기존 34건 수정 없음), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 개발 DB 실제 호출 139개 항목 2회 — 이 기기·전체 로그아웃 끝 상태(참여자·슬롯·다른 세션 md5 그대로), 반복·재로그인, 위조·만료·탈퇴자·내보내진 참여자 204, 다른 약속 세션 403·삭제 없음, 취소된 약속·draft 204, 400·401·403·404 쿠키 변경 없음. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
+- 남은 제한: 설정 완료가 로그아웃과 겹치면 지워진 토큰으로 쿠키를 다시 심을 수 있음(다음 요청 401, → 026에서 처리), 로그아웃 버튼·로컬 입력 삭제 화면 없음, C-07 팀 확인 필요
