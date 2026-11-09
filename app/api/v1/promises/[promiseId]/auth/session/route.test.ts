@@ -2,8 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const loginParticipant = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/member/login", () => ({ loginParticipant }));
+// 로그아웃 서비스만 바꾸고 allDevices 파싱·promiseId 형식은 실제 함수를 쓴다. DB 클라이언트는 만들지 않는다
+vi.mock("@/lib/prisma", () => ({ prisma: {} }));
+const logoutSession = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/member/logout", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/member/logout")>()),
+  logoutSession,
+}));
 
-import { POST } from "./route";
+import { DELETE, POST } from "./route";
 
 const BASE_URL = "http://localhost:3000";
 const PROMISE_ID = "7c1b2f40-8f6a-4c21-9d55-0d3b1a7e9c42";
@@ -185,5 +192,122 @@ describe("POST /api/v1/promises/[promiseId]/auth/session (MEMBER-API-04)", () =>
     const res = await call(body, headers);
     expect(res.status).toBe(status);
     expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+});
+
+function logout(
+  query = "",
+  headers: Record<string, string> = { origin: BASE_URL },
+  promiseId = PROMISE_ID,
+) {
+  const request = new Request(`${BASE_URL}/api/v1/promises/${promiseId}/auth/session${query}`, {
+    method: "DELETE",
+    headers,
+  });
+  return DELETE(request, { params: Promise.resolve({ promiseId }) });
+}
+
+const CLEARED = `ys_session_${PROMISE_ID}=; HttpOnly; Secure; SameSite=Lax; Path=/api/v1/promises/${PROMISE_ID}; Max-Age=0`;
+
+describe("DELETE /api/v1/promises/[promiseId]/auth/session (MEMBER-API-07)", () => {
+  beforeEach(() => {
+    vi.stubEnv("NEXT_PUBLIC_BASE_URL", BASE_URL);
+    logoutSession.mockReset();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("204 본문 없음, 쿠키 Max-Age=0, no-store. allDevices 기본값 false", async () => {
+    logoutSession.mockResolvedValueOnce({ kind: "ok", promiseId: PROMISE_ID });
+
+    const res = await logout("", { origin: BASE_URL, cookie: `ys_session_${PROMISE_ID}=abc` });
+
+    expect(res.status).toBe(204);
+    expect(await res.text()).toBe("");
+    expect(res.headers.get("set-cookie")).toBe(CLEARED);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(logoutSession).toHaveBeenCalledWith(expect.any(Request), PROMISE_ID, {
+      allDevices: false,
+    });
+  });
+
+  it.each([
+    ["?allDevices=true", true],
+    ["?allDevices=false", false],
+  ])("%s → allDevices %s로 넘긴다", async (query, allDevices) => {
+    logoutSession.mockResolvedValueOnce({ kind: "ok", promiseId: PROMISE_ID });
+    const res = await logout(query);
+    expect(res.status).toBe(204);
+    expect(logoutSession).toHaveBeenCalledWith(expect.any(Request), PROMISE_ID, { allDevices });
+  });
+
+  it("대문자 promiseId로 와도 쿠키 이름·Path는 서비스가 돌려준 DB id(소문자)로 지운다", async () => {
+    logoutSession.mockResolvedValueOnce({ kind: "ok", promiseId: PROMISE_ID });
+    const res = await logout("", { origin: BASE_URL }, PROMISE_ID.toUpperCase());
+    expect(res.headers.get("set-cookie")).toBe(CLEARED);
+  });
+
+  it.each([
+    ["Origin 없음", {}],
+    ["다른 Origin", { origin: "https://evil.example" }],
+  ])("%s → 403 INVALID_ORIGIN, 서비스 호출 없음·쿠키 변경 없음", async (_name, headers) => {
+    const res = await logout("", headers);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("INVALID_ORIGIN");
+    expect(res.headers.get("set-cookie")).toBeNull();
+    expect(logoutSession).not.toHaveBeenCalled();
+  });
+
+  it("Origin이 promiseId 형식보다 먼저다", async () => {
+    const res = await logout("", {}, "not-a-uuid");
+    expect((await res.json()).code).toBe("INVALID_ORIGIN");
+  });
+
+  it("promiseId 형식 오류 → 400 INVALID_REQUEST, allDevices보다 먼저", async () => {
+    const res = await logout("?allDevices=yes", { origin: BASE_URL }, "not-a-uuid");
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe("INVALID_REQUEST");
+    expect(logoutSession).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "?allDevices=1",
+    "?allDevices=TRUE",
+    "?allDevices=",
+    "?allDevices=true&allDevices=false",
+  ])("%s → 400 INVALID_REQUEST, 약속 조회 전에 거절", async (query) => {
+    const res = await logout(query);
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe("INVALID_REQUEST");
+    expect(res.headers.get("set-cookie")).toBeNull();
+    expect(logoutSession).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ kind: "not_found" }, 404, "PROMISE_NOT_FOUND"],
+    [{ kind: "unauthenticated" }, 401, "UNAUTHENTICATED"],
+    [{ kind: "forbidden" }, 403, "FORBIDDEN"],
+  ])("%o → %i %s, 쿠키를 건드리지 않는다", async (result, status, code) => {
+    logoutSession.mockResolvedValueOnce(result);
+    const res = await logout();
+    expect(res.status).toBe(status);
+    expect((await res.json()).code).toBe(code);
+    expect(res.headers.get("set-cookie")).toBeNull();
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("DB 오류 → 500, 토큰을 응답·로그에 남기지 않는다", async () => {
+    logoutSession.mockRejectedValueOnce(new Error("token secret-token-value"));
+    const res = await logout("", {
+      origin: BASE_URL,
+      cookie: `ys_session_${PROMISE_ID}=secret-token-value`,
+    });
+    expect(res.status).toBe(500);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(await res.text()).not.toContain("secret-token-value");
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain("secret-token-value");
   });
 });

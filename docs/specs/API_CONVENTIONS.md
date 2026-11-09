@@ -124,6 +124,7 @@ MEMBER-API-01 응답에 본인 정보를 담지 않는 이유가 이것이다.
 | 탈퇴·내보내기 | 해당 참여자의 모든 세션 expires_at을 현재 시각으로 변경해 즉시 만료한다(행은 삭제하지 않음). 이후 그 쿠키는 401. 구현: 아직 유효한 세션만 `expires_at`=탈퇴 시각(이미 만료된 세션은 원래 시각). 방장 승계면 옛 방장 세션만 만료하고 새 방장 세션은 그대로다. 후임 없는 방장의 탈퇴는 아래 「약속 취소」 행과 같다. 탈퇴는 요청자 쿠키 Max-Age=0. 내보내기는 대상 세션만 같은 방식으로 만료하고 요청한 방장의 세션·쿠키는 그대로 갱신한다(일반 탈퇴와 같은 함수 `cancelParticipant`) | MEMBER-10-03, STATE-API-08, MEMBER-API-08, R-28, R-30 |
 | 약속 취소 | 취소와 같은 트랜잭션에서 이 약속의 세션 중 **아직 유효한 것을 참여자 상태와 관계없이** `expires_at`=취소 시각(`cancelled_at`)으로 바꾼다. 행은 삭제하지 않고, 이미 만료된 세션은 원래 시각을 둔다. 요청자 쿠키는 Max-Age=0. 이후 세션 API는 세션보다 먼저 409 `PROMISE_CANCELLED` | STATE-API-07, R-25 |
 | draft 탈퇴, 10분 만료 | 세션 행 물리 삭제(약속과 함꼐 삭제됨) | ERD 10절 |
+| 로그아웃(MEMBER-API-07) | 쿠키의 세션 행을 물리 삭제한다. `allDevices=true`이고 그 세션이 아직 유효(만료 전·active 참여자)하면 같은 참여자의 세션 행을 모두 삭제한다. 만료·cancelled 참여자 세션이면 자기 행만 지운다. 행이 없어도·만료돼도·취소된 약속이어도 204와 쿠키 Max-Age=0(공통 인증 순서의 409 `PROMISE_CANCELLED` 예외). 다른 약속 세션은 403 `FORBIDDEN`·삭제 없음 | ERD 3.5, MEMBER-04-02, R-31 |
 
 | 참여자 등록(MEMBER-API-03)으로 발급 | `linkExpiryBase + 7일`(collecting이므로 `voting_deadline_at + 7일`). 쿠키 Max-Age는 잠금 후 판정 시각 기준 `expires_at`까지 남은 초(내림) | **확정 (2026-11-04, DECISION_CONFLICTS R-13)** |
 | 재인증(MEMBER-API-04)으로 발급 | draft면 발급 시각 + 24시간. 그 외에는 `linkExpiryBase + 7일`(MEMBER-API-01 링크 만료와 같은 기준 시각). 쿠키 Max-Age는 `expires_at`까지 남은 초(내림) | **확정 (2026-11-04)** |

@@ -1,61 +1,60 @@
-# 현재 기능: 참여자 내보내기 API (MEMBER-API-08)
+# 현재 기능: 로그아웃 API (MEMBER-API-07)
 
 ## 상태
 
-완료
+검토 중
 
 ## 스펙
 
-`context/features/024-remove-participant-api.md`
+`context/features/025-logout-api.md`
 
 ## 목표
 
-현재 active host가 collecting·마감 전에 다른 참여자를 cancelled로 바꾸고 그 참여자의 세션만 즉시 만료한다. 데이터는 보존, 재요청은 변경 없이 200. cancelled는 세션보다 먼저 409 `PROMISE_CANCELLED`, 마감 경과는 참여자 등록과 같이 상태를 바꾸지 않고 409 `DEADLINE_PASSED`. API만, 화면·DB 변경 없음.
+`DELETE /api/v1/promises/{promiseId}/auth/session`으로 이 기기의 세션 행을 삭제하고(allDevices=true면 같은 참여자의 모든 세션 행) 204·쿠키 Max-Age=0을 돌려준다. 로그아웃은 탈퇴가 아니므로 참여자·가능 시간·제출 상태는 그대로다. 행이 없거나 만료된 세션·취소된 약속도 204, 다른 약속 세션은 403이고 지우지 않는다. API만, 화면·DB 변경 없음.
 
 ## 수용 기준
 
-스펙 `context/features/024-remove-participant-api.md` AC-1~8 참고.
+스펙 `context/features/025-logout-api.md` AC-1~8 참고.
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-내보내기-api` (`main` 999dcc7에서 생성, 023 PR #28 병합 포함)
-- 시작 시 작업 트리: 깨끗함(`ahn/feat-명단조회-api`에서 `main`으로 전환 후 `git fetch --prune`·`git pull`). 원격이 사라진 로컬 `ahn/` 브랜치 없음(원격이 남은 로컬 `ahn/` 브랜치 20개는 그대로 둠)
-- 첫 커밋은 023 완료 기록(스펙 023 상태, 완료 이력, feature-list) — 스테이징해 둠
+- 브랜치: `ahn/feat-로그아웃-api` (`main` 5fac722에서 생성, 024 PR #29 병합 포함)
+- 시작 시 작업 트리: 깨끗함(`ahn/feat-내보내기-api`에서 `main`으로 전환 후 `git fetch --prune`·`git pull`). 원격이 사라진 로컬 `ahn/` 브랜치 없음(원격이 남은 로컬 `ahn/` 브랜치 21개는 그대로 둠)
+- 첫 커밋은 024 완료 기록(스펙 024 상태, 완료 이력, feature-list) — 스테이징해 둠
 
 ## 검증 결과
 
-2026-11-09, Node.js 24
+2026-11-10, Node.js 24
 
 | 단계 | 명령 | 결과 |
 | --- | --- | --- |
-| RED | `npx vitest run lib/member/remove-participant.test.ts` (빈 구현: 트랜잭션에서 아무것도 하지 않고 `{ kind: "ok", participantId, currentParticipantCount: 0, participantLimit: 0 }` 반환. 테스트는 메모리 가짜 DB의 참여자·세션 행 끝 상태를 본다) | 2건 실패. 「방장이 참여자를 내보내면 대상만 cancelled가 되고 대상 세션만 만료된다」 `AssertionError: expected { Object (kind, participantId, ...) } to deeply equal { Object (kind, participantId, ...) }` — `currentParticipantCount` 기대 2·실제 0, `participantLimit` 기대 6·실제 0, `session.now` 기대 잠금 후 시각·실제 인증 시각. 「이미 내보낸 대상에 다시 요청하면 아무것도 바꾸지 않고 200」 같은 `AssertionError`(인원 2·정원 6 기대, 0·0) |
-| GREEN | 같은 명령 + `lib/state/withdraw-participant.test.ts` (`cancelParticipant` 추출, `remove-participant.ts` 구현) | 27건 통과(새 2 + 탈퇴 25, 탈퇴 기대값 수정 없음) |
-| REFACTOR | 거절·검사 순서·마감 경계·멱등(본인 탈퇴 대상)·잠금 대상 테스트 추가, `[participantId]/route.ts`·`route.test.ts`, 에러 헬퍼 2개 / `npm run test` | 69 파일, 1462 테스트 통과(기존 1412 + 이번 50: `remove-participant` 26, `[participantId]/route` 24). PowerShell `$env:TZ`로 `UTC`(오프셋 0)·`America/Los_Angeles`(오프셋 480)에서도 1462건 통과 |
-| | `npm run lint` / `npm run typecheck` | 통과 |
-| | `npm run build` | 통과(3000 포트 비어 있음 확인 후 실행), 라우트 목록에 `/api/v1/promises/[promiseId]/participants/[participantId]`와 기존 `/participants/me` 함께 |
+| RED | `npx vitest run lib/member/logout.test.ts` (빈 구현: 아무것도 지우지 않고 `{ kind: "ok", promiseId }` 반환. 테스트는 메모리 가짜 DB의 세션·참여자 행 끝 상태를 본다) | 2건 실패. 「이 기기의 세션만 삭제하고 참여자 상태와 다른 기기 세션은 그대로 둔다」 `AssertionError: expected [ 'host-phone', 'me-laptop', …(2) ] to deeply equal [ 'host-phone', 'me-laptop', …(1) ]`(`me-phone`이 남음). 「allDevices=true면 같은 참여자의 모든 세션을 삭제한다」 `AssertionError: expected [ 'host-phone', 'me-laptop', …(2) ] to deeply equal [ 'host-phone', 'other-phone' ]`(`me-laptop`·`me-phone`이 남음) |
+| GREEN | 같은 명령 (`lib/member/logout.ts` 구현) | 2건 통과 |
+| REFACTOR | 멱등·위조·만료 경계·탈퇴자·상태 5종·다른 약속·404·401·`parseAllDevices` 테스트, `auth/session/route.ts` DELETE·`route.test.ts` / `npm run test` | 70 파일, 1509 테스트 통과(기존 1462 + 이번 47: `logout` 31, `auth/session/route` DELETE 16, POST 기존 34건 수정 없음). PowerShell `$env:TZ`로 `UTC`(오프셋 0)·`America/Los_Angeles`(오프셋 480)에서도 1509건 통과 |
+| | `npm run lint` / `npm run typecheck` / `prettier --check`(변경 파일) | 통과 |
+| | `npm run build` | 통과(3000 포트 비어 있음 확인 후 실행), 라우트 목록에 `ƒ /api/v1/promises/[promiseId]/auth/session` |
 
-| 개발 DB 실제 호출 (dev 서버, 73개 항목 전부 통과) | 결과 |
+| 개발 DB 실제 호출 (`node scripts/verify/025-logout.mjs`, dev 서버, 139개 항목 전부 통과·2회) | 결과 |
 | --- | --- |
-| 내보내기 200 | 정원 4 약속(방장 + 3명, 대상은 두 기기 로그인·슬롯 3개 제출). 본문 4개 필드(인원 3·정원 4), no-store, 방장 쿠키 같은 토큰·Max-Age>0. 대상 status cancelled·`cancelled_at`이 요청 전후 DB 시각 사이, 슬롯·제출 시각·버전·닉네임·정규화 닉네임·PIN 해시·role·created_at 동일, 대상 세션 2개 `expires_at` = `cancelled_at`, 다른 세션 그대로, 약속 collecting |
-| 재요청 | 200 같은 본문, 약속·참여자·세션·슬롯 md5 동일 |
-| 오류 | 본인 409 `CANNOT_REMOVE_SELF`(쿠키 갱신), 다른 약속 참여자 404 `PARTICIPANT_NOT_FOUND`(그 참여자 active 그대로), 없는 참여자 404, 일반 참여자 403 `FORBIDDEN`(쿠키 갱신), Origin 없음 403 `INVALID_ORIGIN`, 쿠키 없음·위조 401, 다른 약속 방장 세션 403, promiseId·participantId 형식 400(쿠키 없음), 없는 약속 404 `PROMISE_NOT_FOUND`, 전부 no-store, 오류 뒤 md5 동일 |
-| 내보낸 뒤 | 내보내기 전 새 등록 409 `PROMISE_FULL` → 뒤 201(인원 4). 대상 닉네임 409 `NICKNAME_TAKEN`, 대상 로그인 403 `PARTICIPANT_CANCELLED`, 대상 두 기기 쿠키로 `/me`·현황·명단·제출·상태 조회 모두 401. 명단·현황에서 제외. 마감 뒤 후보: 대상이 함께 고른 칸 공통 인원 2(방장·m2), 대상 단독 칸은 후보 없음. 다른 참여자 `/me` 200 |
-| 상태 | closed·confirmed 409 `INVALID_PROMISE_STATE`(details `promiseStatus`·`allowedStates: ["collecting"]`, 대상 그대로), draft 409, 10분 지난 draft 409(약속 삭제 없음), cancelled 409 `PROMISE_CANCELLED`(쿠키 없이·만료 쿠키 모두) |
-| 마감 경과 | DB로 마감을 1분 전으로 → 409 `DEADLINE_PASSED`·쿠키 갱신, DB `status` collecting 그대로, md5 동일·대상 active. 같은 약속 참여자 등록도 409 `DEADLINE_PASSED`·collecting 그대로(같은 처리 확인) |
-| 동시성 | 별도 연결로 `promises` 행을 잠그고 요청을 `pg_locks` 대기열에 순서대로 넣은 뒤 해제. 내보내기 → 대상 제출: 200·401, 슬롯·버전 그대로. 제출 → 내보내기: 둘 다 200, 제출 슬롯 보존. 내보내기 → 대상 탈퇴: 200·401. 대상 탈퇴 → 내보내기: 둘 다 200, `cancelled_at` = 탈퇴 응답 시각(한 번). 방장 탈퇴(승계) → 내보내기: 탈퇴 200·내보내기 401(쿠키 Max-Age=0), 대상 active 그대로·후임 host. 내보내기 → 방장 탈퇴: 둘 다 200. 같은 대상 2건(대기열·그냥 병렬 각각): 둘 다 200 같은 본문, 대상 세션 2개 `expires_at` = `cancelled_at` 하나 |
-| 정리 | 확인 링크 12·약속 12·참여자 28·세션 31·슬롯 9행 삭제. 6개 테이블(`_prisma_migrations` 포함) 행 수·md5가 시작 상태와 동일. dev 서버 종료, 3000 포트·yaksok `next` 프로세스 없음(다른 프로젝트 `hintcheck`의 `next dev`는 그대로 둠) |
-
-| 화면 확인(코드 변경 없음, 코드 읽기로만) | 결과 |
-| --- | --- |
-| 내보낸 사람이 열어 둔 화면 | 시간 입력 폴링·제출(`lib/availability/failure.ts`)과 결과 화면(`lib/result/failure.ts`)이 `UNAUTHENTICATED`를 `relink`로 분류 → 링크 재조회(011). 링크는 collecting이고 `/me` 401이라 참여 화면으로 가며, 같은 닉네임 재등록은 `NICKNAME_TAKEN` → 로그인 1회 → 403 `PARTICIPANT_CANCELLED` 재참여 불가 안내(R-18). 브라우저로는 확인하지 않음 |
+| 이 기기 로그아웃 | 204·본문 없음·쿠키 `ys_session_{id}=; …; Path=/api/v1/promises/{id}; Max-Age=0`·no-store. 그 세션 행만 삭제, 같은 참여자 다른 기기 행·다른 참여자 세션 md5·참여자 행 md5(status·role·닉네임·PIN 해시·제출 시각·버전)·슬롯 md5 그대로. 다른 기기 `/me` 200(제출 시각 유지)·현황 200(내 슬롯 2개), 로그아웃 기기 `/me` 401 |
+| 반복·재로그인 | 같은 요청 반복 204·6개 테이블 md5 변경 없음. 같은 닉네임·PIN 재로그인 200(새 세션 행, 참여자 행 그대로) |
+| allDevices=true | 204, 그 참여자 세션 0행, 두 기기 `/me` 401·제출 401, 방장·다른 참여자 `/me` 200·세션 수 그대로, 참여자·슬롯 그대로. 반복 204, 다시 로그인 200. `allDevices=false` 명시도 204·행 삭제 |
+| 멱등·만료 | 위조 토큰 204. DB로 만료시킨 쿠키 + allDevices=true → 204, 그 행만 삭제·같은 참여자 다른 기기 유효 세션 그대로(`/me` 200) |
+| 탈퇴·내보내기 | 탈퇴자 쿠키 + allDevices=true → 204·그 행만 삭제(다른 기기 만료 행 남음)·참여자 행 그대로·재로그인 403 `PARTICIPANT_CANCELLED`. 내보내진 참여자 쿠키 204·행 삭제 |
+| 다른 약속 세션 | 다른 약속 방장 토큰을 이 약속 쿠키 이름으로 + allDevices=true → 403 `FORBIDDEN`·쿠키 변경 없음, 그 세션 행·그 약속 세션 md5 그대로, 그 방장 `/me` 200 |
+| cancelled 약속 | 취소 뒤 다른 세션 API는 409 `PROMISE_CANCELLED`인데 로그아웃은 참여자·방장(allDevices) 모두 204·행 삭제, 약속 cancelled 그대로. 쿠키 없음은 401 |
+| draft | 방장 로그아웃 204 → `/me` 401 → 재로그인 200(host), 약속 draft 그대로 |
+| 오류 | Origin 없음·다른 Origin 403 `INVALID_ORIGIN`, promiseId 형식 400, `allDevices=1`·`TRUE`·빈 값·`true&false` 400, 없는 약속 404, 쿠키 없음·다른 이름 쿠키만 401 — 전부 쿠키 변경 없음·no-store, 뒤에 대상 세션 행 그대로. 대문자 promiseId 204(쿠키 이름·Path 소문자 DB id) |
+| 정리 | 확인 링크 4·약속 4·참여자 9·세션 4·슬롯 2행 삭제(회차마다). 6개 테이블(`_prisma_migrations` 포함) 행 수·md5가 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
 
 ## 메모
 
-- 사용자 지시로 정한 것: cancelled 409 `PROMISE_CANCELLED`(명세 `INVALID_PROMISE_STATE` 대신, R-11), 마감 경과는 참여자 등록과 같이 closed 저장 없이 409 `DEADLINE_PASSED`(참여자 등록이 저장하지 않음을 코드·R-13·개발 DB로 확인), 대상 처리는 탈퇴와 공유
-- 이번 구현 판단(R-30): `lockPromiseAsHost` 재사용(`promises`만 잠금), participantId 형식 400을 인증보다 먼저, 처리 순서 2의 요청자 비active는 401, 404는 없음·다른 약속 구분 없음, 응답 participantId는 DB 값, 이미 cancelled면 현재 인원으로 200
-- 문서: member.md MEMBER-API-08 요청 헤더·에러 표·구현 결정, API_CONVENTIONS 5.2 탈퇴·내보내기 행, DECISION_CONFLICTS R-30·A-02 해결
-- 팀 확인 필요: STATE-API-09 5번(마감 경과 closed 저장)과 MEMBER-API-03·08의 차이, C-07, MEMBER-API-07 보안 정보의 "세션 전부 삭제" 문구(07 구현 때)
-- 화면 PR 몫: 내보내기 버튼·명단 화면 없음
+- 사용자 지시로 정한 것: 행 물리 삭제(ERD 3.5), 취소된 약속 204(R-11 예외), 다른 약속 세션 403·삭제 없음, 만료·탈퇴자 쿠키 204
+- 이번 구현 판단(R-31): allDevices=true는 유효 세션일 때만 전체 삭제(만료·cancelled 참여자면 자기 행만), allDevices는 `true`·`false` 한 개만, 400·401·403·404는 쿠키 변경 없음, 401 메시지는 공통 헬퍼 문구, 공통 세션 인증 미사용(쿠키 읽기·해시만 재사용), 잠금 없음·조회와 삭제 한 트랜잭션
+- 행이 사라진 경우 점검(코드): 공통 인증·잠금 후 재확인 12개 API·`/me` 모두 401·쿠키 Max-Age=0. 설정 완료는 재확인이 없어 겹치면 지워진 토큰 쿠키를 다시 심을 수 있음(다음 요청 401, 고치지 않음)
+- 문서: member.md MEMBER-API-07 에러 표·보안 정보 문구·구현 결정, MEMBER-API-05 비고 문구, API_CONVENTIONS 5.2 로그아웃 행, DECISION_CONFLICTS R-31 신설·R-30 끝 문구·A-09 07 완료
+- 검증 스크립트: `scripts/verify/025-logout.mjs`(`.gitignore`에 `scripts/verify/` 추가). `node scripts/verify/025-logout.mjs`로 다시 돌릴 수 있다(dev 서버 필요)
+- 화면 PR 몫: 로그아웃 버튼, 로그아웃 시 그 기기 로컬 입력 삭제(TIME.md 250행)
 
 ## 완료 이력
 

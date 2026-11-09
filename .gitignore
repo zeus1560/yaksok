@@ -61,3 +61,6 @@ next-env.d.ts
 !.claude/skills/list-components/
 skills-lock.json
 .windsurf/
+
+# 개발 DB 확인 스크립트 — 본인 개발 DB에 확인 데이터를 만들고 지운다. 로컬에서만 다시 돌린다
+scripts/verify/
