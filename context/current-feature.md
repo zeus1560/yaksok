@@ -1,26 +1,26 @@
-# 현재 기능: 로그아웃 API (MEMBER-API-07)
+# 현재 기능: 공통 상태 가드 점검과 정리 (STATE-API-09)
 
 ## 상태
 
-완료
+검토 중
 
 ## 스펙
 
-`context/features/025-logout-api.md`
+`context/features/026-common-guard-cleanup.md`
 
 ## 목표
 
-`DELETE /api/v1/promises/{promiseId}/auth/session`으로 이 기기의 세션 행을 삭제하고(allDevices=true면 같은 참여자의 모든 세션 행) 204·쿠키 Max-Age=0을 돌려준다. 로그아웃은 탈퇴가 아니므로 참여자·가능 시간·제출 상태는 그대로다. 행이 없거나 만료된 세션·취소된 약속도 204, 다른 약속 세션은 403이고 지우지 않는다. API만, 화면·DB 변경 없음.
+구현된 API 20개(MEMBER 01~09, STATE 01~08·10, TIME 01·02)를 STATE-API-09 공통 처리 계약으로 대조한 점검표 `docs/development/GUARD_MATRIX.md`를 만들고, 이미 정한 두 가지를 고친다 — 설정 완료(STATE-API-02) 잠금 후 세션·참여자 재확인(로그아웃과 겹치면 401·쿠키 삭제, 비활성 참여자 401), 취소된 링크 방장 등록(MEMBER-API-02) 409 `PROMISE_CANCELLED`. 검토 뒤 추가 지시로 제출(TIME-API-01)의 잠금 후 재확인을 상태·마감 판정보다 먼저 하게 고친다(N-2). 새 API·DB·화면 변경 없음.
 
 ## 수용 기준
 
-스펙 `context/features/025-logout-api.md` AC-1~8 참고.
+스펙 `context/features/026-common-guard-cleanup.md` AC-1~7 참고.
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-로그아웃-api` (`main` 5fac722에서 생성, 024 PR #29 병합 포함)
-- 시작 시 작업 트리: 깨끗함(`ahn/feat-내보내기-api`에서 `main`으로 전환 후 `git fetch --prune`·`git pull`). 원격이 사라진 로컬 `ahn/` 브랜치 없음(원격이 남은 로컬 `ahn/` 브랜치 21개는 그대로 둠)
-- 첫 커밋은 024 완료 기록(스펙 024 상태, 완료 이력, feature-list) — 스테이징해 둠
+- 브랜치: `ahn/fix-공통가드-정리` (`main` 32663ea에서 생성, 025 PR #30 병합 포함)
+- 시작 시 작업 트리: 깨끗함(`ahn/feat-로그아웃-api`에서 `main`으로 전환 후 `git fetch --prune`·`git pull`). 원격이 사라진 로컬 `ahn/` 브랜치 없음(원격이 남은 로컬 `ahn/` 브랜치는 그대로 둠)
+- 첫 커밋은 025 완료 기록(스펙 025 상태, 완료 이력, feature-list) — 스테이징해 둠
 
 ## 검증 결과
 
@@ -28,33 +28,32 @@
 
 | 단계 | 명령 | 결과 |
 | --- | --- | --- |
-| RED | `npx vitest run lib/member/logout.test.ts` (빈 구현: 아무것도 지우지 않고 `{ kind: "ok", promiseId }` 반환. 테스트는 메모리 가짜 DB의 세션·참여자 행 끝 상태를 본다) | 2건 실패. 「이 기기의 세션만 삭제하고 참여자 상태와 다른 기기 세션은 그대로 둔다」 `AssertionError: expected [ 'host-phone', 'me-laptop', …(2) ] to deeply equal [ 'host-phone', 'me-laptop', …(1) ]`(`me-phone`이 남음). 「allDevices=true면 같은 참여자의 모든 세션을 삭제한다」 `AssertionError: expected [ 'host-phone', 'me-laptop', …(2) ] to deeply equal [ 'host-phone', 'other-phone' ]`(`me-laptop`·`me-phone`이 남음) |
-| GREEN | 같은 명령 (`lib/member/logout.ts` 구현) | 2건 통과 |
-| REFACTOR | 멱등·위조·만료 경계·탈퇴자·상태 5종·다른 약속·404·401·`parseAllDevices` 테스트, `auth/session/route.ts` DELETE·`route.test.ts` / `npm run test` | 70 파일, 1509 테스트 통과(기존 1462 + 이번 47: `logout` 31, `auth/session/route` DELETE 16, POST 기존 34건 수정 없음). PowerShell `$env:TZ`로 `UTC`(오프셋 0)·`America/Los_Angeles`(오프셋 480)에서도 1509건 통과 |
-| | `npm run lint` / `npm run typecheck` / `prettier --check`(변경 파일) | 통과 |
-| | `npm run build` | 통과(3000 포트 비어 있음 확인 후 실행), 라우트 목록에 `ƒ /api/v1/promises/[promiseId]/auth/session` |
+| RED ① 설정 완료 | `npx vitest run lib/state/start-collecting.test.ts` | 새 5건 실패. 「잠금 후 세션이 삭제됐으면(로그아웃과 겹침) 설정 완료는 unauthenticated이고 쿠키를 다시 심지 않는다」 `AssertionError: expected { Object (kind, settings, ...) } to deeply equal { kind: 'unauthenticated', …(1) }`(200 경로로 감), 「잠금 후 참여자가 cancelled면 403이 아니라 … unauthenticated(401)」 `expected 'forbidden' to be 'unauthenticated'`, 「다른 참여자·다른 약속 소속」 `expected 'ok' to be 'unauthenticated'` 외 2건 |
+| | `npx vitest run start/route` | 「unauthenticated(세션 행 삭제됨) → 401 UNAUTHENTICATED, 쿠키를 Max-Age=0으로 지운다」 `TypeError: Cannot read properties of undefined (reading 'headers')`(분기 없음) |
+| RED ② 방장 등록 | `npx vitest run lib/member/host-registration.test.ts` | 「취소된 링크에 방장 등록하면 cancelled(409 PROMISE_CANCELLED)…」·「취소된 draft(10분 지남)도…」 `AssertionError: expected { kind: 'already_registered' } to deeply equal { kind: 'cancelled' }` |
+| | `npx vitest run host/route` | 「cancelled → 409 PROMISE_CANCELLED, 쿠키 없음」 `AssertionError: expected 500 to be 409` |
+| GREEN | 같은 네 파일 | 새 9건 통과. 기존 4건 실패 → 분류: 의도된 기대값 변경 1건(잠금 후 host·cancelled forbidden → unauthenticated), 모의 데이터만 바꾼 것 3건(역할을 `participant.findUnique` 대신 세션 재조회로 주기, 마감 경계 테스트의 세션 만료값을 판정 시각 뒤로) |
+| REFACTOR | 쓰지 않는 `participant.findUnique` 모의 제거 / `npm run test` | 70 파일, 1517 테스트 통과(기존 1509 + 이번 8 순증: 새 9건 − 방장 등록 `it.each`의 cancelled 케이스 1건 이동). `$env:TZ` `UTC`(오프셋 0)·`America/Los_Angeles`(오프셋 480)에서도 1517건 통과 |
+| RED ③ 제출(N-2) | `npx vitest run lib/time/submit-availability.test.ts` | 새 7건 실패(취소 우선 1건은 기존 순서에서도 통과). 「잠금 후 세션이 삭제됐으면 마감이 지났어도 제출은 401이고 closed를 저장하지 않는다」·「잠금 후 참여자가 cancelled면 마감이 지났어도 401…」 `AssertionError: expected { kind: 'voting_closed', …(1) } to deeply equal { kind: 'unauthenticated', …(1) }`, 「로그아웃과 겹친 제출은 쿠키를 다시 심지 않는다: 마감 경과 collecting·closed·confirmed」 `expected 'voting_closed' to be 'unauthenticated'`, 「… 진행 중 draft」 `expected 'not_open' to be 'unauthenticated'`, 「… 10분 지난 draft」 `expected 'draft_expired' to be 'unauthenticated'` |
+| GREEN ③ | 같은 명령(`lib/time/submit-availability.ts` 재확인을 잠금 후 취소 판정 바로 뒤로 이동) | 새 8건 통과. 기존 5건 실패 — 모두 「세션 재조회를 하지 않는다」(`participantSession.findUnique` not called) 단언으로, 결과 값(종류·쿠키·저장)은 그대로. 이번 순서 변경 때문이라 「재확인을 먼저 한다」(cancelled만 0회, 나머지 1회)로 바꿈: 「마감 경과(판정 시각 = 마감): closed로 전환…」 1건, 상태별 거절 `it.each`의 진행 중 draft·10분 지난 draft·closed·confirmed 4건 |
+| REFACTOR ③ | prettier, 쓰지 않게 된 `keep` 변수 제거(취소 분기만 인증 시점 만료값) / `npm run test` | 70 파일, 1525 테스트 통과(1517 + 8). `UTC`(오프셋 0)·`America/Los_Angeles`(오프셋 480)에서도 1525건 통과 |
+| | `npm run lint` / `npm run typecheck` | 통과(N-2 뒤 다시 실행) |
+| | `npm run build` | 통과(dev 서버 종료·3000 포트 비어 있음 확인 후, N-2 뒤 다시 실행) |
 
-| 개발 DB 실제 호출 (`node scripts/verify/025-logout.mjs`, dev 서버, 139개 항목 전부 통과·2회) | 결과 |
+| 개발 DB 실제 호출 (dev 서버) | 결과 |
 | --- | --- |
-| 이 기기 로그아웃 | 204·본문 없음·쿠키 `ys_session_{id}=; …; Path=/api/v1/promises/{id}; Max-Age=0`·no-store. 그 세션 행만 삭제, 같은 참여자 다른 기기 행·다른 참여자 세션 md5·참여자 행 md5(status·role·닉네임·PIN 해시·제출 시각·버전)·슬롯 md5 그대로. 다른 기기 `/me` 200(제출 시각 유지)·현황 200(내 슬롯 2개), 로그아웃 기기 `/me` 401 |
-| 반복·재로그인 | 같은 요청 반복 204·6개 테이블 md5 변경 없음. 같은 닉네임·PIN 재로그인 200(새 세션 행, 참여자 행 그대로) |
-| allDevices=true | 204, 그 참여자 세션 0행, 두 기기 `/me` 401·제출 401, 방장·다른 참여자 `/me` 200·세션 수 그대로, 참여자·슬롯 그대로. 반복 204, 다시 로그인 200. `allDevices=false` 명시도 204·행 삭제 |
-| 멱등·만료 | 위조 토큰 204. DB로 만료시킨 쿠키 + allDevices=true → 204, 그 행만 삭제·같은 참여자 다른 기기 유효 세션 그대로(`/me` 200) |
-| 탈퇴·내보내기 | 탈퇴자 쿠키 + allDevices=true → 204·그 행만 삭제(다른 기기 만료 행 남음)·참여자 행 그대로·재로그인 403 `PARTICIPANT_CANCELLED`. 내보내진 참여자 쿠키 204·행 삭제 |
-| 다른 약속 세션 | 다른 약속 방장 토큰을 이 약속 쿠키 이름으로 + allDevices=true → 403 `FORBIDDEN`·쿠키 변경 없음, 그 세션 행·그 약속 세션 md5 그대로, 그 방장 `/me` 200 |
-| cancelled 약속 | 취소 뒤 다른 세션 API는 409 `PROMISE_CANCELLED`인데 로그아웃은 참여자·방장(allDevices) 모두 204·행 삭제, 약속 cancelled 그대로. 쿠키 없음은 401 |
-| draft | 방장 로그아웃 204 → `/me` 401 → 재로그인 200(host), 약속 draft 그대로 |
-| 오류 | Origin 없음·다른 Origin 403 `INVALID_ORIGIN`, promiseId 형식 400, `allDevices=1`·`TRUE`·빈 값·`true&false` 400, 없는 약속 404, 쿠키 없음·다른 이름 쿠키만 401 — 전부 쿠키 변경 없음·no-store, 뒤에 대상 세션 행 그대로. 대문자 promiseId 204(쿠키 이름·Path 소문자 DB id) |
-| 정리 | 확인 링크 4·약속 4·참여자 9·세션 4·슬롯 2행 삭제(회차마다). 6개 테이블(`_prisma_migrations` 포함) 행 수·md5가 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
+| `node scripts/verify/026-common-guard.mjs` 71개 항목(N-2 추가 뒤), 2회 전부 통과 | **방장 등록:** draft 취소 링크·collecting 취소 링크 모두 409 `PROMISE_CANCELLED`·no-store·Set-Cookie 없음, 약속·참여자·세션 md5 그대로, 새 약속 행 없음, 링크 조회는 그대로 `cancelled`. 취소 전 collecting 링크는 409 `HOST_ALREADY_REGISTERED`(대조군). 취소된 링크라도 닉네임 형식 422·Origin 없음 403이 먼저. **설정 완료:** 다른 연결로 링크 행을 잠가 설정 완료가 인증을 통과해 잠금을 기다리는 것을 `pg_stat_activity`로 확인한 뒤 로그아웃 204 → 잠금 해제 → 401 `UNAUTHENTICATED`·쿠키 `ys_session_{id}=; …; Max-Age=0`, 약속 행 md5 그대로(draft·설정 없음), 지운 세션 행 되살아나지 않음 → 다시 로그인 200 → 설정 완료 200·collecting. 같은 방식으로 DB에서 세션을 만료시키면 401·Max-Age=0·약속 그대로. 회귀: 정상 설정 완료 200·세션 = 마감 + 7일·쿠키 Max-Age 일치(±5초), 재요청 409 `INVALID_PROMISE_STATE`, 10분 지난 draft 410·삭제, 취소된 draft 쿠키 없이 409 `PROMISE_CANCELLED`. **제출(N-2):** 약속 행을 다른 연결로 잠가 제출을 잠금 대기시킨 뒤 — 마감 지남(DB로 마감을 1초 전으로) + 로그아웃 204 → 401·쿠키 Max-Age=0·약속 행 md5 그대로(collecting, closed 저장 없음)·슬롯 0. 대조군: 같은 약속에 유효 세션(방장)으로 제출하면 409 `VOTING_CLOSED`·closed 저장. 마감 지남 + DB로 세션 만료 → 401·Max-Age=0·collecting 그대로. 조기 마감(closed) + 로그아웃 → 401·Max-Age=0(이전에는 409 `VOTING_CLOSED`). 마감 전 + 로그아웃 → 401·Max-Age=0·슬롯 0(기존과 같음), 마감 전 정상 제출 200·version 1, 취소된 약속 제출 409 `PROMISE_CANCELLED` |
+| `node scripts/verify/025-logout.mjs` 회귀 | 139개 항목 전부 통과(N-2 뒤 다시 실행) |
+| 정리 | 회차마다 확인 링크·약속·참여자·세션 삭제(026 N-2 추가 뒤: 링크 12·약속 11·참여자 16·세션 13·슬롯 1, 025: 링크 4·약속 4·참여자 9·세션 4·슬롯 2). 6개 테이블(`_prisma_migrations` 포함) 행 수·md5가 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
 
 ## 메모
 
-- 사용자 지시로 정한 것: 행 물리 삭제(ERD 3.5), 취소된 약속 204(R-11 예외), 다른 약속 세션 403·삭제 없음, 만료·탈퇴자 쿠키 204
-- 이번 구현 판단(R-31): allDevices=true는 유효 세션일 때만 전체 삭제(만료·cancelled 참여자면 자기 행만), allDevices는 `true`·`false` 한 개만, 400·401·403·404는 쿠키 변경 없음, 401 메시지는 공통 헬퍼 문구, 공통 세션 인증 미사용(쿠키 읽기·해시만 재사용), 잠금 없음·조회와 삭제 한 트랜잭션
-- 행이 사라진 경우 점검(코드): 공통 인증·잠금 후 재확인 12개 API·`/me` 모두 401·쿠키 Max-Age=0. 설정 완료는 재확인이 없어 겹치면 지워진 토큰 쿠키를 다시 심을 수 있음(다음 요청 401, 고치지 않음)
-- 문서: member.md MEMBER-API-07 에러 표·보안 정보 문구·구현 결정, MEMBER-API-05 비고 문구, API_CONVENTIONS 5.2 로그아웃 행, DECISION_CONFLICTS R-31 신설·R-30 끝 문구·A-09 07 완료
-- 검증 스크립트: `scripts/verify/025-logout.mjs`(`.gitignore`에 `scripts/verify/` 추가). `node scripts/verify/025-logout.mjs`로 다시 돌릴 수 있다(dev 서버 필요)
-- 화면 PR 몫: 로그아웃 버튼, 로그아웃 시 그 기기 로컬 입력 삭제(TIME.md 250행)
+- 사용자 지시로 정한 것: 위 두 수정과 검토 뒤 N-2(제출 재확인 순서), R-30(마감 경과 closed 저장)·C-07·C-12·R-17은 기록만, 로그아웃 취소 예외(R-31)는 의도된 예외
+- 이번 구현 판단: 취소된 링크라도 링크 만료면 410이 먼저(링크 조회와 같은 판정 함수). 설정 완료의 잠금 후 순서는 다른 쓰기 API와 같이 cancelled 409 → 세션 401 → role 403 → 상태
+- 새로 발견한 차이(GUARD_MATRIX.md N-1~N-5): N-2(제출의 상태 판정이 재확인보다 먼저)는 고침. 고치지 않음 — 링크 조회 effectiveStatus 미계산(N-1), 현황 조회 draft 판정 순서(N-3), 잠금 후 cancelled 분기 쿠키(N-4), 방장 등록 화면 409 상태 코드 분기(N-5)
+- 기준 문서: 노션 STATE-API-09는 연결 인증이 없어 직접 열지 못했고 저장소 사본(`docs/specs/api/state.md`)을 기준으로 했다
+- 문서: GUARD_MATRIX.md 신설, state.md STATE-API-02 처리 순서·쿠키 갱신, member.md MEMBER-API-02 에러 표·처리 순서, time.md TIME-API-01 처리 순서 5, DECISION_CONFLICTS R-32 신설·R-22·R-31 후속 표시
+- 검증 스크립트: `scripts/verify/026-common-guard.mjs`(Git 제외). dev 서버를 띄운 뒤 `node scripts/verify/026-common-guard.mjs`
 
 ## 완료 이력
 

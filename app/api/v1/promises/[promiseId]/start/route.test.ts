@@ -172,6 +172,7 @@ describe("POST /api/v1/promises/[promiseId]/start (STATE-API-02)", () => {
   it.each([
     ["draft_expired", 410, "DRAFT_EXPIRED"],
     ["not_found", 404, "PROMISE_NOT_FOUND"],
+    ["unauthenticated", 401, "UNAUTHENTICATED"], // 잠금 후 세션 행 없음(로그아웃과 겹침, R-31)
   ])("%s(세션 행 삭제됨) → %i %s, 쿠키를 Max-Age=0으로 지운다", async (kind, status, code) => {
     startCollecting.mockResolvedValueOnce({ kind, session: { expiresAt: null, now: NOW } });
     const res = await call(BODY);

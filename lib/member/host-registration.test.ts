@@ -127,7 +127,23 @@ describe("registerHost (MEMBER-API-02)", () => {
     expect(calls).toEqual([]);
   });
 
-  it.each(["collecting", "closed", "confirmed", "cancelled"])("%s 약속이면 409", async (status) => {
+  it("취소된 링크에 방장 등록하면 cancelled(409 PROMISE_CANCELLED)이고 아무것도 바꾸지 않는다 (R-25)", async () => {
+    queue(LINK, {
+      ...draft(LINK.created_at),
+      status: "cancelled",
+      voting_deadline_at: new Date("2026-11-10T18:00:00+09:00"),
+    });
+    expect(await registerHost(TOKEN, INPUT)).toEqual({ kind: "cancelled" });
+    expect(calls).toEqual([]);
+  });
+
+  it("취소된 draft(10분 지남)도 지우지 않고 cancelled", async () => {
+    queue(LINK, { ...draft(new Date(NOW.getTime() - 30 * MIN)), status: "cancelled" });
+    expect(await registerHost(TOKEN, INPUT)).toEqual({ kind: "cancelled" });
+    expect(calls).toEqual([]);
+  });
+
+  it.each(["collecting", "closed", "confirmed"])("%s 약속이면 409", async (status) => {
     queue(LINK, {
       ...draft(LINK.created_at),
       status,

@@ -9,6 +9,7 @@ import { DRAFT_SESSION_TTL_SECONDS, generateSessionToken, hashSessionToken } fro
 export type HostRegistrationResult =
   | { kind: "not_found" }
   | { kind: "expired" }
+  | { kind: "cancelled" }
   | { kind: "already_registered" }
   | {
       kind: "created";
@@ -80,6 +81,8 @@ export async function registerHost(
         now,
       );
       if (status.kind === "expired") return { kind: "expired" } as const;
+      // 취소된 약속은 "이미 선점"이 아니라 취소 사실을 알린다 (STATE-API-09 공통 처리 1, R-25). 링크 조회와 같이 410이 먼저다
+      if (status.body.promiseStatus === "cancelled") return { kind: "cancelled" } as const;
 
       if (promiseRow && status.body.draftExpired) {
         // 만료 draft 물리 삭제: 세션 → 방장 참여자 → promise. 링크는 남겨 재사용한다 (STATE-02-02, ERD 10절)

@@ -9,11 +9,11 @@ const tx = {
     return queryResults.shift() ?? [];
   }),
   participant: {
-    findUnique: vi.fn(),
     count: vi.fn(async () => 1),
     deleteMany: vi.fn(async () => (calls.push("participant.deleteMany"), { count: 1 })),
   },
   participantSession: {
+    findUnique: vi.fn(),
     deleteMany: vi.fn(async () => (calls.push("session.deleteMany"), { count: 1 })),
   },
   promise: {
@@ -66,12 +66,96 @@ function queue(promise: { status?: string; created_at?: Date } | null, extended:
   );
 }
 
+// 잠금 후 다시 읽은 요청자 세션 행 (participantSession.findUnique 결과)
+function lockedSession(
+  overrides: {
+    expiresAt?: Date;
+    id?: string;
+    promiseId?: string;
+    role?: string;
+    status?: string;
+  } = {},
+) {
+  return {
+    expiresAt: overrides.expiresAt ?? SESSION_EXPIRES,
+    participant: {
+      id: overrides.id ?? "pt-1",
+      promiseId: overrides.promiseId ?? PROMISE_ID,
+      role: overrides.role ?? "host",
+      status: overrides.status ?? "active",
+    },
+  };
+}
+
+describe("startCollecting 잠금 후 세션·참여자 재확인 (R-31·R-22 정렬)", () => {
+  beforeEach(() => {
+    calls.length = 0;
+    queryResults.length = 0;
+    vi.clearAllMocks();
+    tx.participantSession.findUnique.mockResolvedValue(lockedSession());
+    tx.participant.count.mockResolvedValue(1);
+    transaction.mockImplementation(async (fn: (t: typeof tx) => unknown) => fn(tx));
+  });
+
+  it("잠금 후 세션이 삭제됐으면(로그아웃과 겹침) 설정 완료는 unauthenticated이고 쿠키를 다시 심지 않는다", async () => {
+    queue({}, ["s-1"]);
+    tx.participantSession.findUnique.mockResolvedValueOnce(null);
+
+    const result = await startCollecting(AUTH, INPUT);
+
+    expect(result).toEqual({ kind: "unauthenticated", session: { expiresAt: null, now: NOW } });
+    expect(tx.participantSession.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "s-1" } }),
+    );
+    expect(tx.promise.update).not.toHaveBeenCalled();
+    expect(calls).not.toContain("UPDATE");
+  });
+
+  it("잠금 후 세션이 만료됐으면(경계: expires_at = 판정 시각) unauthenticated, 저장 없음", async () => {
+    queue({}, ["s-1"]);
+    tx.participantSession.findUnique.mockResolvedValueOnce(lockedSession({ expiresAt: NOW }));
+
+    expect(await startCollecting(AUTH, INPUT)).toEqual({
+      kind: "unauthenticated",
+      session: { expiresAt: NOW, now: NOW },
+    });
+    expect(tx.promise.update).not.toHaveBeenCalled();
+  });
+
+  it("잠금 후 참여자가 cancelled면 403이 아니라 다른 쓰기 API와 같은 unauthenticated(401)", async () => {
+    queue({}, ["s-1"]);
+    tx.participantSession.findUnique.mockResolvedValueOnce(lockedSession({ status: "cancelled" }));
+
+    expect((await startCollecting(AUTH, INPUT)).kind).toBe("unauthenticated");
+    expect(tx.promise.update).not.toHaveBeenCalled();
+  });
+
+  it("잠금 후 세션이 다른 참여자·다른 약속 소속이면 unauthenticated", async () => {
+    queue({}, ["s-1"]);
+    tx.participantSession.findUnique.mockResolvedValueOnce(lockedSession({ promiseId: "other" }));
+    expect((await startCollecting(AUTH, INPUT)).kind).toBe("unauthenticated");
+  });
+
+  it("잠금 후 최신 role이 member면 forbidden이고 쿠키는 다시 읽은 세션 기준", async () => {
+    queue({}, ["s-1"]);
+    const later = new Date(SESSION_EXPIRES.getTime() + MIN);
+    tx.participantSession.findUnique.mockResolvedValueOnce(
+      lockedSession({ role: "member", expiresAt: later }),
+    );
+
+    expect(await startCollecting(AUTH, INPUT)).toEqual({
+      kind: "forbidden",
+      session: { expiresAt: later, now: NOW },
+    });
+  });
+});
+
 describe("startCollecting (STATE-API-02)", () => {
   beforeEach(() => {
     calls.length = 0;
     queryResults.length = 0;
     vi.clearAllMocks();
-    tx.participant.findUnique.mockResolvedValue({ role: "host", status: "active" });
+    tx.participantSession.findUnique.mockResolvedValue(lockedSession());
     tx.participant.count.mockResolvedValue(1);
     transaction.mockImplementation(async (fn: (t: typeof tx) => unknown) => fn(tx));
   });
@@ -141,19 +225,20 @@ describe("startCollecting (STATE-API-02)", () => {
     expect(tx.promise.update).not.toHaveBeenCalled();
   });
 
+  // host·cancelled는 2026-11-10부터 forbidden이 아니라 unauthenticated(401)다 (R-22 정렬, 위 describe)
   it.each([
-    ["member", "active"],
-    ["host", "cancelled"],
-  ])("잠금 후 최신 role=%s·status=%s → forbidden, 저장 없음", async (role, status) => {
+    ["member", "active", "forbidden"],
+    ["host", "cancelled", "unauthenticated"],
+  ])("잠금 후 최신 role=%s·status=%s → %s, 저장 없음", async (role, status, kind) => {
     queue({});
-    tx.participant.findUnique.mockResolvedValueOnce({ role, status });
-    expect((await startCollecting(AUTH, INPUT)).kind).toBe("forbidden");
+    tx.participantSession.findUnique.mockResolvedValueOnce(lockedSession({ role, status }));
+    expect((await startCollecting(AUTH, INPUT)).kind).toBe(kind);
     expect(tx.promise.update).not.toHaveBeenCalled();
   });
 
   it("방장이 아니면 만료 draft여도 삭제하지 않고 forbidden", async () => {
     queue({ created_at: new Date(NOW.getTime() - 10 * MIN) });
-    tx.participant.findUnique.mockResolvedValueOnce({ role: "member", status: "active" });
+    tx.participantSession.findUnique.mockResolvedValueOnce(lockedSession({ role: "member" }));
     expect((await startCollecting(AUTH, INPUT)).kind).toBe("forbidden");
     expect(calls).not.toContain("promise.delete");
   });
@@ -218,6 +303,10 @@ describe("startCollecting (STATE-API-02)", () => {
       [{ id: "l-1" }],
       [{ id: PROMISE_ID, status: "draft", created_at: new Date(late.getTime() - MIN) }],
       [{ now: late }],
+    );
+    // 세션은 판정 시각보다 뒤에 만료된다(재확인 통과). 마감 검증만 실패해야 한다
+    tx.participantSession.findUnique.mockResolvedValueOnce(
+      lockedSession({ expiresAt: new Date(late.getTime() + DAY) }),
     );
     const result = await startCollecting(AUTH, INPUT);
     expect(result.kind).toBe("validation_failed");

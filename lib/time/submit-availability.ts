@@ -52,27 +52,16 @@ export async function submitAvailability(
       FROM promises WHERE id = ${auth.promise.id}::uuid FOR UPDATE`;
     // 잠금을 얻은 "뒤"의 시각. now()는 트랜잭션 시작 시각이라 쓰지 않는다 (API_CONVENTIONS 4.2)
     const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
-    const keep = { session: { expiresAt: auth.session.expiresAt, now } };
 
     // 인증 뒤 잠금 사이에 만료 draft가 정리됐다. 요청자 세션도 함께 지워졌다
     if (!promise) return { kind: "not_found", session: { expiresAt: null, now } };
-    if (promise.status === "cancelled") return { kind: "cancelled", ...keep };
-    if (promise.status === "draft") {
-      // 링크를 잠그지 않으므로 삭제하지 않는다 (R-12·R-13)
-      return promise.created_at.getTime() + DRAFT_EXPIRY_MS <= now.getTime()
-        ? { kind: "draft_expired", ...keep }
-        : { kind: "not_open", ...keep };
-    }
-    if (promise.status !== "collecting") return { kind: "voting_closed", ...keep };
-    if (!promise.voting_deadline_at) throw new Error("마감 시각이 없는 collecting 약속");
-    // 경계값: 판정 시각 = 마감이면 마감. 쓰기 요청이 실제 status를 closed로 바꾸고 커밋한다 (ERD 8.2·11절)
-    if (promise.voting_deadline_at.getTime() <= now.getTime()) {
-      await tx.$executeRaw`
-        UPDATE promises SET status = 'closed' WHERE id = ${auth.promise.id}::uuid AND status = 'collecting'`;
-      return { kind: "voting_closed", ...keep };
+    if (promise.status === "cancelled") {
+      return { kind: "cancelled", session: { expiresAt: auth.session.expiresAt, now } };
     }
 
-    // 잠금 후 세션·참여자 재확인. 탈퇴·내보내기는 세션을 즉시 만료시키므로 만료도 함께 본다 (ERD 11절, C-07)
+    // 잠금 후 세션·참여자 재확인을 상태·마감 판정보다 먼저 한다 (설정 완료와 같은 순서, R-32 N-2).
+    // 탈퇴·내보내기는 세션을 즉시 만료시키므로 만료도 본다 (ERD 11절, C-07). 로그아웃으로 행이 없으면 쿠키를 지운다(R-31).
+    // 재확인에 실패한 요청은 마감이 지났어도 closed를 저장하지 않는다 (STATE-API-09 공통 처리 4)
     const session = await tx.participantSession.findUnique({
       where: { id: auth.session.id },
       select: {
@@ -98,6 +87,21 @@ export async function submitAvailability(
       me.id !== auth.participant.id
     ) {
       return { kind: "unauthenticated", ...current };
+    }
+
+    if (promise.status === "draft") {
+      // 링크를 잠그지 않으므로 삭제하지 않는다 (R-12·R-13)
+      return promise.created_at.getTime() + DRAFT_EXPIRY_MS <= now.getTime()
+        ? { kind: "draft_expired", ...current }
+        : { kind: "not_open", ...current };
+    }
+    if (promise.status !== "collecting") return { kind: "voting_closed", ...current };
+    if (!promise.voting_deadline_at) throw new Error("마감 시각이 없는 collecting 약속");
+    // 경계값: 판정 시각 = 마감이면 마감. 쓰기 요청이 실제 status를 closed로 바꾸고 커밋한다 (ERD 8.2·11절)
+    if (promise.voting_deadline_at.getTime() <= now.getTime()) {
+      await tx.$executeRaw`
+        UPDATE promises SET status = 'closed' WHERE id = ${auth.promise.id}::uuid AND status = 'collecting'`;
+      return { kind: "voting_closed", ...current };
     }
 
     if (

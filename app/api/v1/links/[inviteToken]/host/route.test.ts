@@ -102,6 +102,7 @@ describe("POST /api/v1/links/[inviteToken]/host (MEMBER-API-02)", () => {
     ["not_found", 404, "LINK_NOT_FOUND"],
     ["already_registered", 409, "HOST_ALREADY_REGISTERED"],
     ["expired", 410, "LINK_EXPIRED"],
+    ["cancelled", 409, "PROMISE_CANCELLED"], // 취소된 링크 (R-25)
   ])("%s → %i %s, 쿠키 없음", async (kind, status, code) => {
     registerHost.mockResolvedValueOnce({ kind });
     const res = await call(VALID);
