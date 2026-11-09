@@ -900,7 +900,14 @@ Set-Cookie: ys_session_{promiseId}=; HttpOnly; Secure; SameSite=Lax;
 
 ### 요청
 
-본문 없음.
+헤더
+
+| Name | Value | 필수 |
+| --- | --- | --- |
+| Cookie | ys_session_{promiseId}=... | O |
+| Origin | 서비스 도메인 | O |
+
+본문 없음(보내도 읽지 않는다).
 
 대상은 경로의 `participantId`로만 지정
 
@@ -921,14 +928,20 @@ Response Body (`200 OK`)
 
 요청이 실패하면 해당 **HTTP 상태 코드**와 함께 아래 형태의 JSON이 반환됩니다. error 필드는 상황에 따라 생략될 수 있습니다.
 
-| HTTP | 발생 원인 | code |
-| --- | --- | --- |
-| 401 | 세션 없음·만료, 또는 요청자가 cancelled | `UNAUTHENTICATED` |
-| 403 | 방장이 아님 | `FORBIDDEN` |
-| 404 | 대상이 없거나 다른 약속 소속 | `PARTICIPANT_NOT_FOUND` |
-| 409 | draft·closed·confirmed·cancelled에서의 요청. 재조율 후 처리 안내 | `INVALID_PROMISE_STATE` |
-| 409 | collecting이지만 마감 지남 | `DEADLINE_PASSED` |
-| 409 | 방장이 자신을 지정. 탈퇴 API로 안내 | `CANNOT_REMOVE_SELF` |
+| HTTP 상태 | code | 발생 원인 | message 예시 |
+| --- | --- | --- | --- |
+| 400 | INVALID_REQUEST | promiseId 또는 participantId 형식 오류 | 요청 형식이 올바르지 않습니다. |
+| 401 | UNAUTHENTICATED | 세션 없음·위조·만료, 또는 요청자가 cancelled(탈퇴·승계로 세션 만료) | 다시 로그인해 주세요. |
+| 403 | FORBIDDEN | 잠금 후 다시 읽은 role이 host가 아님, 또는 다른 약속의 세션 | 이 작업을 수행할 권한이 없습니다. |
+| 403 | INVALID_ORIGIN | Origin 없음·불일치 | 허용되지 않은 요청 출처입니다. |
+| 404 | PROMISE_NOT_FOUND | 존재하지 않는 promiseId | 약속을 찾을 수 없습니다. |
+| 404 | PARTICIPANT_NOT_FOUND | 대상이 없거나 다른 약속 소속(구분하지 않음) | 참여자를 찾을 수 없습니다. |
+| 409 | PROMISE_CANCELLED | cancelled 약속. 세션 검사보다 먼저 판정한다(R-11) | 취소된 약속입니다. |
+| 409 | INVALID_PROMISE_STATE | draft·closed·confirmed. details `{ promiseStatus, allowedStates: ["collecting"] }`. 재조율 후 처리 안내 | 현재 약속 상태에서는 요청할 수 없습니다. |
+| 409 | DEADLINE_PASSED | collecting이지만 판정 시각 ≥ 마감. 상태는 바꾸지 않는다 | 응답 마감이 지났습니다. |
+| 409 | CANNOT_REMOVE_SELF | 방장이 자신을 지정. 탈퇴 API로 안내 | 방장은 스스로를 내보낼 수 없습니다. 탈퇴를 이용해 주세요. |
+
+> 2026-11-09 구현 반영(R-30): 에러 표를 다른 페이지와 같은 열 순서로 바꾸고 400·403 `INVALID_ORIGIN`·404 `PROMISE_NOT_FOUND`를 추가했다. cancelled는 `INVALID_PROMISE_STATE`가 아니라 `PROMISE_CANCELLED`다. 2번의 "아니면 403"은 요청자가 active가 아닌 경우 401이다(세션 인증 공통 기준).
 
 ```json
 {
@@ -952,6 +965,16 @@ Response Body (`200 OK`)
    내보낸 참여자의 슬롯은 보존하지만 `status != 'active'`이므로 후보 계산(ERD 7.1)과 히트맵 집계에서 제외된다.
 9. 대상의 모든 세션은 **행 삭제 없이** `expires_at`을 현재 시각으로 변경
 10. 커밋
+
+#### **구현 결정 (2026-11-09, DECISION_CONFLICTS R-30)**
+
+- 검사 순서: Origin 403 → promiseId·participantId 형식 400 → 404 → 409 `PROMISE_CANCELLED`(세션보다 우선) → 401 → 403(다른 약속 세션) → `promises` 행 `FOR UPDATE` → 잠금 후 `clock_timestamp()` → 사라짐 404·cancelled 409 → 세션·참여자 재확인 401 → 최신 role이 host가 아니면 403 → 상태 409 → 마감 409 → 대상 404 → 본인 409 → 이미 cancelled면 변경 없이 200 → 저장. 잠금·재확인은 설정 변경·재조율과 같은 `lockPromiseAsHost`다.
+- draft를 지우지 않으므로 `promises`만 잠근다(API_CONVENTIONS 4.1-3). 10분 지난 draft도 409 `INVALID_PROMISE_STATE`이고 삭제하지 않는다.
+- 마감 경과: 참여자 등록(MEMBER-API-03, R-13)과 같이 **DB 상태를 closed로 바꾸지 않고** 409 `DEADLINE_PASSED`를 낸다. 경계는 판정 시각 = 마감이면 지난 것.
+- 저장: 대상 `status='cancelled'`·`cancelled_at`=판정 시각, 대상의 아직 유효한 세션만 `expires_at`=판정 시각. 본인 탈퇴(STATE-API-08)의 일반 참여자 분기와 같은 함수(`cancelParticipant`)다. 슬롯·제출 시각·버전·닉네임·PIN 해시·role은 보존한다.
+- 멱등: 대상이 이미 cancelled(먼저 내보냄·본인 탈퇴)면 `cancelled_at`·세션을 다시 쓰지 않고 현재 인원으로 200.
+- 응답: `participantId`는 DB 값(소문자 UUID), `currentParticipantCount`는 저장 뒤 active 인원. 요청한 방장의 쿠키는 잠금 후 다시 읽은 세션 기준으로 모든 응답에서 갱신한다. 모든 응답 `Cache-Control: no-store`.
+- 경로: 같은 위치의 정적 경로 `participants/me`(STATE-API-08)가 먼저 매칭되므로 `participantId`가 `me`인 요청은 이 API로 오지 않는다.
 
 #### 보안 정보
 
