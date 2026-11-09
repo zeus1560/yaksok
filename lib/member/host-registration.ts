@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/prisma/generated/client";
+import { deleteDraftPromise } from "./draft-discard";
 import { isInviteTokenFormat } from "./invite-link";
 import { DRAFT_EXPIRY_MS, resolveLinkStatus, type LinkPromise } from "./link-status";
 import { hashPin } from "./pin";
@@ -82,11 +83,7 @@ export async function registerHost(
 
       if (promiseRow && status.body.draftExpired) {
         // 만료 draft 물리 삭제: 세션 → 방장 참여자 → promise. 링크는 남겨 재사용한다 (STATE-02-02, ERD 10절)
-        await tx.participantSession.deleteMany({
-          where: { participant: { promiseId: promiseRow.id } },
-        });
-        await tx.participant.deleteMany({ where: { promiseId: promiseRow.id } });
-        await tx.promise.delete({ where: { id: promiseRow.id } });
+        await deleteDraftPromise(tx, promiseRow.id);
       } else if (status.body.promiseStatus !== "unclaimed") {
         return { kind: "already_registered" } as const;
       }

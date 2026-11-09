@@ -43,3 +43,18 @@ export async function expireAllSessions(
     RETURNING s.id`;
   return { sessionIds: rows.map((row) => row.id) };
 }
+
+// 본인 탈퇴(STATE-API-08)처럼 한 참여자의 세션만 즉시 만료한다. 행은 지우지 않는다
+// - expireAllSessions와 같은 기준: now 기준 아직 유효한 세션만 expires_at = now, 이미 만료된 세션은 그 시각을 그대로 둔다
+// - now는 잠금 후 판정 시각. 호출자가 약속 행을 FOR UPDATE로 잡은 트랜잭션 안에서 부른다
+export async function expireParticipantSessions(
+  tx: Pick<Prisma.TransactionClient, "$queryRaw">,
+  { participantId, now }: { participantId: string; now: Date },
+): Promise<{ sessionIds: string[] }> {
+  const rows = await tx.$queryRaw<{ id: string }[]>`
+    UPDATE participant_sessions SET expires_at = ${now}
+    WHERE participant_id = ${participantId}::uuid
+      AND expires_at > ${now}
+    RETURNING id`;
+  return { sessionIds: rows.map((row) => row.id) };
+}

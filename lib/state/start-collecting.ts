@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { deleteDraftPromise } from "@/lib/member/draft-discard";
 import { DRAFT_EXPIRY_MS } from "@/lib/member/link-status";
 import type { PromiseSession } from "@/lib/member/session-auth";
 import { refreshActiveSessions } from "@/lib/member/session-expiry";
@@ -57,9 +58,7 @@ export async function startCollecting(
 
     if (promise.created_at.getTime() + DRAFT_EXPIRY_MS <= now.getTime()) {
       // 만료 draft 물리 삭제: 세션 → 방장 참여자 → promise. 링크는 남긴다 (STATE-02-02, ERD 10절)
-      await tx.participantSession.deleteMany({ where: { participant: { promiseId: promise.id } } });
-      await tx.participant.deleteMany({ where: { promiseId: promise.id } });
-      await tx.promise.delete({ where: { id: promise.id } });
+      await deleteDraftPromise(tx, promise.id);
       return { kind: "draft_expired", session: { expiresAt: null, now } };
     }
 
