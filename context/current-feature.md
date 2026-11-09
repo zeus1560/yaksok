@@ -1,26 +1,26 @@
-# 현재 기능: 참여자 명단 조회 API (MEMBER-API-06)
+# 현재 기능: 참여자 내보내기 API (MEMBER-API-08)
 
 ## 상태
 
-완료
+검토 중
 
 ## 스펙
 
-`context/features/023-participant-list-api.md`
+`context/features/024-remove-participant-api.md`
 
 ## 목표
 
-이 약속의 active 참여자가 정원·현재 인원·active 명단(등록순, 역할, 본인 표시)을 본다. 제출 여부는 보이지 않는다. 읽기 전용(잠금 없음), cancelled는 세션보다 먼저 409 `PROMISE_CANCELLED`, draft는 방장 포함 403. API만, 화면·DB 변경 없음.
+현재 active host가 collecting·마감 전에 다른 참여자를 cancelled로 바꾸고 그 참여자의 세션만 즉시 만료한다. 데이터는 보존, 재요청은 변경 없이 200. cancelled는 세션보다 먼저 409 `PROMISE_CANCELLED`, 마감 경과는 참여자 등록과 같이 상태를 바꾸지 않고 409 `DEADLINE_PASSED`. API만, 화면·DB 변경 없음.
 
 ## 수용 기준
 
-스펙 `context/features/023-participant-list-api.md` AC-1~7 참고.
+스펙 `context/features/024-remove-participant-api.md` AC-1~8 참고.
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-명단조회-api` (`main` 6ea77cc에서 생성, 022 PR #27 병합 포함)
-- 시작 시 작업 트리: 깨끗함(`ahn/feat-탈퇴-api`에서 `main`으로 전환 후 `git fetch --prune`·`git pull`). 원격이 사라진 로컬 `ahn/` 브랜치 없음(원격이 남은 로컬 `ahn/` 브랜치 19개는 그대로 둠)
-- 첫 커밋은 022 완료 기록(스펙 022 상태, 완료 이력, feature-list) — 스테이징해 둠
+- 브랜치: `ahn/feat-내보내기-api` (`main` 999dcc7에서 생성, 023 PR #28 병합 포함)
+- 시작 시 작업 트리: 깨끗함(`ahn/feat-명단조회-api`에서 `main`으로 전환 후 `git fetch --prune`·`git pull`). 원격이 사라진 로컬 `ahn/` 브랜치 없음(원격이 남은 로컬 `ahn/` 브랜치 20개는 그대로 둠)
+- 첫 커밋은 023 완료 기록(스펙 023 상태, 완료 이력, feature-list) — 스테이징해 둠
 
 ## 검증 결과
 
@@ -28,31 +28,34 @@
 
 | 단계 | 명령 | 결과 |
 | --- | --- | --- |
-| RED | `npx vitest run lib/member/participant-list.test.ts` (빈 구현: 읽기 트랜잭션에서 `now()`만 읽고 `{ kind: "ok", participantLimit: 0, participants: [] }` 반환. 테스트는 메모리 가짜 DB의 participants 행으로 결과 값을 본다) | 2건 실패. 「탈퇴자는 명단과 인원에서 빠지고 등록순(created_at → id)으로 정렬된다」 `AssertionError: expected { kind: 'ok', …(3) } to deeply equal { kind: 'ok', …(3) }` — `participantLimit` 기대 6·실제 0, `participants` 기대 4명(승주 host·영희·혜승 isMe·철수)·실제 `[]`. 「제출 여부·status·PIN 해시·정규화 닉네임을 명단 항목에 넣지 않는다 (미제출자도 포함)」 `AssertionError: expected [] to have a length of 2 but got +0` |
-| GREEN | 같은 명령 (`lib/member/participant-list.ts` 구현) | 2건 통과 |
-| REFACTOR | 판정 순서·재확인·draft·잠금 없음 테스트 추가, `route.ts` GET 추가, `route.test.ts`에 GET 테스트 / `npm run test` | 67 파일, 1412 테스트 통과(기존 1380 + 이번 32: `participant-list` 19, `participants/route` GET 13. POST 기존 26건 수정 없음). PowerShell `$env:TZ`로 `UTC`·`America/Los_Angeles`(오프셋 480 확인)에서도 1412건 통과 |
+| RED | `npx vitest run lib/member/remove-participant.test.ts` (빈 구현: 트랜잭션에서 아무것도 하지 않고 `{ kind: "ok", participantId, currentParticipantCount: 0, participantLimit: 0 }` 반환. 테스트는 메모리 가짜 DB의 참여자·세션 행 끝 상태를 본다) | 2건 실패. 「방장이 참여자를 내보내면 대상만 cancelled가 되고 대상 세션만 만료된다」 `AssertionError: expected { Object (kind, participantId, ...) } to deeply equal { Object (kind, participantId, ...) }` — `currentParticipantCount` 기대 2·실제 0, `participantLimit` 기대 6·실제 0, `session.now` 기대 잠금 후 시각·실제 인증 시각. 「이미 내보낸 대상에 다시 요청하면 아무것도 바꾸지 않고 200」 같은 `AssertionError`(인원 2·정원 6 기대, 0·0) |
+| GREEN | 같은 명령 + `lib/state/withdraw-participant.test.ts` (`cancelParticipant` 추출, `remove-participant.ts` 구현) | 27건 통과(새 2 + 탈퇴 25, 탈퇴 기대값 수정 없음) |
+| REFACTOR | 거절·검사 순서·마감 경계·멱등(본인 탈퇴 대상)·잠금 대상 테스트 추가, `[participantId]/route.ts`·`route.test.ts`, 에러 헬퍼 2개 / `npm run test` | 69 파일, 1462 테스트 통과(기존 1412 + 이번 50: `remove-participant` 26, `[participantId]/route` 24). PowerShell `$env:TZ`로 `UTC`(오프셋 0)·`America/Los_Angeles`(오프셋 480)에서도 1462건 통과 |
 | | `npm run lint` / `npm run typecheck` | 통과 |
-| | `npm run build` | 통과(3000 포트 비어 있음 확인 후 실행), 라우트 목록에 `/api/v1/promises/[promiseId]/participants` |
+| | `npm run build` | 통과(3000 포트 비어 있음 확인 후 실행), 라우트 목록에 `/api/v1/promises/[promiseId]/participants/[participantId]`와 기존 `/participants/me` 함께 |
 
-| 개발 DB 실제 호출 (dev 서버, 40개 항목 전부 통과) | 결과 |
+| 개발 DB 실제 호출 (dev 서버, 73개 항목 전부 통과) | 결과 |
 | --- | --- |
-| collecting (방장 + 4명, 3명 제출) | 200·no-store·쿠키 갱신(Max-Age>0). 본문 키 3개, 항목 키 4개만, 등록순 = DB `created_at, id` 순서, 인원 5 = 배열 길이, isMe는 요청자만(일반·방장 시점), 미제출자(방장·엠사) 포함, 본문에 submitted·status·hash·version 없음. GET 전후 약속·참여자·세션 행 md5 동일 |
-| 탈퇴 | 엠원 탈퇴 뒤 인원 4·명단에서 제외. 탈퇴자 세션 401 `UNAUTHENTICATED`(쿠키 갱신 없음) |
-| 승계 | 방장 탈퇴 → 엠투 승계 뒤 명단 엠투 host·엠삼·엠사 member. 옛 방장 세션 401 |
-| 마감 지난 collecting | DB로 마감을 1분 전으로 → 200, DB `status` collecting 그대로 |
-| closed / confirmed | 후임 방장 마감 → 200(인원 3, 엠사 isMe) / 확정 → 200 |
-| 오류 | 쿠키 없음 401, 위조 쿠키 401, 없는 약속 404, promiseId 형식 400, 다른 약속 세션 토큰 403 `FORBIDDEN`, 모두 no-store |
-| cancelled | 약속 B 취소 뒤 쿠키 없이 409 `PROMISE_CANCELLED`, 만료된 쿠키로도 409 |
-| draft | 방장 403 `FORBIDDEN`·쿠키 갱신·no-store, 쿠키 없음 401 |
-| 정리 | 확인 링크 3·약속 3·참여자 7·세션 7·슬롯 6행 삭제. 6개 테이블(`_prisma_migrations` 포함) 행 수·md5가 시작 상태와 동일. dev 서버 종료, 3000 포트·yaksok `next` 프로세스 없음(다른 프로젝트 `hintcheck`의 `next dev`는 그대로 둠) |
+| 내보내기 200 | 정원 4 약속(방장 + 3명, 대상은 두 기기 로그인·슬롯 3개 제출). 본문 4개 필드(인원 3·정원 4), no-store, 방장 쿠키 같은 토큰·Max-Age>0. 대상 status cancelled·`cancelled_at`이 요청 전후 DB 시각 사이, 슬롯·제출 시각·버전·닉네임·정규화 닉네임·PIN 해시·role·created_at 동일, 대상 세션 2개 `expires_at` = `cancelled_at`, 다른 세션 그대로, 약속 collecting |
+| 재요청 | 200 같은 본문, 약속·참여자·세션·슬롯 md5 동일 |
+| 오류 | 본인 409 `CANNOT_REMOVE_SELF`(쿠키 갱신), 다른 약속 참여자 404 `PARTICIPANT_NOT_FOUND`(그 참여자 active 그대로), 없는 참여자 404, 일반 참여자 403 `FORBIDDEN`(쿠키 갱신), Origin 없음 403 `INVALID_ORIGIN`, 쿠키 없음·위조 401, 다른 약속 방장 세션 403, promiseId·participantId 형식 400(쿠키 없음), 없는 약속 404 `PROMISE_NOT_FOUND`, 전부 no-store, 오류 뒤 md5 동일 |
+| 내보낸 뒤 | 내보내기 전 새 등록 409 `PROMISE_FULL` → 뒤 201(인원 4). 대상 닉네임 409 `NICKNAME_TAKEN`, 대상 로그인 403 `PARTICIPANT_CANCELLED`, 대상 두 기기 쿠키로 `/me`·현황·명단·제출·상태 조회 모두 401. 명단·현황에서 제외. 마감 뒤 후보: 대상이 함께 고른 칸 공통 인원 2(방장·m2), 대상 단독 칸은 후보 없음. 다른 참여자 `/me` 200 |
+| 상태 | closed·confirmed 409 `INVALID_PROMISE_STATE`(details `promiseStatus`·`allowedStates: ["collecting"]`, 대상 그대로), draft 409, 10분 지난 draft 409(약속 삭제 없음), cancelled 409 `PROMISE_CANCELLED`(쿠키 없이·만료 쿠키 모두) |
+| 마감 경과 | DB로 마감을 1분 전으로 → 409 `DEADLINE_PASSED`·쿠키 갱신, DB `status` collecting 그대로, md5 동일·대상 active. 같은 약속 참여자 등록도 409 `DEADLINE_PASSED`·collecting 그대로(같은 처리 확인) |
+| 동시성 | 별도 연결로 `promises` 행을 잠그고 요청을 `pg_locks` 대기열에 순서대로 넣은 뒤 해제. 내보내기 → 대상 제출: 200·401, 슬롯·버전 그대로. 제출 → 내보내기: 둘 다 200, 제출 슬롯 보존. 내보내기 → 대상 탈퇴: 200·401. 대상 탈퇴 → 내보내기: 둘 다 200, `cancelled_at` = 탈퇴 응답 시각(한 번). 방장 탈퇴(승계) → 내보내기: 탈퇴 200·내보내기 401(쿠키 Max-Age=0), 대상 active 그대로·후임 host. 내보내기 → 방장 탈퇴: 둘 다 200. 같은 대상 2건(대기열·그냥 병렬 각각): 둘 다 200 같은 본문, 대상 세션 2개 `expires_at` = `cancelled_at` 하나 |
+| 정리 | 확인 링크 12·약속 12·참여자 28·세션 31·슬롯 9행 삭제. 6개 테이블(`_prisma_migrations` 포함) 행 수·md5가 시작 상태와 동일. dev 서버 종료, 3000 포트·yaksok `next` 프로세스 없음(다른 프로젝트 `hintcheck`의 `next dev`는 그대로 둠) |
+
+| 화면 확인(코드 변경 없음, 코드 읽기로만) | 결과 |
+| --- | --- |
+| 내보낸 사람이 열어 둔 화면 | 시간 입력 폴링·제출(`lib/availability/failure.ts`)과 결과 화면(`lib/result/failure.ts`)이 `UNAUTHENTICATED`를 `relink`로 분류 → 링크 재조회(011). 링크는 collecting이고 `/me` 401이라 참여 화면으로 가며, 같은 닉네임 재등록은 `NICKNAME_TAKEN` → 로그인 1회 → 403 `PARTICIPANT_CANCELLED` 재참여 불가 안내(R-18). 브라우저로는 확인하지 않음 |
 
 ## 메모
 
-- 사용자 지시로 정한 것: cancelled 409 `PROMISE_CANCELLED`(명세 `INVALID_PROMISE_STATE` 대신, R-11), draft는 방장 포함 403, 읽기 트랜잭션 하나
-- 이번 구현 판단(R-29): 마감 지난 collecting을 closed로 계산하는 코드는 넣지 않음(두 상태 모두 허용, 응답에 상태 없음 — 결과가 같다), 10분 지난 draft도 403(삭제 없음), 세션 무효면 draft여도 401이 먼저, 기존 `participants/route.ts`에 GET 추가(같은 경로)
-- 문서: member.md MEMBER-API-06 허용 상태 줄·에러 표(400 행 추가, 403에 다른 약속 세션, 409 `PROMISE_CANCELLED`)·구현 결정, DECISION_CONFLICTS R-29
-- 팀 확인 필요(기존 미결): C-07(탈퇴자 세션 401)
-- 화면 PR 몫: 명단을 보여 주는 화면 없음
+- 사용자 지시로 정한 것: cancelled 409 `PROMISE_CANCELLED`(명세 `INVALID_PROMISE_STATE` 대신, R-11), 마감 경과는 참여자 등록과 같이 closed 저장 없이 409 `DEADLINE_PASSED`(참여자 등록이 저장하지 않음을 코드·R-13·개발 DB로 확인), 대상 처리는 탈퇴와 공유
+- 이번 구현 판단(R-30): `lockPromiseAsHost` 재사용(`promises`만 잠금), participantId 형식 400을 인증보다 먼저, 처리 순서 2의 요청자 비active는 401, 404는 없음·다른 약속 구분 없음, 응답 participantId는 DB 값, 이미 cancelled면 현재 인원으로 200
+- 문서: member.md MEMBER-API-08 요청 헤더·에러 표·구현 결정, API_CONVENTIONS 5.2 탈퇴·내보내기 행, DECISION_CONFLICTS R-30·A-02 해결
+- 팀 확인 필요: STATE-API-09 5번(마감 경과 closed 저장)과 MEMBER-API-03·08의 차이, C-07, MEMBER-API-07 보안 정보의 "세션 전부 삭제" 문구(07 구현 때)
+- 화면 PR 몫: 내보내기 버튼·명단 화면 없음
 
 ## 완료 이력
 

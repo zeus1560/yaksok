@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { deleteDraftPromise } from "@/lib/member/draft-discard";
+import { cancelParticipant } from "@/lib/member/participant-cancel";
 import type { PromiseSession } from "@/lib/member/session-auth";
 import { expireParticipantSessions } from "@/lib/member/session-expiry";
 import { markPromiseCancelled } from "./cancel-promise";
@@ -74,14 +75,9 @@ export async function withdrawParticipant(auth: PromiseSession): Promise<Withdra
     const promiseStatus = await closeIfDeadlinePassed(tx, auth.promise.id, promise, now);
     const left = { session: { expiresAt: now, now } };
 
-    // 3. 일반 참여자: 본인만 cancelled + 탈퇴 시각, 본인 세션만 만료
+    // 3. 일반 참여자: 본인만 cancelled + 탈퇴 시각, 본인 세션만 만료 (참여자 내보내기와 같은 함수)
     if (me.role !== "host") {
-      await tx.participant.update({
-        where: { id: me.id },
-        data: { status: "cancelled", cancelledAt: now },
-        select: { id: true },
-      });
-      await expireParticipantSessions(tx, { participantId: me.id, now });
+      await cancelParticipant(tx, { participantId: me.id, now });
       return {
         kind: "ok",
         promiseStatus,

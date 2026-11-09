@@ -29,6 +29,8 @@ export type ApiErrorCode =
   | "CAPACITY_BELOW_ACTIVE_COUNT"
   | "CAPACITY_DECREASE_NOT_ALLOWED"
   | "DEADLINE_SHORTEN_NOT_ALLOWED"
+  | "PARTICIPANT_NOT_FOUND"
+  | "CANNOT_REMOVE_SELF"
   | "INTERNAL_ERROR";
 
 export function apiError(
@@ -218,6 +220,15 @@ export function settingsViolation(violation: {
     default:
       return validationFailed(violation.field, violation.message);
   }
+}
+
+// MEMBER-API-08 참여자 내보내기. 대상이 없는 경우와 다른 약속 소속인 경우를 구분하지 않는다
+export function participantNotFound(): Response {
+  return apiError(404, "PARTICIPANT_NOT_FOUND", "참여자를 찾을 수 없습니다.");
+}
+
+export function cannotRemoveSelf(): Response {
+  return apiError(409, "CANNOT_REMOVE_SELF", "방장은 스스로를 내보낼 수 없습니다. 탈퇴를 이용해 주세요.");
 }
 
 export function internalError(): Response {
