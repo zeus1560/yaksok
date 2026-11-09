@@ -2,7 +2,7 @@
 
 ## 상태
 
-검토 중
+완료
 
 ## 스펙
 
@@ -233,3 +233,11 @@
 - 변경: `DELETE /api/v1/promises/[promiseId]/participants/me`(active 참여자 본인, Origin 필수, 본문 없음, no-store, 성공 응답 요청자 쿠키 Max-Age=0), `lib/state/withdraw-participant.ts`(모든 분기 `promise_links` → `promises` `FOR UPDATE`, 잠금 후 `clock_timestamp()`·약속 없음 404·cancelled 409·세션·active 401·최신 role 재확인, draft 방장 폐기(링크 보존)·draft 일반 참여자 403, 마감 지난 collecting closed 먼저 저장, 일반 탈퇴·본인 세션만 만료, 먼저 들어온 active 참여자에게 자동 승계(옛 방장 member·cancelled 먼저), 후임 없으면 약속 취소), 공용화: `lib/member/draft-discard.ts` `deleteDraftPromise`(방장 등록·설정 완료와 공유), `markPromiseCancelled`(취소 API와 공유), `expireParticipantSessions`(`session-expiry.ts`). 문서: state.md STATE-API-08 구현 결정, API_CONVENTIONS 5.2 탈퇴 행, DECISION_CONFLICTS R-28 신설·C-12
 - 검증: Vitest 1380건(이번 44건, 기존 기대값 수정 없음), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 개발 DB 실제 호출 102개 항목 — 네 분기 끝 상태, 탈퇴자 정원·닉네임·로그인·집계 처리, 후임 방장 권한 API 전부, 후임 없는 방장 = 취소 API 끝 상태, 마감 경과 closed 저장, draft 폐기 뒤 링크 재등록, 403·401·404·400·409, 동시성(잠금 대기열)·R-22 점검 표. 브라우저 6개 항목(코드 변경 없음). 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
 - 남은 제한: C-07(탈퇴자 세션 401·로그인 403)·C-12(후임 없는 방장 탈퇴 뒤 `/me` 401) 팀 확인 필요, 후임 방장이 열어 둔 화면은 새로고침해야 방장 버튼이 나타남(화면 PR 몫), 탈퇴 버튼 화면 없음
+
+### 2026-11-09 — 참여자 명단 조회 API (MEMBER-API-06)
+
+- 스펙: `context/features/023-participant-list-api.md`
+- 브랜치: `ahn/feat-명단조회-api` (PR #28 병합)
+- 변경: `GET /api/v1/promises/[promiseId]/participants`(같은 경로 POST 옆에 추가, Origin 검사 없음, no-store, 인증 후 모든 응답 쿠키 갱신), `lib/member/participant-list.ts`(REPEATABLE READ 읽기 트랜잭션 하나·잠금 없음, 약속·세션·참여자 재확인, active 명단 `created_at, id` 순서·`participantId·nickname·role·isMe`만, 제출 여부 비공개, cancelled 409 `PROMISE_CANCELLED` 세션보다 우선, draft는 방장 포함 403). 문서: member.md MEMBER-API-06 허용 상태·에러 표·구현 결정, DECISION_CONFLICTS R-29 신설
+- 검증: Vitest 1412건(이번 32건, POST 기존 26건 수정 없음), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 개발 DB 실제 호출 40개 항목 — 세 상태 200, 탈퇴자 제외·등록순, 승계 후 role, isMe, 미제출자 포함, 제출 여부 없음, GET 전후 행 md5 동일, 마감 지난 collecting 200(DB 그대로), draft 403(방장 포함), 탈퇴자 세션 401, cancelled 409(세션 없이), 403·404·400, no-store. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
+- 남은 제한: C-07(탈퇴자 세션 401) 팀 확인 필요, 명단 화면 없음
