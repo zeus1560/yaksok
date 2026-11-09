@@ -277,7 +277,8 @@ Response Body
 | 400 | INVALID_REQUEST | JSON 파싱 실패, `nickname`·`pin` 누락 또는 문자열이 아님 | 요청 형식이 올바르지 않습니다. |
 | 403 | INVALID_ORIGIN | `Origin` 헤더가 없거나 서비스 도메인과 다름. DB에 아무것도 쓰지 않는다 | 허용되지 않은 요청 출처입니다. |
 | 404 | LINK_NOT_FOUND | 존재하지 않는 토큰 | 유효하지 않은 링크입니다. |
-| 409 | HOST_ALREADY_REGISTERED | 이미 다른 사람이 선점 (MEMBER-02-01) | 이미 다른 분이 약속을 만들었습니다. 본인이 등록했다면 로그인해 주세요. |
+| 409 | HOST_ALREADY_REGISTERED | 이미 다른 사람이 선점 (MEMBER-02-01). 취소된 약속은 제외 | 이미 다른 분이 약속을 만들었습니다. 본인이 등록했다면 로그인해 주세요. |
+| 409 | PROMISE_CANCELLED | 링크의 약속이 취소됨 (STATE-API-09 공통 처리 1, R-25. 2026-11-10 추가) | 취소된 약속입니다. |
 | 410 | LINK_EXPIRED | 기준 시각 + 7일 경과 (MEMBER-01-02) | 만료된 링크입니다. |
 | 422 | VALIDATION_FAILED | 닉네임 길이 위반, 닉네임 이모지, PIN 형식 위반. `details.field`에 `nickname` 또는 `pin` | 닉네임은 2자 이상 12자 이하여야 합니다. |
 
@@ -297,6 +298,7 @@ Response Body
 2. `SELECT ... FROM promise_links WHERE invite_token = $1 FOR UPDATE`. 없으면 404. 판정 시각은 잠금 후 `clock_timestamp()`로 읽는다. 연결된 약속이 있으면 **그 `promises` 행도 `FOR UPDATE`로 잠그고 status·created_at을 다시 읽는다** (MEMBER-API-00 4.1·4.2). 잠금 후 읽은 값으로 MEMBER-01-02 기준 시각 + 7일이 지났으면 410 (기준 시각 선택은 MEMBER-API-01 처리 순서 3번과 같다). 잠금 대기 중에 방장이 설정을 끝냈다면 재조회에서 status가 draft가 아니므로 만료 삭제하지 않는다 (STATE-02-02).
 3. 연결된 `promises` 행 확인.
    - 있고 draft이며 10분 경과 → 세션 → 방장 참여자 → promise 순서로 삭제 후 계속 진행
+   - 있고 cancelled → **409 PROMISE_CANCELLED** (아무것도 바꾸지 않음. 링크 만료 410이 먼저 — 링크 조회와 같은 순서)
    - 있고 그 외 → **409 HOST_ALREADY_REGISTERED**
 4. `promises` 생성 (status = draft, 설정 컬럼은 전부 NULL). `created_at`은 잠금 후 읽은 판정 시각으로 넣어 draft 10분이 잠금 대기만큼 줄지 않게 한다. `promise_link_id` UNIQUE 위반(P2002)도 409로 응답한다.
 5. `participants` 생성 (role = host, status = active, password_hash = hash(pin)).

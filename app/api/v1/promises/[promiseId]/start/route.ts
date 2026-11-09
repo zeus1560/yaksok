@@ -57,6 +57,8 @@ async function handle(
         return reply(promiseNotFound());
       case "cancelled":
         return reply(promiseCancelled());
+      case "unauthenticated":
+        return reply(unauthenticated());
       case "forbidden":
         return reply(forbidden());
       case "invalid_state":

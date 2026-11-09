@@ -272,7 +272,8 @@ describe("submitAvailability (TIME-API-01)", () => {
     expect(sql.join("?")).toMatch(/UPDATE promises SET status = 'closed'/);
     // 트랜잭션 콜백이 예외 없이 끝났다 = 커밋된다
     await expect(transaction.mock.results[0].value).resolves.toEqual(result);
-    expect(tx.participantSession.findUnique).not.toHaveBeenCalled();
+    // 세션·참여자 재확인을 통과한 요청만 closed를 저장한다 (R-32 N-2 — 이전에는 재확인 전에 저장)
+    expect(tx.participantSession.findUnique).toHaveBeenCalledTimes(1);
   });
 
   it("마감 1ms 전이면 제출된다", async () => {
@@ -298,7 +299,8 @@ describe("submitAvailability (TIME-API-01)", () => {
     prepare(row);
     expect(await submitAvailability(AUTH, input(0, [FUTURE_A]))).toEqual({ kind, ...keep });
     expect(calls).toEqual([]);
-    expect(tx.participantSession.findUnique).not.toHaveBeenCalled();
+    // cancelled만 세션 재확인보다 먼저다. 나머지 상태는 재확인 뒤 판정한다 (R-32 N-2)
+    expect(tx.participantSession.findUnique).toHaveBeenCalledTimes(kind === "cancelled" ? 0 : 1);
   });
 
   it("잠금 후 약속이 없으면 not_found, 쿠키는 지운다", async () => {
@@ -332,5 +334,57 @@ describe("submitAvailability (TIME-API-01)", () => {
       kind: "unauthenticated",
       session: { expiresAt: null, now: NOW },
     });
+  });
+});
+
+// 잠금 후 세션·참여자 재확인은 취소 판정 바로 뒤, 상태·마감 판정보다 먼저다 (R-32 N-2, 설정 완료와 같은 순서)
+describe("submitAvailability 재확인 순서 (R-32 N-2)", () => {
+  beforeEach(() => {
+    calls.length = 0;
+    txQueryResults.length = 0;
+    vi.clearAllMocks();
+    transaction.mockImplementation(async (fn: (t: typeof tx) => unknown) => fn(tx));
+  });
+
+  it("잠금 후 세션이 삭제됐으면 마감이 지났어도 제출은 401이고 closed를 저장하지 않는다", async () => {
+    prepare(lockedRow({ voting_deadline_at: NOW }), { sessionMissing: true });
+    expect(await submitAvailability(AUTH, input(0, [FUTURE_A]))).toEqual({
+      kind: "unauthenticated",
+      session: { expiresAt: null, now: NOW },
+    });
+    expect(calls).toEqual([]);
+    expect(tx.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it("잠금 후 참여자가 cancelled면 마감이 지났어도 401이고 closed를 저장하지 않는다", async () => {
+    prepare(lockedRow({ voting_deadline_at: NOW }), { me: { status: "cancelled" } });
+    expect(await submitAvailability(AUTH, input(0, [FUTURE_A]))).toEqual({
+      kind: "unauthenticated",
+      ...keep,
+    });
+    expect(tx.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["마감 경과 collecting", lockedRow({ voting_deadline_at: NOW })],
+    ["closed", lockedRow({ status: "closed" })],
+    ["confirmed", lockedRow({ status: "confirmed" })],
+    ["진행 중 draft", lockedRow({ status: "draft", created_at: new Date(NOW.getTime() - MIN) })],
+    [
+      "10분 지난 draft",
+      lockedRow({ status: "draft", created_at: new Date(NOW.getTime() - 10 * MIN) }),
+    ],
+  ])("로그아웃과 겹친 제출은 쿠키를 다시 심지 않는다: %s → 401·쿠키 삭제", async (_, row) => {
+    prepare(row, { sessionMissing: true });
+    const result = await submitAvailability(AUTH, input(0, [FUTURE_A]));
+    expect(result.kind).toBe("unauthenticated");
+    expect(result.session).toEqual({ expiresAt: null, now: NOW });
+    expect(calls).toEqual([]);
+  });
+
+  it("잠금 후 cancelled 약속은 세션 재확인보다 먼저 cancelled(취소 우선)", async () => {
+    prepare(lockedRow({ status: "cancelled" }), { sessionMissing: true });
+    expect((await submitAvailability(AUTH, input(0, []))).kind).toBe("cancelled");
+    expect(tx.participantSession.findUnique).not.toHaveBeenCalled();
   });
 });

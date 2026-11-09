@@ -5,6 +5,7 @@ import {
   invalidRequest,
   linkExpired,
   linkNotFound,
+  promiseCancelled,
   validationFailed,
 } from "@/lib/api-error";
 import { registerHost } from "@/lib/member/host-registration";
@@ -54,6 +55,7 @@ async function handle(
     const result = await registerHost(inviteToken, { nickname: checked.nickname, pin });
     if (result.kind === "not_found") return linkNotFound();
     if (result.kind === "expired") return linkExpired();
+    if (result.kind === "cancelled") return promiseCancelled();
     if (result.kind === "already_registered") return hostAlreadyRegistered();
 
     const response = Response.json(

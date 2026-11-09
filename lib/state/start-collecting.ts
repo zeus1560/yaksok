@@ -15,6 +15,7 @@ type SessionState = { session: { expiresAt: Date | null; now: Date } };
 export type StartCollectingResult =
   | ({ kind: "not_found" } & SessionState)
   | ({ kind: "cancelled" } & SessionState)
+  | ({ kind: "unauthenticated" } & SessionState)
   | ({ kind: "forbidden" } & SessionState)
   | ({ kind: "invalid_state"; promiseStatus: string } & SessionState)
   | ({ kind: "draft_expired" } & SessionState)
@@ -37,23 +38,38 @@ export async function startCollecting(
     const [promise] = await tx.$queryRaw<PromiseRow[]>`
       SELECT id, status, created_at FROM promises WHERE id = ${auth.promise.id}::uuid FOR UPDATE`;
     const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
-    const keep = { session: { expiresAt: auth.session.expiresAt, now } };
 
     // 인증 뒤 잠금 사이에 다른 요청이 만료 draft를 정리했다. 요청자 세션도 함께 지워졌다
     if (!promise) return { kind: "not_found", session: { expiresAt: null, now } };
-    if (promise.status === "cancelled") return { kind: "cancelled", ...keep };
-
-    const participant = await tx.participant.findUnique({
-      where: { id: auth.participant.id },
-      select: { role: true, status: true },
-    });
-    if (participant?.role !== "host" || participant.status !== "active") {
-      return { kind: "forbidden", ...keep };
+    if (promise.status === "cancelled") {
+      return { kind: "cancelled", session: { expiresAt: auth.session.expiresAt, now } };
     }
+
+    // 잠금 후 세션·참여자·역할 재확인 (close-voting.ts·settings-change.ts와 같은 기준, C-07)
+    // 로그아웃으로 세션 행이 지워졌으면 401 + 쿠키 삭제 — 지워진 토큰으로 쿠키를 다시 심지 않는다 (R-31)
+    const session = await tx.participantSession.findUnique({
+      where: { id: auth.session.id },
+      select: {
+        expiresAt: true,
+        participant: { select: { id: true, promiseId: true, role: true, status: true } },
+      },
+    });
+    if (!session) return { kind: "unauthenticated", session: { expiresAt: null, now } };
+    const current = { session: { expiresAt: session.expiresAt, now } };
+    const me = session.participant;
+    if (
+      session.expiresAt.getTime() <= now.getTime() ||
+      me.status !== "active" ||
+      me.promiseId !== auth.promise.id ||
+      me.id !== auth.participant.id
+    ) {
+      return { kind: "unauthenticated", ...current };
+    }
+    if (me.role !== "host") return { kind: "forbidden", ...current };
 
     // 이미 collecting인 재요청도 409. 성공 여부는 조회 API로 확인한다
     if (promise.status !== "draft") {
-      return { kind: "invalid_state", promiseStatus: promise.status, ...keep };
+      return { kind: "invalid_state", promiseStatus: promise.status, ...current };
     }
 
     if (promise.created_at.getTime() + DRAFT_EXPIRY_MS <= now.getTime()) {
@@ -66,7 +82,7 @@ export async function startCollecting(
       where: { promiseId: promise.id, status: "active" },
     });
     const violation = validateStartSettings(input, { now, activeCount });
-    if (violation) return { kind: "validation_failed", violation, ...keep };
+    if (violation) return { kind: "validation_failed", violation, ...current };
 
     await tx.promise.update({
       where: { id: promise.id },
@@ -103,7 +119,7 @@ export async function startCollecting(
       kind: "ok",
       settings: input,
       session: {
-        expiresAt: requesterRefreshed ? refreshed.expiresAt : auth.session.expiresAt,
+        expiresAt: requesterRefreshed ? refreshed.expiresAt : session.expiresAt,
         now,
       },
     };
