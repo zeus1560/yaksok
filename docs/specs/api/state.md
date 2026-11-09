@@ -1178,6 +1178,15 @@ if (!response.ok) {
 10. 약속이 취소되지 않고 `closed`로 남으면 다음 후보 조회에서 최신 active 참여자 기준으로 다시 계산한다. `confirmed`로 남으면 약속 상태와 `confirmed_start_at`을 유지하고 다음 조회에서 참석자 명단을 갱신한다. 이 경우 참석 가능 인원이 2명 미만이어도 자동 확정 해제·자동 취소하지 않으며 STATE-API-01의 `hostActionRequired`로 방장에게 재조율·취소를 안내한다. 마지막 방장 요청으로 약속 전체를 취소한 분기에는 이 유지 규칙을 적용하지 않는다.
 11. 관련 상태·역할·시각 기록·세션 처리는 같은 트랜잭션으로 커밋하며 하나라도 실패하면 전체 롤백한다. 성공 시 요청 브라우저의 해당 약속 쿠키도 `Max-Age=0`으로 제거하고 `200 OK`를 반환한다. 약속 취소로 전환된 최초 요청에도 성공 결과를 반환하되, 이후 취소된 약속의 동일 API 및 일반 API 요청은 `409 PROMISE_CANCELLED`로 거절한다.
 
+#### **구현 결정 (2026-11-09, DECISION_CONFLICTS R-28)**
+
+- 위 처리 순서의 번호가 깨져 있어(X-11) 3번 안의 "3번 이하"와 9~11번의 "3·5·6번"을 실제 4·6·7번(draft 폐기 뒤 일반 탈퇴·승계·후임 없음)으로 읽었다.
+- 검사 순서: Origin 403 → promiseId 400 → 404 → 409 `PROMISE_CANCELLED` → 401 → 403(다른 약속) → `promise_links` 행 잠금 → `promises` 행 잠금 → 잠금 후 약속 없음 404·cancelled 409·세션·참여자 재확인 401 → 분기. 역할은 잠금 후 다시 읽은 값이다.
+- draft: 현재 active host만 폐기하고 10분이 지났어도 같은 폐기다(410 아님). 삭제는 방장 등록·설정 완료의 10분 지난 draft 정리와 같은 함수(세션 → 참여자 → promise, 링크 보존). draft의 일반 참여자 요청은 403 `FORBIDDEN`.
+- 후임자 없는 방장은 약속 취소(STATE-API-07)와 같은 저장 코드로 약속만 cancelled로 바꾸고 이 약속의 유효 세션을 모두 만료한다. 마감 지난 collecting이면 closed를 거쳐 cancelled.
+- 세션은 아직 유효한 것만 `expires_at`=탈퇴 시각으로 바꾼다(이미 만료된 세션은 원래 시각). 성공 응답은 모두 요청자 쿠키 Max-Age=0, 거절 응답은 잠금 후 다시 읽은 세션 기준으로 쿠키를 갱신한다.
+- 명세 에러 표의 409 `INVALID_PROMISE_STATE`·422 `VALIDATION_FAILED`는 나올 경우가 없다(본문 없음, cancelled 외 네 상태 허용).
+
 #### **보안 정보**
 
 - 약속별 HttpOnly 세션 쿠키 `ys_session_{promiseId}`를 사용하고 서버는 `session_token_hash`로 검증한다.

@@ -1,26 +1,30 @@
-# 현재 기능: 모집 중 설정 변경 API (STATE-API-03)
+# 현재 기능: 본인 탈퇴와 자동 승계 API (STATE-API-08)
 
 ## 상태
 
-완료
+검토 중
 
 ## 스펙
 
-`context/features/021-update-settings-api.md`
+`context/features/022-withdraw-participant-api.md`
 
 ## 목표
 
-현재 active 방장이 모집 중(마감 전) 약속의 정원(증가만)·마감(연장만)·날짜 범위·하루 범위·소요 시간을 바꾼다. 설정 검증·범위 변경 계산·부분 요청 합치기는 020 것을 그대로 쓰고, 잠금·재확인·범위 정리 단계를 재조율과 공유한다. 상태는 collecting 유지, 마감 연장 때만 세션 갱신. API만, 화면·DB 변경 없음.
+active 참여자 본인이 약속에서 나간다. draft 방장은 초안 폐기(링크 보존), 일반 참여자는 탈퇴, 방장은 가장 먼저 들어온 active 참여자에게 자동 승계, 후임이 없으면 약속 취소. 모든 분기에서 링크 → 약속 순서로 잠근다. draft 삭제·약속 취소 저장은 기존 코드와 공유. API만, 화면·DB 변경 없음.
 
 ## 수용 기준
 
-스펙 `context/features/021-update-settings-api.md` AC-1~10 참고.
+스펙 `context/features/022-withdraw-participant-api.md` AC-1~9 참고.
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-설정변경-api` (`main` 1eb0c96에서 생성, 020 PR #25 병합 포함)
-- 시작 시 작업 트리: 깨끗함(`ahn/feat-재조율-api`에서 `main`으로 전환 후 `git pull`). 원격이 사라진 로컬 `ahn/` 브랜치 없음(원격이 남은 로컬 `ahn/` 브랜치 17개는 그대로 둠)
-- 첫 커밋은 020 완료 기록(스펙 020 상태, 완료 이력, feature-list) — 스테이징해 둠
+- 브랜치: `ahn/feat-탈퇴-api` (`main` 90da329에서 생성, 021 PR #26 병합 포함)
+- 시작 시 작업 트리: 깨끗함(`ahn/feat-설정변경-api`에서 `main`으로 전환 후 `git fetch --prune`·`git pull`). 원격이 사라진 로컬 `ahn/` 브랜치 없음(원격이 남은 로컬 `ahn/` 브랜치 18개는 그대로 둠)
+- 첫 커밋은 021 완료 기록(스펙 021 상태, 완료 이력, feature-list) — 스테이징해 둠
+
+## 잠금 순서 점검
+
+`promise_links`를 잠그는 곳은 `lib/member/host-registration.ts`(방장 등록)·`lib/state/start-collecting.ts`(설정 완료)·이번 `lib/state/withdraw-participant.ts`뿐이고 모두 links → promises 순서다. 나머지 쓰기(마감·확정·취소·재조율·설정 변경·참여자 등록·제출)는 `promises`만 잠그고, 링크를 조인하는 쿼리는 `FOR UPDATE OF p`라 링크 행을 잠그지 않는다. `promises`를 먼저 잠근 뒤 링크를 잠그는 경로는 없다.
 
 ## 검증 결과
 
@@ -28,31 +32,52 @@
 
 | 단계 | 명령 | 결과 |
 | --- | --- | --- |
-| RED | `npx vitest run lib/state/update-settings.test.ts` (빈 구현: 약속 행을 잠그고 시각만 읽은 뒤 아무것도 바꾸지 않고 `{ kind: "ok", changeImpact: 전부 false/0 }` 반환. 테스트는 메모리 가짜 DB의 끝 상태(약속 설정·참여자 슬롯·제출·버전·세션 만료)를 본다) | 2건 실패. 「정원을 줄이면 422 CAPACITY_DECREASE_NOT_ALLOWED이고 아무것도 바뀌지 않는다」 `AssertionError: expected { kind: 'ok', …(2) } to match object { kind: 'validation_failed', …(1) }` — `kind` 기대 `"validation_failed"`·실제 `"ok"`, `violation` 없음. 「마감만 연장하면 슬롯·제출·버전은 그대로이고 세션만 새 마감 + 7일로 갱신된다」 `AssertionError: expected { …(11) } to match object { status: 'collecting', …(7) }` — `voting_deadline_at` 기대 `2026-11-09T12:00:00.000Z`(21:00 KST)·실제 `2026-11-09T09:00:00.000Z`(기존 18:00) |
-| GREEN | 같은 명령 | 2건 통과. 재조율 `reopen-promise.test.ts` 33건도 공용 모듈로 옮긴 뒤 그대로 통과 |
-| REFACTOR | `npm run test` | 64 파일, 1336 테스트 통과(기존 1256 + 이번 80: `update-settings` 38, `settings/route` 32, `settings-patch` 10). 기존 테스트 기대값 수정 없음. PowerShell `$env:TZ`로 `UTC`(오프셋 0)·`America/Los_Angeles`(480)에서도 1336건 통과 |
+| RED | `npx vitest run lib/state/withdraw-participant.test.ts` (빈 구현: 링크·약속을 잠그고 시각만 읽은 뒤 아무것도 바꾸지 않고 `{ kind: "ok", promiseStatus: 잠근 상태, participantStatus: "active", 나머지 false/null }` 반환. 테스트는 메모리 가짜 DB의 끝 상태와 응답 값을 본다) | 2건 실패. 「방장이 나가면 가장 먼저 참여한 active 참여자가 방장이 되고 옛 방장은 탈퇴 처리된다」 `AssertionError: expected { kind: 'ok', …(7) } to deeply equal { kind: 'ok', …(7) }` — `hostTransferred` 기대 true·실제 false, `newHostParticipantId` 기대 `"a"`·실제 null, `participantStatus` 기대 `"cancelled"`·실제 `"active"`, `participantCancelledAt` 기대 판정 시각·실제 null, `session.expiresAt` 기대 판정 시각·실제 기존 만료(11-16 18:00). 「후임자가 없는 방장이 나가면 약속이 취소되고 방장 참여자 상태는 그대로다」 같은 메시지 — `promiseStatus` 기대 `"cancelled"`·실제 `"collecting"`, `promiseCancelledAt` 기대 판정 시각·실제 null, `session.expiresAt` 기대 판정 시각·실제 기존 만료 |
+| GREEN | 같은 명령 + 공유 코드를 바꾼 파일의 기존 테스트(`cancel-promise`·`host-registration`·`start-collecting`·`session-expiry`) | 5 파일 61건 통과. 기존 기대값 수정 없음 |
+| REFACTOR | `npm run test` | 66 파일, 1380 테스트 통과(기존 1336 + 이번 44: `withdraw-participant` 25, `participants/me/route` 18, `session-expiry` 1). PowerShell `$env:TZ`로 `UTC`(오프셋 0)·`America/Los_Angeles`(480)에서도 1380건 통과 |
 | | `npm run lint` / `npm run typecheck` | 통과 |
-| | `npm run build` | 통과(3000 포트 비어 있음 확인 후 실행), 라우트 목록에 `/api/v1/promises/[promiseId]/settings` |
+| | `npm run build` | 통과(3000 포트 비어 있음 확인 후 실행), 라우트 목록에 `/api/v1/promises/[promiseId]/participants/me` |
 
-| 개발 DB 실제 호출 (dev 서버, 90개 항목 전부 통과) | 결과 |
+| 개발 DB 실제 호출 (dev 서버, 102개 항목 전부 통과) | 결과 |
 | --- | --- |
-| 준비 | 링크 발급 → 방장 등록 → 모집 시작(11-10~11-12, 09:00~12:00, 60분, 정원 5, 마감 11-09 18:00) → B·C·D 등록 → 방장·B·D 제출(C 미제출) → B 두 번째 세션 만료·D 탈퇴(DB, 08 미구현) |
-| 정원 | 증가 5→8 200(`settings` 전체·`changeImpact` 전부 false/0, 슬롯·제출·버전·세션 그대로, 쿠키 Max-Age = 기존 마감 + 7일), 상태 조회 settings와 응답 settings 동일, 증가 뒤 신규 참여 201. 8→6 422 `CAPACITY_DECREASE_NOT_ALLOWED`, 3 < active 4 → 422 `CAPACITY_BELOW_ACTIVE_COUNT`, 31 → 422 `VALIDATION_FAILED`, 같은 값 200. 422 뒤 약속·참여자·슬롯·세션 그대로 |
-| 마감 | 연장(18:00 → 20:00) 200: 마감만 바뀌고 슬롯·제출·버전 그대로, active 참여자 유효 세션만 새 마감 + 7일(B 만료 세션·D 세션 그대로), 요청자 쿠키도 그 값, 링크 조회 `join`. 단축(17:00) 422 `DEADLINE_SHORTEN_NOT_ALLOWED`, 과거 422 `VALIDATION_FAILED`, 마지막 날 00:00 422, 같은 마감 200(세션 갱신 없음) |
-| 범위 | 날짜 축소(~11-11): 제출 유지, 11-12 슬롯이 지워진 방장만 버전 +1, `removedSlotCount` 1 / 확대(~11-13): 방장·B·C 제출 해제·버전 +1, 슬롯 유지 / 이동(11-11~11-13): 11-10 슬롯 삭제 + 전원 해제 / 하루 범위 축소(10:00~): 방장만 +1 / 하루 범위 확대(~13:00): 전원 해제 / 소요 시간만: 슬롯·제출·버전 그대로, `candidateRecalculationRequired`만 true / 같은 범위 재전송: 전부 false·0. 모든 경우 collecting 유지, 탈퇴 D 그대로, 세션 갱신 없음 |
-| 변경 뒤 제출 | 확대 뒤 B 옛 버전 제출 409 `AVAILABILITY_VERSION_CONFLICT`(현재 2·미제출), `/me` 제출 시각 null. 축소 뒤 버전 그대로인 B가 범위 밖 칸 포함 제출 200(`droppedSlotCount` 1) |
-| 상태·오류 | 마감 경과 → 409 `INVALID_PROMISE_STATE`(`promiseStatus` closed, `allowedStates` collecting), DB closed 저장, 정원·슬롯 그대로. closed·confirmed·draft 409, cancelled 409 `PROMISE_CANCELLED`(쿠키 없음·만료 쿠키 모두), 일반 참여자 403 `FORBIDDEN`(쿠키 갱신), Origin 없음 403 `INVALID_ORIGIN`(no-store), 쿠키 없음 401, 없는 약속 404, 빈 요청·모르는 필드만·부분 `dateRange`·JSON 아님·promiseId 형식 400. 종료 2027-02-10·보낸 시작일 어제·소요 시간 > 하루 범위·범위를 마감 날짜까지 줄임 422, 종료 2027-02-09 200(R-07), `dateRange` 생략 + 지난 기존 시작일 200 |
-| 동시성 | 다른 연결이 약속 행을 잠근 동안 0.5초 간격으로 보낸 뒤 해제: 제출(11-12 포함) → 축소는 200·200, 방장·B의 11-12 슬롯 정리(`removedSlotCount` 2), B 버전 2→3·제출 유지 / 축소 → B 옛 버전 제출 200(11-12 제외) / 축소 → 방장 옛 버전 제출 409(현재 2). 같은 방장 병렬: 정원 8 → 6은 200·422(최종 8), 마감 연장 + 하루 범위 축소는 둘 다 200·둘 다 반영(두 번째 응답 settings에 새 마감), 같은 축소 동시 3건은 200 3건·`removedSlotCount` 합 1·버전 한 번만 |
-| 재조율 회귀 | 020 확인 스크립트(66개 항목)를 그대로 다시 실행해 전부 통과(오늘 날짜가 바뀌어 3개월 초과 값만 2027-02-09 → 02-10) |
-| 브라우저 (Playwright + 로컬 Chromium 1243, 1280px, 코드 변경 없음, 32개 항목) | ① 화면을 띄운 채 확대: 다음 폴링에서 "다른 곳에서 내용이 바뀌었어요" 표시, 로컬 입력 삭제, 11/13 열 표시, 서버 값으로 다시 그림, 제출 바 "제출하기" ② 하루 범위 축소로 B의 서버 슬롯이 지워짐(버전 +1): 같은 안내·로컬 입력 삭제, 10:00 줄 없음, "다시 제출" 유지 ③ 버전 그대로인 B가 로컬 입력(범위 밖이 될 11-10 09:00 포함)을 가진 채 하루 범위 축소(09:30~): 안내 없이 새 범위로 다시 그림, 로컬 입력은 그대로 남음(범위 안 11-12 11:00은 가능 표시), **제출 바 "선택 4칸"(화면에 보이는 가능 칸은 3칸)**, 그대로 제출하면 "범위 밖 시간은 제외하고 저장했어요" 표시·저장 3칸(012에서 확인하지 못한 안내) ④ 마감 연장 + 소요 시간 90분: 머리글 "1시간 → 1시간 30분", "마감 11/9(월) 18:00 → 20:00", 남은 시간도 바뀜, 안내 없음 |
-| 정리 | 설정 변경 확인 링크 23·약속 23·참여자 90·세션 112·슬롯 143행, 재조율 회귀 링크 21·약속 21, 브라우저 확인 링크 5·약속 5 삭제. 세 스크립트 모두 6개 테이블(`_prisma_migrations` 포함) 행 수·md5가 시작 상태와 동일. dev 서버 종료, 3000 포트·yaksok `next` 프로세스 없음(다른 프로젝트 `hintcheck`의 `next dev`는 그대로 둠) |
+| 일반 참여자 (collecting) | 200 7개 필드·`participantCancelledAt` = DB `cancelled_at`(초 단위 +09:00)·쿠키 Max-Age=0(값 비움)·no-store. DB role member·cancelled·cancelled_at, 닉네임·PIN 해시·슬롯·제출 시각·버전 그대로, 본인 세션 2개만 `expires_at`=탈퇴 시각, 다른 사람 세션·약속 collecting 그대로 |
+| 탈퇴자 처리 (처음 확인) | 정원 3/3에서 409 `PROMISE_FULL` → 탈퇴 뒤 신규 참여 201. 탈퇴자 닉네임 409 `NICKNAME_TAKEN`, 로그인 403 `PARTICIPANT_CANCELLED`, 탈퇴자 세션으로 상태 조회·`/me`·현황 조회 401(두 기기 모두). **`/me`의 `status=cancelled` 응답(R-17)은 나오지 않음(401)**. 현황 조회 총 인원·목록에서 제외 |
+| 방장 승계 (collecting) | 200 `hostTransferred` true, 후임 = 먼저 들어온 미제출 참여자(제출한 사람보다 우선). 옛 방장 member·cancelled·cancelled_at·기록 보존, 후임 host·active·cancelled_at NULL, 방장 1명. 옛 방장 세션 2개만 만료, 후임·다른 참여자 세션 그대로 |
+| 후임 방장 (처음 확인) | 기존 세션 그대로 유효, `/me` role=host·active·`canManagePromise` true. 설정 변경·마감·재조율(closed)·제출·마감·확정·재조율(confirmed)·취소 모두 200. 후보 조회에서 옛 방장 슬롯 제외(09:00 후보 2명). 옛 방장 세션 401, 로그인 403 `PARTICIPANT_CANCELLED` |
+| confirmed 일반 탈퇴 | 200 `promiseStatus` confirmed, `confirmed_start_at` 그대로, 상태 조회 가능 인원 2 → 1·**`hostActionRequired` true** |
+| 후임 없음 (confirmed) | 200 `promiseStatus` cancelled·`participantStatus` active·`promiseCancelledAt` = DB `cancelled_at`. 약속 cancelled + cancelled_at, `confirmed_start_at` 보존, 방장 행 전체 그대로(host·active·NULL), 탈퇴자 행 그대로, 방장 세션 2개 = 취소 시각, 이미 만료된 탈퇴자 세션 시각 그대로. 세션 없이 409 `PROMISE_CANCELLED`(쿠키 없음), 재요청 409, 링크 `cancelled`, `/me` 401(C-12와 같음), 로그인 409 |
+| 취소 API와 비교 (closed) | 후임 없는 방장 탈퇴와 취소 API의 약속·참여자·세션 끝 상태 동일 |
+| 마감 지난 collecting | (마감을 DB로 1분 전으로) 일반 탈퇴 200 `promiseStatus` closed·DB closed 저장, 이어서 후임 없는 방장 → cancelled |
+| draft | 방장(세션 2개) 200 `{ result: "draft_discarded", promiseId: null }`·쿠키 Max-Age=0. 약속·방장·세션 물리 삭제, 링크 행 값 그대로, 링크 조회 `register_host`, 같은 쿠키 재요청 404, 다른 사람 방장 등록 201(새 약속), 옛 promiseId로 탈퇴 404(새 약속 그대로 draft). 일반 참여자(DB로 넣음) 403 `FORBIDDEN`·쿠키 갱신·아무것도 안 바뀜. 10분 지난 draft 방장 200 폐기 → 다시 `register_host` |
+| 오류 | Origin 없음 403 `INVALID_ORIGIN`(no-store, 변경 없음), 쿠키 없음 401, 없는 약속 404, promiseId 형식 400, 다른 약속 세션 토큰 403 `FORBIDDEN` |
+| 동시성 (외부 연결이 약속 행을 잠근 채 요청을 차례로 대기열에 넣고 `pg_stat_activity`로 잠금 대기를 확인한 뒤 해제) | 방장 탈퇴 → 그 방장 확정: 200(승계)·401, closed 그대로 / 확정 → 탈퇴: 200·200(confirmed 유지·승계). 일반 탈퇴 → 확정(후보 가능 2명): 200·422 `INVALID_CONFIRMATION_CANDIDATE`, closed 그대로 / 확정 → 탈퇴: 200·200, `hostActionRequired` true. 방장 탈퇴(후임 없음) → 참여자 등록: 200 cancelled·409 `PROMISE_CANCELLED`, 참여자 추가 없음 / 등록 → 탈퇴: 201·200(후임 = 신규). 같은 사람 2건: 일반 동시(`Promise.all`) 200·401·탈퇴 기록 1건, 방장(대기열) 200·401·승계 1번, draft 방장 동시 200·404 |
+| 잠금 대기 중 탈퇴 (R-22 점검, 고치지 않음) | 아래 표 |
+| 정리 | 확인 링크 25·약속 22·참여자 47·세션 50·슬롯 37행 삭제(브라우저 확인 링크 2·약속 2 별도 삭제). 6개 테이블(`_prisma_migrations` 포함) 행 수·md5가 시작 상태와 동일(두 번 비교). dev 서버 종료, 3000 포트·yaksok `next` 프로세스 없음(다른 프로젝트 `hintcheck`의 `next dev`는 그대로 둠) |
+
+탈퇴가 먼저 잠금을 잡고, 뒤 요청은 탈퇴 커밋 전에 인증을 통과해 잠금을 기다린 경우:
+
+| 뒤 요청 | 앞선 탈퇴 | 실제 응답 |
+| --- | --- | --- |
+| STATE-API-02 설정 완료 | draft 방장 나가기(폐기) | 404 `PROMISE_NOT_FOUND` (02의 cancelled 참여자 403 경로는 draft에 탈퇴자가 생기지 않아 API로는 도달하지 않음) |
+| STATE-API-03 설정 변경 | 방장 탈퇴(승계) | 401 `UNAUTHENTICATED` |
+| STATE-API-04 마감 | 방장 탈퇴(승계) | 401 `UNAUTHENTICATED` |
+| STATE-API-05 확정 | 방장 탈퇴(승계) | 401 `UNAUTHENTICATED` |
+| STATE-API-06 재조율 | 방장 탈퇴(승계) | 401 `UNAUTHENTICATED` |
+| STATE-API-07 취소 | 방장 탈퇴(승계) | 401 `UNAUTHENTICATED` |
+| TIME-API-01 제출 | 일반 참여자 탈퇴 | 401 `UNAUTHENTICATED`(탈퇴자 슬롯 저장 없음) |
+| STATE-API-04 마감(후임자 본인, 승계 전 인증) | 방장 탈퇴(승계) | 200 closed (잠금 후 최신 role) |
+
+| 브라우저 (Playwright + 로컬 Chromium 1243, 1280px, 코드 변경 없음, 6개 항목) | 결과 |
+| --- | --- |
+| 후임 방장 화면 | collecting(시간 입력)·closed(후보) 화면을 엠원으로 연 채 방장 탈퇴 → 엠원 승계. **12초(폴링 2회 이상) 뒤에도 방장 버튼(「응답 마감하기」·「이 시간으로 확정」) 없음, 새로고침하면 나타남.** 원인(코드): `components/result/promise-room.tsx`는 상태 조회만 폴링하고 `/me`는 진입 때와 403 응답 때만 다시 부른다 |
 
 ## 메모
 
-- 사용자 지시·명세로 정한 것: 정원은 증가만·마감은 연장만(TIME-14-03·04 ❗미결, 팀 확인 필요), 날짜 범위는 R-07(노션 "최대 90일" 아님), `dateRange`를 보낸 경우에만 시작 날짜 하한 검사
-- 이번 구현 판단(R-27): 빈 요청 400, 공통 규칙 → 모집 중 규칙 순서(정원 < active는 `CAPACITY_BELOW_ACTIVE_COUNT` — 03 에러 표에 없던 코드), 같은 정원·같은 마감은 변경 없음으로 허용, `rangeChanged`·`candidateRecalculationRequired` 정의, API_CONVENTIONS 5.2 마감 연장 행 수정
-- 재조율 코드 변경: `reopen-promise.ts`의 잠금·재확인·마감 경과 closed 저장·설정 합치기·범위 정리·설정 저장을 `settings-change.ts`로 옮김(같은 SQL·같은 순서). 단위 33건·개발 DB 66개 항목 그대로 통과
-- 화면 PR 몫(보고만): 범위가 줄어도 버전이 그대로인 참여자의 로컬 입력이 남고 화면 밖 칸이 "선택 N칸"에 세어짐. 범위를 줄여 기존 마감이 새 마지막 날 00:00 이후가 되는 축소는 모집 중에 할 수 없음(마감 단축 불가)
+- 사용자 지시·명세로 정한 것: 모든 분기 링크 → 약속 잠금, draft 삭제는 방장 등록과 같은 함수, 후임 없음은 취소 API와 같은 결과(취소 API 동작 유지), 한 참여자 세션 만료 함수는 `session-expiry.ts`
+- 이번 구현 판단(R-28): 10분 지난 draft 방장도 폐기(410 아님), draft 일반 참여자 403 `FORBIDDEN`, 처리 순서 번호 해석(X-11), 이미 만료된 세션 시각은 그대로(R-25와 같은 기준)
+- 공유 코드 변경: `deleteDraftPromise`(방장 등록·설정 완료가 사용, 같은 Prisma 호출·같은 순서), `markPromiseCancelled`(취소 API가 사용, 같은 SQL), `closeIfDeadlinePassed` 인자 타입만 넓힘. 기존 테스트 기대값 수정 없음
+- 팀 확인 필요(기존 미결): C-07(탈퇴자 세션 401·로그인 403), C-12(후임 없는 방장 탈퇴 뒤 `/me` 401)
+- 화면 PR 몫(보고만): 후임 방장이 열어 둔 화면은 새로고침해야 방장 버튼이 나타남. 탈퇴 버튼 없음
 
 ## 완료 이력
 

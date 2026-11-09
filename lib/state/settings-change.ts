@@ -76,7 +76,7 @@ export async function lockPromiseAsHost(tx: Tx, auth: PromiseSession): Promise<H
 export async function closeIfDeadlinePassed(
   tx: Tx,
   promiseId: string,
-  promise: LockedSettingsPromise,
+  promise: Pick<LockedSettingsPromise, "status" | "voting_deadline_at">,
   now: Date,
 ): Promise<string> {
   if (
