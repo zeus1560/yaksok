@@ -706,7 +706,7 @@ Response Body
 - 도메인: MEMBER
 - 관련 규칙: MEMBER-07-02, MEMBER-08-01, MEMBER-08-02, MEMBER-08-03, MEMBER-03-01
 - 권한: **등록한 참여자만** (세션 필요). 링크만 가진 비참여자는 볼 수 없다 (MEMBER-08-01)
-- 허용 상태: collecting / closed / confirmed. draft는 403, cancelled는 409
+- 허용 상태: collecting / closed / confirmed. draft는 403(방장 포함), cancelled는 409 `PROMISE_CANCELLED`(세션보다 우선)
 - 상태 전환: 없음
 - 동시성: 잠금 불필요 (읽기 전용)
 - TBD: MEMBER-08-01 — collecting 이후 비참여자 공개 범위가 본문 미작성. 여기서는 **비참여자 비공개**로 두었다
@@ -773,12 +773,23 @@ Response Body
 
 | HTTP 상태 | code | 발생 원인 | message 예시 |
 | --- | --- | --- | --- |
-| 401 | UNAUTHENTICATED | 등록하지 않은 사람의 요청, 또는 탈퇴로 세션이 즉시 만료된 경우 (MEMBER-08-01) | 참여 등록 후 볼 수 있습니다. |
-| 403 | FORBIDDEN | draft 상태 — 방장 외에는 명단·정원을 보여주지 않는다 (MEMBER-03-01) | 방장이 약속을 설정 중입니다. |
+| 400 | INVALID_REQUEST | promiseId 형식 오류 | 요청 형식이 올바르지 않습니다. |
+| 401 | UNAUTHENTICATED | 등록하지 않은 사람의 요청(쿠키 없음·위조·만료), 또는 탈퇴로 세션이 즉시 만료된 경우 (MEMBER-08-01, C-07) | 참여 등록 후 볼 수 있습니다. |
+| 403 | FORBIDDEN | draft 상태(방장 포함, MEMBER-03-01), 또는 다른 약속의 세션 | 방장이 약속을 설정 중입니다. |
 | 404 | PROMISE_NOT_FOUND | 존재하지 않는 promiseId | 약속을 찾을 수 없습니다. |
-| 409 | INVALID_PROMISE_STATE | cancelled 약속 (STATE-10-01) | 취소된 약속입니다. |
+| 409 | PROMISE_CANCELLED | cancelled 약속 (STATE-10-01). 세션 검사보다 먼저 판정한다 | 취소된 약속입니다. |
+
+> 2026-11-09 구현 반영(R-29): 409 코드를 `INVALID_PROMISE_STATE`에서 다른 세션 API와 같은 `PROMISE_CANCELLED`로 바꿨다(R-11). draft는 방장도 403이다.
 
 ### 처리 순서 / 비고
+
+#### **구현 결정 (2026-11-09, DECISION_CONFLICTS R-29)**
+
+- 검사 순서: promiseId 400 → 404 → 409 `PROMISE_CANCELLED`(세션보다 우선) → 401 → 403(다른 약속) → 트랜잭션 안 약속 재확인(사라짐 404·cancelled 409) → 세션·참여자 재확인 401 → draft 403. 공통 인증 모듈 `session-auth.ts` 순서를 따른다.
+- REPEATABLE READ 읽기 트랜잭션 하나에서 약속·세션·참여자를 읽고 잠그지 않는다. DB를 바꾸지 않는다. 마감 지난 collecting은 다른 GET처럼 closed로 볼 수 있지만, 두 상태 모두 허용이고 응답에 상태가 없어 따로 계산하지 않는다.
+- 명단: `status='active'`만, `created_at ASC, id ASC`. `role`은 트랜잭션에서 읽은 최신 값이라 방장 승계가 반영된다. `currentParticipantCount`는 배열 길이다.
+- draft는 10분 경과와 관계없이 방장을 포함해 403 `FORBIDDEN`이며 삭제하지 않는다. 방장의 draft 정보는 STATE-API-01로 본다.
+- 인증 성공 뒤 모든 응답에 쿠키를 다시 보낸다(인증 뒤 세션이 사라지면 Max-Age=0). 모든 응답 `Cache-Control: no-store`. GET이라 Origin을 검사하지 않는다.
 
 #### 보안 정보
 
