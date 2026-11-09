@@ -1,6 +1,7 @@
 import {
   accessPeriodExpired,
   draftExpired,
+  forbidden,
   internalError,
   invalidCredentials,
   invalidOrigin,
@@ -8,9 +9,12 @@ import {
   participantCancelled,
   promiseCancelled,
   promiseNotFound,
+  unauthenticated,
   validationFailed,
 } from "@/lib/api-error";
 import { loginParticipant } from "@/lib/member/login";
+import { logoutSession, parseAllDevices } from "@/lib/member/logout";
+import { isPromiseIdFormat } from "@/lib/member/session-auth";
 import { validateNickname } from "@/lib/member/nickname";
 import { isPinFormat } from "@/lib/member/pin";
 import { sessionCookie } from "@/lib/member/session";
@@ -82,6 +86,44 @@ async function handle(
     // 연결 문자열이 섞일 수 있는 원문 메시지 대신 오류 종류만 남긴다
     const code = (error as { code?: unknown } | null)?.code;
     console.error("재인증 실패", error instanceof Error ? error.name : "unknown", code ?? "");
+    return internalError();
+  }
+}
+
+// MEMBER-API-07 로그아웃. 탈퇴가 아니다 — 세션 행만 지운다. 본문은 읽지 않는다
+// 검사 순서: Origin 403 → promiseId 400 → allDevices 400 → 404 → 쿠키 없음 401 → 다른 약속 세션 403 → 삭제 204
+// 취소된 약속·만료 세션·행 없음도 204와 쿠키 제거다(R-11 예외, DECISION_CONFLICTS R-31)
+export async function DELETE(
+  request: Request,
+  ctx: RouteContext<"/api/v1/promises/[promiseId]/auth/session">,
+) {
+  return noStore(await handleLogout(request, ctx));
+}
+
+async function handleLogout(
+  request: Request,
+  ctx: RouteContext<"/api/v1/promises/[promiseId]/auth/session">,
+): Promise<Response> {
+  if (!isAllowedOrigin(request)) return invalidOrigin();
+
+  const { promiseId } = await ctx.params;
+  if (!isPromiseIdFormat(promiseId)) return invalidRequest();
+  const allDevices = parseAllDevices(new URL(request.url).searchParams);
+  if (allDevices === null) return invalidRequest();
+
+  try {
+    const result = await logoutSession(request, promiseId, { allDevices });
+    if (result.kind === "not_found") return promiseNotFound();
+    if (result.kind === "unauthenticated") return unauthenticated();
+    if (result.kind === "forbidden") return forbidden();
+
+    const response = new Response(null, { status: 204 });
+    response.headers.set("Set-Cookie", sessionCookie(result.promiseId, "", 0));
+    return response;
+  } catch (error) {
+    // 연결 문자열이 섞일 수 있는 원문 메시지 대신 오류 종류만 남긴다
+    const code = (error as { code?: unknown } | null)?.code;
+    console.error("로그아웃 실패", error instanceof Error ? error.name : "unknown", code ?? "");
     return internalError();
   }
 }
