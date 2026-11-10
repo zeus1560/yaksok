@@ -193,9 +193,19 @@ describe("GET /api/v1/promises/[promiseId]/participants (MEMBER-API-06)", () => 
   const CLEAR_COOKIE = `${COOKIE_PREFIX}${COOKIE_ATTRS}; Max-Age=0`;
   const keepSession = { expiresAt: AUTH.session.expiresAt, now: NOW };
   const PEOPLE = [
-    { participantId: "b9a4c7e1-0000-4000-8000-000000000001", nickname: "승주", role: "host", isMe: false },
+    {
+      participantId: "b9a4c7e1-0000-4000-8000-000000000001",
+      nickname: "승주",
+      role: "host",
+      isMe: false,
+    },
     { participantId: "pt-me", nickname: "혜승", role: "member", isMe: true },
-    { participantId: "7f20a3dd-0000-4000-8000-000000000003", nickname: "철수", role: "member", isMe: false },
+    {
+      participantId: "7f20a3dd-0000-4000-8000-000000000003",
+      nickname: "철수",
+      role: "member",
+      isMe: false,
+    },
   ];
 
   function get(promiseId = PROMISE_ID, headers: Record<string, string> = {}) {

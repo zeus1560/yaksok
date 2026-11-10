@@ -42,19 +42,19 @@
 
 ## 실패 처리 (에러 코드 기준 순수 함수 `lib/manage/failure.ts`)
 
-| 요청 | 코드 | 처리 |
-| --- | --- | --- |
-| 설정 변경·재조율 | 422 `VALIDATION_FAILED`(field) | 해당 입력란에 서버 메시지 |
-| 설정 변경 | 422 `CAPACITY_DECREASE_NOT_ALLOWED`·`DEADLINE_SHORTEN_NOT_ALLOWED`·`CAPACITY_BELOW_ACTIVE_COUNT` | 정원·마감 입력란 안내 + 상태 다시 조회 |
-| 재조율 | 422 `CAPACITY_BELOW_ACTIVE_COUNT` | 정원 입력란 안내 + 명단 다시 조회 |
-| 설정 변경·재조율·취소·내보내기 | 409 `INVALID_PROMISE_STATE` | 안내 + 상태 다시 조회(폼 닫음) |
-| 공통 쓰기 | 403 `FORBIDDEN` | `/me` 다시 조회 |
-| 취소 | 409 `PROMISE_CANCELLED` | **성공과 같음**(응답 유실 재요청, R-25) → 링크 재조회 |
-| 내보내기 | 409 `CANNOT_REMOVE_SELF`·`DEADLINE_PASSED`, 404 `PARTICIPANT_NOT_FOUND` | 안내 + 명단·상태 다시 조회 |
-| 명단 조회 | 403 `FORBIDDEN` | 링크 재조회(다른 약속 세션) |
-| 공통 | `UNAUTHENTICATED`·`PROMISE_CANCELLED`(취소 외)·`PROMISE_NOT_FOUND`·`PROMISE_NOT_OPEN`·`DRAFT_EXPIRED` | 링크 재조회 |
-| 공통 | `INVALID_ORIGIN`·5xx·네트워크·알 수 없는 코드 | 화면 유지, 다시 시도 안내 |
-| 설정 변경·재조율 | 400 `INVALID_REQUEST` | 입력 확인 안내(다시 시도) |
+| 요청                           | 코드                                                                                                  | 처리                                                  |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| 설정 변경·재조율               | 422 `VALIDATION_FAILED`(field)                                                                        | 해당 입력란에 서버 메시지                             |
+| 설정 변경                      | 422 `CAPACITY_DECREASE_NOT_ALLOWED`·`DEADLINE_SHORTEN_NOT_ALLOWED`·`CAPACITY_BELOW_ACTIVE_COUNT`      | 정원·마감 입력란 안내 + 상태 다시 조회                |
+| 재조율                         | 422 `CAPACITY_BELOW_ACTIVE_COUNT`                                                                     | 정원 입력란 안내 + 명단 다시 조회                     |
+| 설정 변경·재조율·취소·내보내기 | 409 `INVALID_PROMISE_STATE`                                                                           | 안내 + 상태 다시 조회(폼 닫음)                        |
+| 공통 쓰기                      | 403 `FORBIDDEN`                                                                                       | `/me` 다시 조회                                       |
+| 취소                           | 409 `PROMISE_CANCELLED`                                                                               | **성공과 같음**(응답 유실 재요청, R-25) → 링크 재조회 |
+| 내보내기                       | 409 `CANNOT_REMOVE_SELF`·`DEADLINE_PASSED`, 404 `PARTICIPANT_NOT_FOUND`                               | 안내 + 명단·상태 다시 조회                            |
+| 명단 조회                      | 403 `FORBIDDEN`                                                                                       | 링크 재조회(다른 약속 세션)                           |
+| 공통                           | `UNAUTHENTICATED`·`PROMISE_CANCELLED`(취소 외)·`PROMISE_NOT_FOUND`·`PROMISE_NOT_OPEN`·`DRAFT_EXPIRED` | 링크 재조회                                           |
+| 공통                           | `INVALID_ORIGIN`·5xx·네트워크·알 수 없는 코드                                                         | 화면 유지, 다시 시도 안내                             |
+| 설정 변경·재조율               | 400 `INVALID_REQUEST`                                                                                 | 입력 확인 안내(다시 시도)                             |
 
 ## 수용 기준
 

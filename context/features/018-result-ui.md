@@ -35,16 +35,16 @@
 
 ## 실패 처리 (에러 코드 기준 순수 함수 `lib/result/failure.ts`)
 
-| 요청 | 코드 | 처리 |
-| --- | --- | --- |
-| 마감 | 200 | 바로 후보 화면 + 상태 다시 조회 |
-| 마감·확정 | 409 `INVALID_PROMISE_STATE` | 상태 다시 조회(이미 확정·응답 유실 재시도 → 결과 화면) |
-| 마감·확정 | 403 `FORBIDDEN` | `/me` 다시 조회(실패하면 링크 재조회), 안내 |
-| 확정 | 422 `INVALID_CONFIRMATION_CANDIDATE`·`VALIDATION_FAILED` | "후보가 바뀌었어요" + 후보 처음부터 다시 조회 |
-| 후보 조회 | 409 `INVALID_PROMISE_STATE` | 상태 다시 조회 |
-| 후보 조회 | 403 `FORBIDDEN` | 링크 재조회(다른 약속 세션) |
-| 공통 | `UNAUTHENTICATED`·`PROMISE_CANCELLED`·`PROMISE_NOT_FOUND`·`INVALID_REQUEST`·`PROMISE_NOT_OPEN`·`DRAFT_EXPIRED` | 링크 재조회 |
-| 공통 | `INVALID_ORIGIN`·5xx·네트워크·알 수 없는 코드 | 화면 유지, 다시 시도 안내 |
+| 요청      | 코드                                                                                                           | 처리                                                   |
+| --------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| 마감      | 200                                                                                                            | 바로 후보 화면 + 상태 다시 조회                        |
+| 마감·확정 | 409 `INVALID_PROMISE_STATE`                                                                                    | 상태 다시 조회(이미 확정·응답 유실 재시도 → 결과 화면) |
+| 마감·확정 | 403 `FORBIDDEN`                                                                                                | `/me` 다시 조회(실패하면 링크 재조회), 안내            |
+| 확정      | 422 `INVALID_CONFIRMATION_CANDIDATE`·`VALIDATION_FAILED`                                                       | "후보가 바뀌었어요" + 후보 처음부터 다시 조회          |
+| 후보 조회 | 409 `INVALID_PROMISE_STATE`                                                                                    | 상태 다시 조회                                         |
+| 후보 조회 | 403 `FORBIDDEN`                                                                                                | 링크 재조회(다른 약속 세션)                            |
+| 공통      | `UNAUTHENTICATED`·`PROMISE_CANCELLED`·`PROMISE_NOT_FOUND`·`INVALID_REQUEST`·`PROMISE_NOT_OPEN`·`DRAFT_EXPIRED` | 링크 재조회                                            |
+| 공통      | `INVALID_ORIGIN`·5xx·네트워크·알 수 없는 코드                                                                  | 화면 유지, 다시 시도 안내                              |
 
 ## 수용 기준
 

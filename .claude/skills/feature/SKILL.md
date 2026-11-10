@@ -9,14 +9,14 @@ description: 스펙과 현재 작업 기록을 기준으로 기능 불러오기,
 
 요청한 동작의 지침만 읽고 수행한다. 여러 동작을 함께 요청했다면 그 범위 안에서 이어서 진행한다. 동작이 없으면 아래 사용법을 안내한다.
 
-| 동작 | 별칭 | 지침 |
-| --- | --- | --- |
-| 불러오기 | `load` | [기능 불러오기](actions/load.md) |
-| 시작 | `start` | [구현 시작](actions/start.md) |
-| 검토 | `review` | [요구사항 검토](actions/review.md) |
-| 테스트 | `test` | [검증](actions/test.md) |
-| 설명 | `explain` | [구현 설명](actions/explain.md) |
-| 완료 | `complete` | [완료 기록](actions/complete.md) |
+| 동작     | 별칭       | 지침                               |
+| -------- | ---------- | ---------------------------------- |
+| 불러오기 | `load`     | [기능 불러오기](actions/load.md)   |
+| 시작     | `start`    | [구현 시작](actions/start.md)      |
+| 검토     | `review`   | [요구사항 검토](actions/review.md) |
+| 테스트   | `test`     | [검증](actions/test.md)            |
+| 설명     | `explain`  | [구현 설명](actions/explain.md)    |
+| 완료     | `complete` | [완료 기록](actions/complete.md)   |
 
 ```text
 /feature 불러오기 001-erd-schema.md

@@ -80,20 +80,20 @@
 
 2026-11-04 구현·검증, 판단 1~3·scrypt N=2^15·NFC 정규화 승인 후 완료
 
-| 수용 기준 | 결과 | 근거 |
-| --- | --- | --- |
-| AC-1 | 충족 | `route.test.ts` Origin 없음·다른 도메인 403, 등록 시도 없음 / curl 403 |
-| AC-2 | 충족 | `route.test.ts` JSON 파싱 실패·누락·숫자 타입·null 본문 400 |
-| AC-3 | 충족 | `nickname.test.ts` 경계·trim·조합형 NFC·NFKC 미적용·이모지 / curl 조합형 "가나" → 응답 완성형(U+AC00 U+B098) |
-| AC-4 | 충족 | `pin.test.ts` 형식, `route.test.ts` 422 `details.field` |
-| AC-5 | 충족 | `host-registration.test.ts` SQL 순서(링크·약속 `FOR UPDATE` → `clock_timestamp()`), `resolveLinkStatus` 재사용 |
-| AC-6 | 충족 | 단위 테스트 / curl 8일 지난 링크 410, 없는 토큰 404 |
-| AC-7 | 충족 | 삭제 순서 단위 테스트 / 개발 DB에서 20분 지난 draft 재등록 → 이전 약속·방장·세션 삭제 |
-| AC-8 | 충족 | 단위 테스트(진행 중 draft·4개 상태·P2002) / 개발 DB 병렬 2건 → 201 1건·409 1건 |
-| AC-9 | 충족 | 개발 DB에 세션 해시 UNIQUE 위반 주입 → 약속·참여자 0건 |
-| AC-10 | 충족 | `pin.test.ts` 왕복·salt / 개발 DB 저장값 `scrypt$32768$8$1$…`, `verifyPin` 확인 |
-| AC-11 | 충족 | `session.test.ts` / curl 쿠키 속성, DB 해시 64자·24시간 |
-| AC-12 | 충족 | `route.test.ts` 본문 6개 필드·`+09:00` / curl 201 본문 |
-| AC-13 | 충족 | `route.test.ts` 500 응답·로그에 PIN·원문 없음 / dev 서버 로그 확인 |
+| 수용 기준 | 결과 | 근거                                                                                                           |
+| --------- | ---- | -------------------------------------------------------------------------------------------------------------- |
+| AC-1      | 충족 | `route.test.ts` Origin 없음·다른 도메인 403, 등록 시도 없음 / curl 403                                         |
+| AC-2      | 충족 | `route.test.ts` JSON 파싱 실패·누락·숫자 타입·null 본문 400                                                    |
+| AC-3      | 충족 | `nickname.test.ts` 경계·trim·조합형 NFC·NFKC 미적용·이모지 / curl 조합형 "가나" → 응답 완성형(U+AC00 U+B098)   |
+| AC-4      | 충족 | `pin.test.ts` 형식, `route.test.ts` 422 `details.field`                                                        |
+| AC-5      | 충족 | `host-registration.test.ts` SQL 순서(링크·약속 `FOR UPDATE` → `clock_timestamp()`), `resolveLinkStatus` 재사용 |
+| AC-6      | 충족 | 단위 테스트 / curl 8일 지난 링크 410, 없는 토큰 404                                                            |
+| AC-7      | 충족 | 삭제 순서 단위 테스트 / 개발 DB에서 20분 지난 draft 재등록 → 이전 약속·방장·세션 삭제                          |
+| AC-8      | 충족 | 단위 테스트(진행 중 draft·4개 상태·P2002) / 개발 DB 병렬 2건 → 201 1건·409 1건                                 |
+| AC-9      | 충족 | 개발 DB에 세션 해시 UNIQUE 위반 주입 → 약속·참여자 0건                                                         |
+| AC-10     | 충족 | `pin.test.ts` 왕복·salt / 개발 DB 저장값 `scrypt$32768$8$1$…`, `verifyPin` 확인                                |
+| AC-11     | 충족 | `session.test.ts` / curl 쿠키 속성, DB 해시 64자·24시간                                                        |
+| AC-12     | 충족 | `route.test.ts` 본문 6개 필드·`+09:00` / curl 201 본문                                                         |
+| AC-13     | 충족 | `route.test.ts` 500 응답·로그에 PIN·원문 없음 / dev 서버 로그 확인                                             |
 
 최종 `npm run test` 112건, lint·typecheck·build 통과.

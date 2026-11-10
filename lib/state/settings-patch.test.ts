@@ -51,9 +51,15 @@ describe("parseSettingsPatch / parseReopenSettings", () => {
     ["소요 시간 NaN 대신 문자열", { votingDeadlineAt: DEADLINE, durationMinutes: "60" }],
     ["날짜 범위 null", { votingDeadlineAt: DEADLINE, dateRange: null }],
     ["날짜 범위 종료만", { votingDeadlineAt: DEADLINE, dateRange: { endDate: "2026-11-20" } }],
-    ["없는 날짜", { votingDeadlineAt: DEADLINE, dateRange: { startDate: "2026-11-10", endDate: "2026-02-30" } }],
+    [
+      "없는 날짜",
+      { votingDeadlineAt: DEADLINE, dateRange: { startDate: "2026-11-10", endDate: "2026-02-30" } },
+    ],
     ["하루 범위 시작만", { votingDeadlineAt: DEADLINE, dailyTimeRange: { startTime: "09:00" } }],
-    ["하루 범위 24:30", { votingDeadlineAt: DEADLINE, dailyTimeRange: { startTime: "09:00", endTime: "24:30" } }],
+    [
+      "하루 범위 24:30",
+      { votingDeadlineAt: DEADLINE, dailyTimeRange: { startTime: "09:00", endTime: "24:30" } },
+    ],
   ])("%s → 400", (_n, body) => {
     expect(parseReopenSettings(body)).toBeNull();
   });
@@ -85,7 +91,12 @@ describe("applySettingsPatch", () => {
         votingDeadlineAt: new Date(DEADLINE),
         dailyTimeRange: { startMinute: 600, endMinute: 780 },
       }),
-    ).toEqual({ ...current, startMinute: 600, endMinute: 780, votingDeadlineAt: new Date(DEADLINE) });
+    ).toEqual({
+      ...current,
+      startMinute: 600,
+      endMinute: 780,
+      votingDeadlineAt: new Date(DEADLINE),
+    });
   });
 
   it("전부 보내면 전부 바뀐다", () => {
@@ -112,7 +123,9 @@ describe("applySettingsPatch", () => {
 describe("parseSettingsUpdate (STATE-API-03)", () => {
   it("한 필드만 있어도 받는다. 마감은 필수가 아니다", () => {
     expect(parseSettingsUpdate({ durationMinutes: 90 })).toEqual({ durationMinutes: 90 });
-    expect(parseSettingsUpdate({ participantLimit: 8, extra: true })).toEqual({ participantLimit: 8 });
+    expect(parseSettingsUpdate({ participantLimit: 8, extra: true })).toEqual({
+      participantLimit: 8,
+    });
   });
 
   it.each([
@@ -133,7 +146,9 @@ describe("validateCollectingChange (STATE-API-03 모집 중 규칙)", () => {
   it("정원 증가·같은 값, 마감 연장·같은 값, 해당 필드 없음은 통과", () => {
     expect(validateCollectingChange(before, { participantLimit: 6 })).toBeNull();
     expect(validateCollectingChange(before, { participantLimit: 5 })).toBeNull();
-    expect(validateCollectingChange(before, { votingDeadlineAt: new Date(Date.parse(DEADLINE) + 1) })).toBeNull();
+    expect(
+      validateCollectingChange(before, { votingDeadlineAt: new Date(Date.parse(DEADLINE) + 1) }),
+    ).toBeNull();
     expect(validateCollectingChange(before, { votingDeadlineAt: new Date(DEADLINE) })).toBeNull();
     expect(validateCollectingChange(before, { durationMinutes: 30 })).toBeNull();
   });

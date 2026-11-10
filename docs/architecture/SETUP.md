@@ -158,10 +158,10 @@ npm run dev
 
 브라우저에서 두 주소를 엽니다.
 
-| 주소 | 기대 결과 |
-| --- | --- |
-| `http://localhost:3000` | Next.js 기본 화면 |
-| `http://localhost:3000/api/health` | `{"ok":true}` |
+| 주소                               | 기대 결과         |
+| ---------------------------------- | ----------------- |
+| `http://localhost:3000`            | Next.js 기본 화면 |
+| `http://localhost:3000/api/health` | `{"ok":true}`     |
 
 > 🎉 `/api/health`에서 `{"ok":true}`가 나오면 **Next.js → Prisma → 내 Neon DB까지 전부 연결된 것**입니다. 환경 구축 완료입니다.
 >
@@ -171,17 +171,17 @@ npm run dev
 
 ## 프로젝트 구조에서 알아둘 것
 
-| 경로 | 역할 |
-| --- | --- |
-| `app/` | 화면과 API. App Router라 폴더 구조가 곧 URL입니다 |
-| `app/api/health/route.ts` | 연결 확인용 API. DB에 붙는지 볼 때 씁니다 |
-| `lib/prisma.ts` | **Prisma 싱글턴.** DB를 쓸 때는 항상 여기서 import합니다 |
-| `prisma/schema.prisma` | DB 스키마. ERD 신버전 5개 테이블 (`docs/architecture/DATABASE.md`) |
-| `prisma/migrations/` | 마이그레이션 기록. **Git으로 공유**되고 각자 DB에 적용합니다 |
-| `prisma/generated/` | 자동 생성 코드. Git에 안 올라가고 `prisma generate`로 만듭니다 |
-| `prisma.config.ts` | Prisma CLI 설정. DB 주소를 환경변수에서 읽습니다 |
-| `AGENTS.md` / `CLAUDE.md` | AI 에이전트용 프로젝트 규칙. `CLAUDE.md`는 `@AGENTS.md` 한 줄 |
-| `.github/workflows/ci.yml` | PR마다 타입·린트·빌드를 검사 |
+| 경로                       | 역할                                                               |
+| -------------------------- | ------------------------------------------------------------------ |
+| `app/`                     | 화면과 API. App Router라 폴더 구조가 곧 URL입니다                  |
+| `app/api/health/route.ts`  | 연결 확인용 API. DB에 붙는지 볼 때 씁니다                          |
+| `lib/prisma.ts`            | **Prisma 싱글턴.** DB를 쓸 때는 항상 여기서 import합니다           |
+| `prisma/schema.prisma`     | DB 스키마. ERD 신버전 5개 테이블 (`docs/architecture/DATABASE.md`) |
+| `prisma/migrations/`       | 마이그레이션 기록. **Git으로 공유**되고 각자 DB에 적용합니다       |
+| `prisma/generated/`        | 자동 생성 코드. Git에 안 올라가고 `prisma generate`로 만듭니다     |
+| `prisma.config.ts`         | Prisma CLI 설정. DB 주소를 환경변수에서 읽습니다                   |
+| `AGENTS.md` / `CLAUDE.md`  | AI 에이전트용 프로젝트 규칙. `CLAUDE.md`는 `@AGENTS.md` 한 줄      |
+| `.github/workflows/ci.yml` | PR마다 타입·린트·빌드를 검사                                       |
 
 > ⚠️ **`new PrismaClient()`를 직접 호출하지 마세요.** 개발 중 핫리로드마다 새 연결이 쌓여서 `too many connections`로 죽습니다. 항상 이렇게 가져다 쓰세요.
 >
@@ -236,10 +236,10 @@ git push -u origin ahn/feat-약속생성-api
 
 push하면 터미널에 PR 생성 링크가 나옵니다. PR을 만들면 CI가 자동으로 돌아가고, **초록 체크를 확인한 뒤 `Squash and merge`** 합니다.
 
-| 브랜치 이름 | 용도 |
-| --- | --- |
-| `<이름>/feat-약속생성-api` | 기능 추가 |
-| `<이름>/fix-투표-중복-버그` | 버그 수정 |
+| 브랜치 이름                            | 용도             |
+| -------------------------------------- | ---------------- |
+| `<이름>/feat-약속생성-api`             | 기능 추가        |
+| `<이름>/fix-투표-중복-버그`            | 버그 수정        |
 | `<이름>/chore-...` · `<이름>/docs-...` | 설정·의존성·문서 |
 
 > ⚠️ 이름만으로 된 단독 브랜치(예: `ahn`)가 있으면 Git 규칙상 `ahn/...` 브랜치를 만들 수 없습니다. 단독 브랜치는 병합 후 지우고 시작하세요.
@@ -323,30 +323,30 @@ npx prisma studio   # 브라우저로 DB 테이블 보기 · 값 직접 입력 �
 > npm ls prisma @prisma/client @prisma/adapter-pg
 > ```
 
-| 증상 | 원인 / 해결 |
-| --- | --- |
-| `new PrismaClient()`에 타입 에러 | Prisma 7부터 드라이버 어댑터를 넘겨야 합니다. `lib/prisma.ts`처럼 `adapter: new PrismaPg({ connectionString })`을 전달하세요 |
-| `@/prisma/generated/client`를 못 찾음 | `npx prisma generate`를 안 돌린 경우. 돌린 뒤에도 빨간 줄이 남으면 VS Code에서 `Ctrl+Shift+P` → `TypeScript: Restart TS Server` |
-| `Environment variable not found: DATABASE_URL` | `.env`가 없거나 `DATABASE_URL` 줄이 비어 있음. `.env.example`을 복사했는지 확인 |
-| 연결할 때 `SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'` | 연결 문자열이 `sslmode=require`. `.env`의 `DATABASE_URL`(과 `DIRECT_URL`)을 `sslmode=verify-full`로 바꾸세요(1-4) |
-| `too many connections` | `new PrismaClient()`를 여러 곳에서 호출. 전부 `@/lib/prisma` import로 교체 |
-| `npm run lint`가 끝나지 않음 | `eslint.config.mjs`의 무시 목록에 `prisma/generated/**`가 있는지 확인. 없으면 생성 코드 수천 줄을 검사하느라 멈춥니다 |
-| CI만 `Cannot find name 'LayoutProps'`로 실패 | Next 16이 자동 생성하는 타입이라 `.next`가 없는 CI에서만 납니다. CI에 `npx next typegen` 단계가 있는지 확인 |
-| 안 건드린 파일이 전부 변경으로 표시됨 | 줄바꿈(CRLF/LF) 문제. `git config --global core.autocrlf false` 설정 후 `git add --renormalize .` |
-| 커밋에 파일 수백 개가 딸려옴 | Prisma가 `.agents` · `.claude` · `.windsurf`에 문서를 복사합니다. `.gitignore`에 들어 있는지 확인하세요 |
-| `npm ci` 실패 | `package-lock.json`이 최신이 아님. pull을 받았는지 확인 |
-| `npm.ps1 ... 로드할 수 없습니다` (Windows) | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
-| cmd에서 `Ctrl+C`가 복사가 안 됨 | cmd에서 그 조합은 **실행 중단**입니다. 복사는 드래그 후 `Enter` 또는 우클릭 |
+| 증상                                                                                                                      | 원인 / 해결                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `new PrismaClient()`에 타입 에러                                                                                          | Prisma 7부터 드라이버 어댑터를 넘겨야 합니다. `lib/prisma.ts`처럼 `adapter: new PrismaPg({ connectionString })`을 전달하세요    |
+| `@/prisma/generated/client`를 못 찾음                                                                                     | `npx prisma generate`를 안 돌린 경우. 돌린 뒤에도 빨간 줄이 남으면 VS Code에서 `Ctrl+Shift+P` → `TypeScript: Restart TS Server` |
+| `Environment variable not found: DATABASE_URL`                                                                            | `.env`가 없거나 `DATABASE_URL` 줄이 비어 있음. `.env.example`을 복사했는지 확인                                                 |
+| 연결할 때 `SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'` | 연결 문자열이 `sslmode=require`. `.env`의 `DATABASE_URL`(과 `DIRECT_URL`)을 `sslmode=verify-full`로 바꾸세요(1-4)               |
+| `too many connections`                                                                                                    | `new PrismaClient()`를 여러 곳에서 호출. 전부 `@/lib/prisma` import로 교체                                                      |
+| `npm run lint`가 끝나지 않음                                                                                              | `eslint.config.mjs`의 무시 목록에 `prisma/generated/**`가 있는지 확인. 없으면 생성 코드 수천 줄을 검사하느라 멈춥니다           |
+| CI만 `Cannot find name 'LayoutProps'`로 실패                                                                              | Next 16이 자동 생성하는 타입이라 `.next`가 없는 CI에서만 납니다. CI에 `npx next typegen` 단계가 있는지 확인                     |
+| 안 건드린 파일이 전부 변경으로 표시됨                                                                                     | 줄바꿈(CRLF/LF) 문제. `git config --global core.autocrlf false` 설정 후 `git add --renormalize .`                               |
+| 커밋에 파일 수백 개가 딸려옴                                                                                              | Prisma가 `.agents` · `.claude` · `.windsurf`에 문서를 복사합니다. `.gitignore`에 들어 있는지 확인하세요                         |
+| `npm ci` 실패                                                                                                             | `package-lock.json`이 최신이 아님. pull을 받았는지 확인                                                                         |
+| `npm.ps1 ... 로드할 수 없습니다` (Windows)                                                                                | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`                                                                           |
+| cmd에서 `Ctrl+C`가 복사가 안 됨                                                                                           | cmd에서 그 조합은 **실행 중단**입니다. 복사는 드래그 후 `Enter` 또는 우클릭                                                     |
 
 ---
 
 ## 아직 남은 일
 
-| 항목 | 내용 |
-| --- | --- |
+| 항목               | 내용                                                                                                                                                                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 브랜치 보호 미작동 | GitHub 룰셋은 비공개 저장소에서 Pro 이상이 필요합니다. **GitHub Education(Student Developer Pack)** 을 신청하면 Pro를 무료로 받아 해결됩니다. 승인까지 며칠 걸리니 미리 신청해두는 게 좋습니다. 저장소를 공개로 전환하는 방법도 있지만 팀 논의가 필요합니다 |
-| 배포 | **Vercel + Neon** 권장. Render 무료 플랜은 15분 유휴 후 잠들어 깨어나는 데 1분이 걸려서, 카카오의 5초 응답 제한을 못 맞춥니다. 무료 DB도 30일 후 만료됩니다 |
-| 운영 DB 분리 | 배포 시 개발용과 별도의 Neon 프로젝트(또는 브랜치)를 씁니다. 운영 DB에는 `prisma migrate deploy`만 사용합니다 |
+| 배포               | **Vercel + Neon** 권장. Render 무료 플랜은 15분 유휴 후 잠들어 깨어나는 데 1분이 걸려서, 카카오의 5초 응답 제한을 못 맞춥니다. 무료 DB도 30일 후 만료됩니다                                                                                                 |
+| 운영 DB 분리       | 배포 시 개발용과 별도의 Neon 프로젝트(또는 브랜치)를 씁니다. 운영 DB에는 `prisma migrate deploy`만 사용합니다                                                                                                                                               |
 
 ---
 

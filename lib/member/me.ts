@@ -18,8 +18,7 @@ export type MyParticipation = {
 type SessionState = { session: { expiresAt: Date | null; now: Date } };
 
 export type MyParticipationResult =
-  | ({ kind: "unauthenticated" } & SessionState)
-  | ({ kind: "ok" } & MyParticipation & SessionState);
+  ({ kind: "unauthenticated" } & SessionState) | ({ kind: "ok" } & MyParticipation & SessionState);
 
 type Row = {
   expires_at: Date;

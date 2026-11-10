@@ -71,7 +71,10 @@ function sessionRow(over: { role?: string; status?: string; expiresAt?: Date } =
   };
 }
 
-function prepare(row: Record<string, unknown> | null, refreshed: { id: string }[] = [{ id: "s-1" }]) {
+function prepare(
+  row: Record<string, unknown> | null,
+  refreshed: { id: string }[] = [{ id: "s-1" }],
+) {
   queryResults.push(row ? [row] : [], [{ now: NOW }], refreshed);
 }
 
@@ -163,7 +166,9 @@ describe("confirmSchedule (STATE-API-05)", () => {
       }),
     );
     const sql = tx.$executeRaw.mock.calls.map((call) => sqlOf(call).sql).join(" ");
-    expect(sql).not.toMatch(/participant_available_slots|availability_submitted_at|availability_version/);
+    expect(sql).not.toMatch(
+      /participant_available_slots|availability_submitted_at|availability_version/,
+    );
   });
 
   it("상위 5개 밖이어도 유효 후보면 확정한다 (처리 순서 6)", async () => {

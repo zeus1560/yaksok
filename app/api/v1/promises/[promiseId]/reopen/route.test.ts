@@ -139,7 +139,11 @@ describe("POST /api/v1/promises/[promiseId]/reopen (STATE-API-06)", () => {
   });
 
   it("허용되지 않은 상태 → 409 INVALID_PROMISE_STATE, allowedStates closed·confirmed", async () => {
-    reopenPromise.mockResolvedValueOnce({ kind: "invalid_state", promiseStatus: "collecting", session: reread });
+    reopenPromise.mockResolvedValueOnce({
+      kind: "invalid_state",
+      promiseStatus: "collecting",
+      session: reread,
+    });
     const res = await call();
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({

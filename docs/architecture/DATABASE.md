@@ -91,32 +91,32 @@ erDiagram
 
 ### 3.1 `promise_links` — 초대 링크
 
-| 컬럼 | NULL | 역할 |
-| --- | --- | --- |
-| `id` | 불가 | 링크 행의 내부 UUID. 약속이 이 값을 참조한다. |
-| `invite_token` | 불가 | 초대 URL에 넣는 암호학적 난수 토큰. 내부 UUID 및 로그인 토큰과 별개다. |
-| `source` | 불가 | 발급 출처. `web`(웹 「새 약속 만들기」) 또는 `kakao`(챗봇). 서버가 발급 경로에 따라 정하며 클라이언트 입력을 받지 않는다. |
-| `created_at` | 불가 | 링크 생성 시각. 오래된 미사용 링크 확인·정리 등에 활용한다. |
+| 컬럼           | NULL | 역할                                                                                                                      |
+| -------------- | ---- | ------------------------------------------------------------------------------------------------------------------------- |
+| `id`           | 불가 | 링크 행의 내부 UUID. 약속이 이 값을 참조한다.                                                                             |
+| `invite_token` | 불가 | 초대 URL에 넣는 암호학적 난수 토큰. 내부 UUID 및 로그인 토큰과 별개다.                                                    |
+| `source`       | 불가 | 발급 출처. `web`(웹 「새 약속 만들기」) 또는 `kakao`(챗봇). 서버가 발급 경로에 따라 정하며 클라이언트 입력을 받지 않는다. |
+| `created_at`   | 불가 | 링크 생성 시각. 오래된 미사용 링크 확인·정리 등에 활용한다.                                                               |
 
 연결된 `promises` 행이 없으면 아직 선점되지 않은 링크다. 연결된 약속이 있으면 선점 완료이므로 `status`, `claimed_at`을 중복 저장하지 않는다. 링크 미리보기나 단순 GET 요청은 방장 선점·약속 생성을 일으키면 안 된다. 챗봇 삭제는 기존 링크 및 약속 삭제로 연결하지 않는다. 단톡방 식별자는 챗봇 연결 작업 때 추가한다.
 
 ### 3.2 `promises` — 설정·상태·확정 결과
 
-| 컬럼 | NULL | 역할 |
-| --- | --- | --- |
-| `id` | 불가 | 약속 내부 UUID. |
-| `promise_link_id` | 불가 | 소속 초대 링크 ID. UNIQUE로 한 링크당 약속 최대 하나를 보장한다. |
-| `participant_limit` | 설정 중 허용 | 방장 포함 활성 참여 정원. 2명 이상 30명 이하이며 탈퇴·제외된 참여자는 정원 집계에서 제외한다. |
-| `date_range_start` | 설정 중 허용 | 선택할 수 있는 첫 날짜. 해당 날짜 포함. |
-| `date_range_end` | 설정 중 허용 | 선택할 수 있는 마지막 날짜. 해당 날짜 포함. 응답 마감일과는 다르다. |
-| `daily_start_minute` | 설정 중 허용 | 한국 시각 자정부터 선택 시작 경계까지의 분. 0\~1410의 30분 배수. 예: 09:00은 540. |
-| `daily_end_minute` | 설정 중 허용 | 한국 시각 자정부터 선택 종료 경계까지의 분. 30\~1440의 30분 배수. 1440은 24:00을 뜻한다. |
-| `duration_minutes` | 설정 중 허용 | 약속 전체 길이. 30분 이상의 30분 배수. 예: 90분. |
-| `voting_deadline_at` | 설정 중 허용 | 응답 수정이 종료되는 절대 시각. 서버 판정 시각이 이 값 이상이면 수정 불가. |
-| `status` | 불가 | draft / collecting / closed / confirmed / cancelled 중 하나. 기본값 `draft`. |
-| `confirmed_start_at` | 허용 | 최종 약속 시작 날짜·시각. 확정 전과 재조율 시 NULL. |
-| `cancelled_at` | 허용 | 약속이 cancelled로 전환된 실제 시각. 취소 전에는 NULL. |
-| `created_at` | 불가 | 실제 약속이 생성된 시각. 링크 발급 시각과 다를 수 있다. |
+| 컬럼                 | NULL         | 역할                                                                                          |
+| -------------------- | ------------ | --------------------------------------------------------------------------------------------- |
+| `id`                 | 불가         | 약속 내부 UUID.                                                                               |
+| `promise_link_id`    | 불가         | 소속 초대 링크 ID. UNIQUE로 한 링크당 약속 최대 하나를 보장한다.                              |
+| `participant_limit`  | 설정 중 허용 | 방장 포함 활성 참여 정원. 2명 이상 30명 이하이며 탈퇴·제외된 참여자는 정원 집계에서 제외한다. |
+| `date_range_start`   | 설정 중 허용 | 선택할 수 있는 첫 날짜. 해당 날짜 포함.                                                       |
+| `date_range_end`     | 설정 중 허용 | 선택할 수 있는 마지막 날짜. 해당 날짜 포함. 응답 마감일과는 다르다.                           |
+| `daily_start_minute` | 설정 중 허용 | 한국 시각 자정부터 선택 시작 경계까지의 분. 0\~1410의 30분 배수. 예: 09:00은 540.             |
+| `daily_end_minute`   | 설정 중 허용 | 한국 시각 자정부터 선택 종료 경계까지의 분. 30\~1440의 30분 배수. 1440은 24:00을 뜻한다.      |
+| `duration_minutes`   | 설정 중 허용 | 약속 전체 길이. 30분 이상의 30분 배수. 예: 90분.                                              |
+| `voting_deadline_at` | 설정 중 허용 | 응답 수정이 종료되는 절대 시각. 서버 판정 시각이 이 값 이상이면 수정 불가.                    |
+| `status`             | 불가         | draft / collecting / closed / confirmed / cancelled 중 하나. 기본값 `draft`.                  |
+| `confirmed_start_at` | 허용         | 최종 약속 시작 날짜·시각. 확정 전과 재조율 시 NULL.                                           |
+| `cancelled_at`       | 허용         | 약속이 cancelled로 전환된 실제 시각. 취소 전에는 NULL.                                        |
+| `created_at`         | 불가         | 실제 약속이 생성된 시각. 링크 발급 시각과 다를 수 있다.                                       |
 
 확정 종료 시각은 `confirmed_start_at + duration_minutes`로 계산한다. `confirmed_at`처럼 "확정 버튼을 누른 시각"이 아니라 "실제 만나는 시작 시각"이라는 점에 주의한다. 확정 중 소요 시간 변경은 금지하며 변경하려면 재조율한다.
 
@@ -124,29 +124,29 @@ erDiagram
 
 ### 3.3 `participants` — 약속별 참여자
 
-| 컬럼 | NULL | 역할 |
-| --- | --- | --- |
-| `id` | 불가 | 참여 기록 UUID. 같은 사람이 약속 두 개에 참여하면 서로 다른 ID가 생긴다. |
-| `promise_id` | 불가 | 소속 약속 ID. 참여자 생성 후 다른 약속으로 옮기지 않는다. |
-| `nickname` | 불가 | 화면 표시 이름. |
-| `normalized_nickname` | 불가 | 닉네임 정규화 결과. 등록과 로그인에서 동일 규칙을 사용한다. |
-| `password_hash` | 불가 | 약속별 PIN 검증용 해시. PIN 원문은 저장하지 않는다. |
-| `role` | 불가 | host 또는 member. 방장 권한의 기준. |
-| `status` | 불가 | active는 정상 참여, cancelled는 탈퇴·제외. 온라인 여부나 특정 슬롯의 가능 여부가 아니다. 기본값 `active`. |
-| `availability_submitted_at` | 허용 | 현재 제출 완료 시각. NULL이면 미제출 또는 재제출 필요, 값이 있으면 제출 완료. |
-| `availability_version` | 불가 | 참여자별 응답 변경 버전. 기본값 0, 슬롯이나 제출 상태가 DB에서 바뀌는 트랜잭션마다 1 증가. 브라우저 동기화 및 오래된 제출 거부에 사용한다. |
-| `cancelled_at` | 허용 | 참여자가 탈퇴하거나 내보내진 실제 시각. active 상태에서는 NULL. |
-| `created_at` | 불가 | 참여자 등록 시각. 등록순 표시 등에 활용한다. |
+| 컬럼                        | NULL | 역할                                                                                                                                       |
+| --------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`                        | 불가 | 참여 기록 UUID. 같은 사람이 약속 두 개에 참여하면 서로 다른 ID가 생긴다.                                                                   |
+| `promise_id`                | 불가 | 소속 약속 ID. 참여자 생성 후 다른 약속으로 옮기지 않는다.                                                                                  |
+| `nickname`                  | 불가 | 화면 표시 이름.                                                                                                                            |
+| `normalized_nickname`       | 불가 | 닉네임 정규화 결과. 등록과 로그인에서 동일 규칙을 사용한다.                                                                                |
+| `password_hash`             | 불가 | 약속별 PIN 검증용 해시. PIN 원문은 저장하지 않는다.                                                                                        |
+| `role`                      | 불가 | host 또는 member. 방장 권한의 기준.                                                                                                        |
+| `status`                    | 불가 | active는 정상 참여, cancelled는 탈퇴·제외. 온라인 여부나 특정 슬롯의 가능 여부가 아니다. 기본값 `active`.                                  |
+| `availability_submitted_at` | 허용 | 현재 제출 완료 시각. NULL이면 미제출 또는 재제출 필요, 값이 있으면 제출 완료.                                                              |
+| `availability_version`      | 불가 | 참여자별 응답 변경 버전. 기본값 0, 슬롯이나 제출 상태가 DB에서 바뀌는 트랜잭션마다 1 증가. 브라우저 동기화 및 오래된 제출 거부에 사용한다. |
+| `cancelled_at`              | 허용 | 참여자가 탈퇴하거나 내보내진 실제 시각. active 상태에서는 NULL.                                                                            |
+| `created_at`                | 불가 | 참여자 등록 시각. 등록순 표시 등에 활용한다.                                                                                               |
 
 가능 슬롯이 0개여도 "가능한 시간 없음"으로 제출할 수 있다. 설정 변경으로 재제출이 필요해지면 제출 시각을 NULL로 되돌리고 버전을 증가시킨다. 제출 시각이 NULL에서 NULL로 유지되더라도 서버의 슬롯이 바뀌면 버전을 증가시킨다. 브라우저에만 저장된 선택은 DB 버전을 바꾸지 않는다. 현재 정규화 닉네임 UNIQUE는 탈퇴한 행에도 적용되므로 닉네임이 자동 해제되지 않는다.
 
 ### 3.4 `participant_available_slots` — 30분 가능 시간
 
-| 컬럼 | NULL | 역할 |
-| --- | --- | --- |
-| `id` | 불가 | 슬롯 선택 행의 UUID. |
-| `participant_id` | 불가 | 이 시간을 선택한 참여자 ID. |
-| `slot_start_at` | 불가 | 해당 30분 구간의 시작 날짜·시각. 종료는 시작 + 30분으로 계산한다. |
+| 컬럼             | NULL | 역할                                                              |
+| ---------------- | ---- | ----------------------------------------------------------------- |
+| `id`             | 불가 | 슬롯 선택 행의 UUID.                                              |
+| `participant_id` | 불가 | 이 시간을 선택한 참여자 ID.                                       |
+| `slot_start_at`  | 불가 | 해당 30분 구간의 시작 날짜·시각. 종료는 시작 + 30분으로 계산한다. |
 
 철수가 09:00\~10:30을 선택하면 09:00, 09:30, 10:00 시작 슬롯을 각각 한 행씩 저장한다. 구간은 `[시작, 종료)`로 해석한다. 10:00\~10:30과 10:30\~11:00은 겹치지 않고 이어진다.
 
@@ -154,12 +154,12 @@ erDiagram
 
 ### 3.5 `participant_sessions` — 로그인 유지
 
-| 컬럼 | NULL | 역할 |
-| --- | --- | --- |
-| `id` | 불가 | 세션 행 UUID. 인증용 비밀값 자체가 아니다. |
-| `participant_id` | 불가 | 인증된 참여자 ID. |
-| `session_token_hash` | 불가 | 브라우저에 발급한 원본 난수 세션 토큰의 해시. |
-| `expires_at` | 불가 | 만료 시각. 현재 시각이 같거나 늦으면 사용 불가. |
+| 컬럼                 | NULL | 역할                                            |
+| -------------------- | ---- | ----------------------------------------------- |
+| `id`                 | 불가 | 세션 행 UUID. 인증용 비밀값 자체가 아니다.      |
+| `participant_id`     | 불가 | 인증된 참여자 ID.                               |
+| `session_token_hash` | 불가 | 브라우저에 발급한 원본 난수 세션 토큰의 해시.   |
+| `expires_at`         | 불가 | 만료 시각. 현재 시각이 같거나 늦으면 사용 불가. |
 
 기기별 여러 세션을 허용한다. 사용자의 명시적인 로그아웃은 해당 세션 행을 삭제한다. 약속 취소·참여자 탈퇴·내보내기 시에는 관련 세션 행을 삭제하지 않고 `expires_at`을 현재 시각으로 변경하여 즉시 만료한다. 요청마다 세션 만료 여부와 현재 역할·참여 상태·약속 상태를 다시 검사한다.
 
@@ -167,14 +167,14 @@ erDiagram
 
 ### 4.1 UNIQUE와 FK
 
-| 테이블 | 제약 |
-| --- | --- |
-| promise\_links | UNIQUE(invite\_token) |
-| promises | UNIQUE(promise\_link\_id), FK promise\_link\_id → `promise_links.id` ON DELETE RESTRICT ON UPDATE RESTRICT |
-| participants | UNIQUE(promise\_id, normalized\_nickname), FK promise\_id → `promises.id` ON DELETE RESTRICT ON UPDATE RESTRICT |
-| participants | role = 'host' 행에 한해 promise\_id UNIQUE |
+| 테이블                        | 제약                                                                                                                   |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| promise\_links                | UNIQUE(invite\_token)                                                                                                  |
+| promises                      | UNIQUE(promise\_link\_id), FK promise\_link\_id → `promise_links.id` ON DELETE RESTRICT ON UPDATE RESTRICT             |
+| participants                  | UNIQUE(promise\_id, normalized\_nickname), FK promise\_id → `promises.id` ON DELETE RESTRICT ON UPDATE RESTRICT        |
+| participants                  | role = 'host' 행에 한해 promise\_id UNIQUE                                                                             |
 | participant\_available\_slots | UNIQUE(participant\_id, slot\_start\_at), FK participant\_id → `participants.id` ON DELETE RESTRICT ON UPDATE RESTRICT |
-| participant\_sessions | UNIQUE(session\_token\_hash), FK participant\_id → `participants.id` ON DELETE RESTRICT ON UPDATE RESTRICT |
+| participant\_sessions         | UNIQUE(session\_token\_hash), FK participant\_id → `participants.id` ON DELETE RESTRICT ON UPDATE RESTRICT             |
 
 ```sql
 CREATE UNIQUE INDEX uq_one_host_per_promise
@@ -268,13 +268,13 @@ ALTER TABLE participant_available_slots ADD CONSTRAINT ck_slot_start_at_boundary
   CHECK (extract(second FROM slot_start_at) = 0 AND extract(minute FROM slot_start_at) IN (0, 30));
 ```
 
-| 상태 | 정원·날짜·일일 시간·소요 시간·마감 | confirmed\_start\_at | cancelled\_at |
-| --- | --- | --- | --- |
-| draft | 미설정 값 NULL 허용, 입력된 값은 유효해야 함 | NULL | NULL |
-| collecting | 모두 필수 | NULL | NULL |
-| closed | 모두 필수 | NULL | NULL |
-| confirmed | 모두 필수 | 필수 | NULL |
-| cancelled | 취소 전 값 유지. 초안에서 취소했다면 NULL 가능 | 이전 값 유지 가능 | 필수 |
+| 상태       | 정원·날짜·일일 시간·소요 시간·마감             | confirmed\_start\_at | cancelled\_at |
+| ---------- | ---------------------------------------------- | -------------------- | ------------- |
+| draft      | 미설정 값 NULL 허용, 입력된 값은 유효해야 함   | NULL                 | NULL          |
+| collecting | 모두 필수                                      | NULL                 | NULL          |
+| closed     | 모두 필수                                      | NULL                 | NULL          |
+| confirmed  | 모두 필수                                      | 필수                 | NULL          |
+| cancelled  | 취소 전 값 유지. 초안에서 취소했다면 NULL 가능 | 이전 값 유지 가능    | 필수          |
 
 현재 시각과의 비교나 다른 테이블의 데이터 확인은 일반 CHECK에 의존하지 않고 서버에서 판정한다.
 
@@ -426,20 +426,20 @@ closed / confirmed → collecting : 새 마감 시각을 정하고 재조율
 
 MVP 권장 패턴은 해당 promises 행을 먼저 FOR UPDATE로 잠그고, 최신 상태·권한·마감·정원을 확인한 후 변경하는 것이다. 참여자·슬롯을 변경하는 요청도 이 규칙을 따라야 한다. 부모 행 잠금만으로 모든 자식 변경이 자동 통제되는 것은 아니다.
 
-| 요청·처리 | 같은 트랜잭션에서 할 일 |
-| --- | --- |
-| 신규 참여 | 약속 상태·마감·정원 검사 + 닉네임 중복 검사 + 참여자 생성 |
-| 가능 시간 제출·재제출 | 권한·상태·마감·범위 검사 + 요청의 기준 `availability_version`과 DB 최신 버전 비교 + 최종 슬롯 저장 + `availability_submitted_at` 기록 + `availability_version` 증가 |
-| 오래된 버전으로 제출 | 슬롯과 제출 상태를 변경하지 않고 요청 거절 + 최신 `availability_version`, 슬롯, 제출 상태 반환 |
-| 범위 축소에 따른 서버 변경 | 범위 밖 슬롯 제거 + 제출 상태 유지 + 실제 슬롯이 삭제된 참여자의 `availability_version` 증가 |
-| 범위 확대·이동에 따른 제출 초기화 | 모든 active 참여자의 availability\_submitted\_at=NULL + availability\_version 증가 + 재제출 필요 상태로 변경 |
-| 허용된 설정 변경 또는 재조율 중 소요 시간만 변경 | 기존 슬롯과 제출 상태 유지 + 변경된 소요 시간으로 후보 재계산. `confirmed` 상태의 직접 변경은 거절하고 재조율을 통해 처리 |
-| 조기 마감·기한 도달 마감 | 잠금 후 최신 마감 시각 검사 + `collecting → closed` 저장. GET 요청은 `effectiveStatus=closed`만 계산하고 DB status는 변경하지 않음 |
-| 일반 참여자 탈퇴 | 참여자 `status=cancelled`, `cancelled_at=clock_timestamp()` 변경 + 슬롯·제출 기록 보존 + 관련 세션 즉시 만료 + 정원·후보·참석자 집계에서 제외 |
-| 방장 탈퇴·자동 승계 | 최신 host 여부 확인 + 후임 active 참여자를 `created_at ASC`, `id ASC`로 선정. 후임자가 있으면 기존 방장을 `role=member`, `status=cancelled`, `cancelled_at=clock_timestamp()`로 변경하고 새 방장을 `role=host`로 지정. 후임자가 없으면 기존 방장의 `role=host`, `status=active`, `cancelled_at=NULL`을 유지하고 약속만 `status=cancelled`, `cancelled_at=clock_timestamp()`로 변경한 뒤 모든 참여자 세션을 즉시 만료 |
-| 최종 일정 확정 | `closed` 상태·방장 권한·미래 시각·범위·공통 가능 인원 재검증 + `confirmed_start_at` 저장 + `status=confirmed` 변경 |
-| 재조율 | 새 설정과 미래 마감 검증 + 필요 시 `confirmed_start_at=NULL` + 범위 밖 슬롯 제거 + 재제출 필요 여부에 따른 제출 상태·버전 처리 + `status=collecting` 변경 |
-| 약속 취소 | 방장 권한과 현재 상태 검사 + `promises.status=cancelled`, `promises.cancelled_at=clock_timestamp()` 변경 + 참여자 role·status를 포함한 관련 데이터 보존 + 모든 참여자 세션 즉시 만료 |
+| 요청·처리                                        | 같은 트랜잭션에서 할 일                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 신규 참여                                        | 약속 상태·마감·정원 검사 + 닉네임 중복 검사 + 참여자 생성                                                                                                                                                                                                                                                                                                                                                            |
+| 가능 시간 제출·재제출                            | 권한·상태·마감·범위 검사 + 요청의 기준 `availability_version`과 DB 최신 버전 비교 + 최종 슬롯 저장 + `availability_submitted_at` 기록 + `availability_version` 증가                                                                                                                                                                                                                                                  |
+| 오래된 버전으로 제출                             | 슬롯과 제출 상태를 변경하지 않고 요청 거절 + 최신 `availability_version`, 슬롯, 제출 상태 반환                                                                                                                                                                                                                                                                                                                       |
+| 범위 축소에 따른 서버 변경                       | 범위 밖 슬롯 제거 + 제출 상태 유지 + 실제 슬롯이 삭제된 참여자의 `availability_version` 증가                                                                                                                                                                                                                                                                                                                         |
+| 범위 확대·이동에 따른 제출 초기화                | 모든 active 참여자의 availability\_submitted\_at=NULL + availability\_version 증가 + 재제출 필요 상태로 변경                                                                                                                                                                                                                                                                                                         |
+| 허용된 설정 변경 또는 재조율 중 소요 시간만 변경 | 기존 슬롯과 제출 상태 유지 + 변경된 소요 시간으로 후보 재계산. `confirmed` 상태의 직접 변경은 거절하고 재조율을 통해 처리                                                                                                                                                                                                                                                                                            |
+| 조기 마감·기한 도달 마감                         | 잠금 후 최신 마감 시각 검사 + `collecting → closed` 저장. GET 요청은 `effectiveStatus=closed`만 계산하고 DB status는 변경하지 않음                                                                                                                                                                                                                                                                                   |
+| 일반 참여자 탈퇴                                 | 참여자 `status=cancelled`, `cancelled_at=clock_timestamp()` 변경 + 슬롯·제출 기록 보존 + 관련 세션 즉시 만료 + 정원·후보·참석자 집계에서 제외                                                                                                                                                                                                                                                                        |
+| 방장 탈퇴·자동 승계                              | 최신 host 여부 확인 + 후임 active 참여자를 `created_at ASC`, `id ASC`로 선정. 후임자가 있으면 기존 방장을 `role=member`, `status=cancelled`, `cancelled_at=clock_timestamp()`로 변경하고 새 방장을 `role=host`로 지정. 후임자가 없으면 기존 방장의 `role=host`, `status=active`, `cancelled_at=NULL`을 유지하고 약속만 `status=cancelled`, `cancelled_at=clock_timestamp()`로 변경한 뒤 모든 참여자 세션을 즉시 만료 |
+| 최종 일정 확정                                   | `closed` 상태·방장 권한·미래 시각·범위·공통 가능 인원 재검증 + `confirmed_start_at` 저장 + `status=confirmed` 변경                                                                                                                                                                                                                                                                                                   |
+| 재조율                                           | 새 설정과 미래 마감 검증 + 필요 시 `confirmed_start_at=NULL` + 범위 밖 슬롯 제거 + 재제출 필요 여부에 따른 제출 상태·버전 처리 + `status=collecting` 변경                                                                                                                                                                                                                                                            |
+| 약속 취소                                        | 방장 권한과 현재 상태 검사 + `promises.status=cancelled`, `promises.cancelled_at=clock_timestamp()` 변경 + 참여자 role·status를 포함한 관련 데이터 보존 + 모든 참여자 세션 즉시 만료                                                                                                                                                                                                                                 |
 
 마감 판정 시각은 잠금을 획득한 뒤의 서버/DB 현재 시각으로 통일하는 것을 권장한다. 요청 시작이 마감 전이어도 잠금 대기 후 마감을 지났다면 거절한다. PostgreSQL NOW()는 트랜잭션 시작 시각이므로 이 정책에서는 잠금 후 실제 현재 시각을 판정하는 방식을 사용한다. 스케줄러 실행이 지연되어도 각 쓰기 요청에서 마감을 검사하므로 늦은 투표는 허용되지 않는다. (P1 자동 마감 도입 시)
 
@@ -487,44 +487,44 @@ MVP에서는 취소·탈퇴 데이터를 자동 삭제하지 않는다. `cancell
 
 ## 11. 구현 검증 체크리스트
 
-| 사례 | 기대 결과 |
-| --- | --- |
-| 두 사용자가 같은 링크를 동시에 선점 | 약속 하나와 방장 한 명만 생성 |
-| 정원 1자리가 남았을 때 두 명이 동시에 참여 | 한 명만 등록 |
-| 정원 31명으로 모집 시작 또는 재조율 요청 | 422로 거절 |
-| 같은 참여자의 동일 슬롯 중복 저장 | 슬롯 행 하나만 유지 |
-| 다른 약속의 참여자 ID로 슬롯 수정 | 거절 |
-| 종료 시각이 23:00인 약속에 23:00 시작 슬롯 저장 | 거절 |
-| 종료 경계가 24:00인 날짜에 23:30 시작 슬롯 저장 | 해당 날짜의 23:30\~24:00 슬롯으로 허용 |
-| 일일 선택 범위 1시간, 소요 시간 2시간 설정 | 거절 |
-| 소요 시간 60분이고 각 슬롯 가능 인원은 2명이지만 전체 구간 공통 참석자는 1명 | 후보에서 제외 |
-| 응답 0명인 collecting 약속을 기한 후 GET 조회 | `effectiveStatus=closed`, 후보 없음 안내. GET은 DB의 실제 status를 변경하지 않음 |
-| DB status가 collecting이지만 기한이 지난 상태에서 쓰기 요청 | 실제 status를 `closed`로 전환한 뒤 해당 수정 요청 거절 |
-| 전원이 제출했지만 마감 전 | `collecting` 유지 |
-| draft 생성 후 10분이 지난 상태에서 GET 조회 | 만료로 계산해 안내하지만 DB는 변경하지 않음 |
-| 만료 draft에 기존 방장 또는 새 방장의 쓰기 요청 | 링크 잠금 후 세션·방장·promise를 명시적으로 삭제하고 링크 재사용 가능 |
-| 마감 순간 슬롯 저장과 조기 마감이 경쟁 | 약속 행 잠금과 마감 판정 순서에 따라 직렬 처리 |
-| 후보가 화면에 표시된 뒤 시작 시각이 지나 확정 요청 | 확정 거절 및 최신 후보 재조회 안내 |
-| 확정 상태에서 소요 시간만 수정 | 거절하고 재조율 안내 |
-| 재조율로 날짜·시간 범위를 축소 | 범위 밖 슬롯만 제거하고 제출 상태 유지. 실제 슬롯이 삭제된 참여자의 `availability_version` 증가 |
-| 재조율로 날짜·시간 범위를 확대하거나 이동 | 모든 active 참여자의 `availability_submitted_at=NULL`, `availability_version + 1` 후 재제출 요청 |
-| 재조율에서 범위는 그대로 두고 소요 시간만 변경 | 슬롯과 제출 상태 유지, 기존 입력으로 후보 재계산 |
-| 방장 탈퇴 자동 승계 처리 중 오류 | 전체 트랜잭션 롤백, 기존 방장의 role·status 유지 |
-| 방장이 해당 후보 시간에 불가능하고 제출한 다른 참여자 2명이 가능 | 후보에 포함 |
-| 슬롯 0개로 가능 시간 제출 | 제출 완료로 기록하되 가능 인원에는 기여하지 않음 |
-| `closed` 상태에서 일반 참여자 탈퇴 | 탈퇴 허용, 참여자 `status=cancelled`, 약속은 `closed` 유지, 다음 후보 조회에서 제외 |
-| `confirmed` 상태에서 일반 참여자 탈퇴 | 탈퇴 허용, 확정 시간과 약속 상태 유지, 참석자 명단만 갱신 |
-| `confirmed` 상태에서 탈퇴 후 참석 가능 인원이 2명 미만 | 자동 확정 해제·자동 취소 없음, 방장에게 재조율·취소 안내 |
-| `closed` 또는 `confirmed` 상태에서 방장이 참여자 내보내기 요청 | 거절하고 재조율 후 처리 안내 |
-| 방장 탈퇴 시 다른 active 참여자가 존재 | `created_at ASC`, `id ASC` 순서의 첫 참여자에게 자동 승계한 뒤 기존 방장 탈퇴 |
+| 사례                                                                         | 기대 결과                                                                                                                                      |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| 두 사용자가 같은 링크를 동시에 선점                                          | 약속 하나와 방장 한 명만 생성                                                                                                                  |
+| 정원 1자리가 남았을 때 두 명이 동시에 참여                                   | 한 명만 등록                                                                                                                                   |
+| 정원 31명으로 모집 시작 또는 재조율 요청                                     | 422로 거절                                                                                                                                     |
+| 같은 참여자의 동일 슬롯 중복 저장                                            | 슬롯 행 하나만 유지                                                                                                                            |
+| 다른 약속의 참여자 ID로 슬롯 수정                                            | 거절                                                                                                                                           |
+| 종료 시각이 23:00인 약속에 23:00 시작 슬롯 저장                              | 거절                                                                                                                                           |
+| 종료 경계가 24:00인 날짜에 23:30 시작 슬롯 저장                              | 해당 날짜의 23:30\~24:00 슬롯으로 허용                                                                                                         |
+| 일일 선택 범위 1시간, 소요 시간 2시간 설정                                   | 거절                                                                                                                                           |
+| 소요 시간 60분이고 각 슬롯 가능 인원은 2명이지만 전체 구간 공통 참석자는 1명 | 후보에서 제외                                                                                                                                  |
+| 응답 0명인 collecting 약속을 기한 후 GET 조회                                | `effectiveStatus=closed`, 후보 없음 안내. GET은 DB의 실제 status를 변경하지 않음                                                               |
+| DB status가 collecting이지만 기한이 지난 상태에서 쓰기 요청                  | 실제 status를 `closed`로 전환한 뒤 해당 수정 요청 거절                                                                                         |
+| 전원이 제출했지만 마감 전                                                    | `collecting` 유지                                                                                                                              |
+| draft 생성 후 10분이 지난 상태에서 GET 조회                                  | 만료로 계산해 안내하지만 DB는 변경하지 않음                                                                                                    |
+| 만료 draft에 기존 방장 또는 새 방장의 쓰기 요청                              | 링크 잠금 후 세션·방장·promise를 명시적으로 삭제하고 링크 재사용 가능                                                                          |
+| 마감 순간 슬롯 저장과 조기 마감이 경쟁                                       | 약속 행 잠금과 마감 판정 순서에 따라 직렬 처리                                                                                                 |
+| 후보가 화면에 표시된 뒤 시작 시각이 지나 확정 요청                           | 확정 거절 및 최신 후보 재조회 안내                                                                                                             |
+| 확정 상태에서 소요 시간만 수정                                               | 거절하고 재조율 안내                                                                                                                           |
+| 재조율로 날짜·시간 범위를 축소                                               | 범위 밖 슬롯만 제거하고 제출 상태 유지. 실제 슬롯이 삭제된 참여자의 `availability_version` 증가                                                |
+| 재조율로 날짜·시간 범위를 확대하거나 이동                                    | 모든 active 참여자의 `availability_submitted_at=NULL`, `availability_version + 1` 후 재제출 요청                                               |
+| 재조율에서 범위는 그대로 두고 소요 시간만 변경                               | 슬롯과 제출 상태 유지, 기존 입력으로 후보 재계산                                                                                               |
+| 방장 탈퇴 자동 승계 처리 중 오류                                             | 전체 트랜잭션 롤백, 기존 방장의 role·status 유지                                                                                               |
+| 방장이 해당 후보 시간에 불가능하고 제출한 다른 참여자 2명이 가능             | 후보에 포함                                                                                                                                    |
+| 슬롯 0개로 가능 시간 제출                                                    | 제출 완료로 기록하되 가능 인원에는 기여하지 않음                                                                                               |
+| `closed` 상태에서 일반 참여자 탈퇴                                           | 탈퇴 허용, 참여자 `status=cancelled`, 약속은 `closed` 유지, 다음 후보 조회에서 제외                                                            |
+| `confirmed` 상태에서 일반 참여자 탈퇴                                        | 탈퇴 허용, 확정 시간과 약속 상태 유지, 참석자 명단만 갱신                                                                                      |
+| `confirmed` 상태에서 탈퇴 후 참석 가능 인원이 2명 미만                       | 자동 확정 해제·자동 취소 없음, 방장에게 재조율·취소 안내                                                                                       |
+| `closed` 또는 `confirmed` 상태에서 방장이 참여자 내보내기 요청               | 거절하고 재조율 후 처리 안내                                                                                                                   |
+| 방장 탈퇴 시 다른 active 참여자가 존재                                       | `created_at ASC`, `id ASC` 순서의 첫 참여자에게 자동 승계한 뒤 기존 방장 탈퇴                                                                  |
 | `collecting`·`closed`·`confirmed`에서 방장 탈퇴 시 다른 active 참여자가 없음 | 방장은 `role=host`, `status=active`, `cancelled_at=NULL`로 보존하고 약속만 `status=cancelled`, `cancelled_at` 기록. 모든 참여자 세션 즉시 만료 |
-| 탈퇴 처리 전 발급된 세션 쿠키 재사용 | 세션 만료 또는 참여자 `status=cancelled` 확인 후 `401 UNAUTHENTICATED` 반환 |
-| 탈퇴 처리 후 DB 확인 | 참여자·닉네임·PIN 해시·가능 슬롯·제출 기록 보존, cancelled\_at 기록, 모든 active 집계에서 제외 |
-| 약속 취소 처리 후 DB 확인 | 설정·참여자·닉네임·PIN 해시·가능 슬롯·제출 기록·확정 일정 보존 및 cancelled\_at 기록 |
-| 취소된 약속의 초대 링크 접속 | 취소 안내만 표시하고 설정·참여자·입력·결과는 노출하지 않음 |
-| 취소된 약속에 일반 API 요청 | `409 PROMISE_CANCELLED` 반환 |
-| 취소된 약속을 복원하거나 재조율 요청 | 거절 |
-| draft에서 방장이 탈퇴 (나가기) | 세션·방장·promise 물리 삭제, 링크 재사용 가능, 이후 다른 사용자가 방장 등록 가능 |
+| 탈퇴 처리 전 발급된 세션 쿠키 재사용                                         | 세션 만료 또는 참여자 `status=cancelled` 확인 후 `401 UNAUTHENTICATED` 반환                                                                    |
+| 탈퇴 처리 후 DB 확인                                                         | 참여자·닉네임·PIN 해시·가능 슬롯·제출 기록 보존, cancelled\_at 기록, 모든 active 집계에서 제외                                                 |
+| 약속 취소 처리 후 DB 확인                                                    | 설정·참여자·닉네임·PIN 해시·가능 슬롯·제출 기록·확정 일정 보존 및 cancelled\_at 기록                                                           |
+| 취소된 약속의 초대 링크 접속                                                 | 취소 안내만 표시하고 설정·참여자·입력·결과는 노출하지 않음                                                                                     |
+| 취소된 약속에 일반 API 요청                                                  | `409 PROMISE_CANCELLED` 반환                                                                                                                   |
+| 취소된 약속을 복원하거나 재조율 요청                                         | 거절                                                                                                                                           |
+| draft에서 방장이 탈퇴 (나가기)                                               | 세션·방장·promise 물리 삭제, 링크 재사용 가능, 이후 다른 사용자가 방장 등록 가능                                                               |
 
 ## 참고 문서
 
@@ -537,11 +537,11 @@ MVP에서는 취소·탈퇴 데이터를 자동 삭제하지 않는다. `cancell
 
 ## ⚠️ 다른 문서와의 불일치 (2026-10-30 확인)
 
-| 항목 | 이 문서(ERD) | 비즈니스 규칙 | 조치 |
-| --- | --- | --- | --- |
-| 정원 최소·최대 | 3.2/4.2절 "2 이상 30 이하" | MEMBER-07-01 ❗미결 | ERD가 선반영. 규칙 확정 필요 |
-| 기록 보관 기간 | 10절 "MVP에서는 자동 삭제하지 않음" | STATE-11-02 ❗미결 | 규칙 확정 필요 |
-| 지난 슬롯 처리 | 5.2절 | TIME API 문서에 "ERD 5.2절 첫 문장 수정 필요"로 기록됨 | ERD 수정 대상 |
+| 항목           | 이 문서(ERD)                        | 비즈니스 규칙                                          | 조치                         |
+| -------------- | ----------------------------------- | ------------------------------------------------------ | ---------------------------- |
+| 정원 최소·최대 | 3.2/4.2절 "2 이상 30 이하"          | MEMBER-07-01 ❗미결                                    | ERD가 선반영. 규칙 확정 필요 |
+| 기록 보관 기간 | 10절 "MVP에서는 자동 삭제하지 않음" | STATE-11-02 ❗미결                                     | 규칙 확정 필요               |
+| 지난 슬롯 처리 | 5.2절                               | TIME API 문서에 "ERD 5.2절 첫 문장 수정 필요"로 기록됨 | ERD 수정 대상                |
 
 ## 현재 구현 상태 (2026-11-03)
 

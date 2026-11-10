@@ -134,7 +134,11 @@ describe("PATCH /api/v1/promises/[promiseId]/settings (STATE-API-03)", () => {
     ["오프셋 없는 마감", { votingDeadlineAt: "2026-11-09T18:00:00" }, PROMISE_ID],
     ["부분 dateRange", { dateRange: { startDate: "2026-11-10" } }, PROMISE_ID],
     ["부분 dailyTimeRange", { dailyTimeRange: { endTime: "18:00" } }, PROMISE_ID],
-    ["30분 경계 밖 시각 형식", { dailyTimeRange: { startTime: "9:00", endTime: "18:00" } }, PROMISE_ID],
+    [
+      "30분 경계 밖 시각 형식",
+      { dailyTimeRange: { startTime: "9:00", endTime: "18:00" } },
+      PROMISE_ID,
+    ],
   ])("%s → 400, 인증보다 먼저(쿠키 없음)", async (_n, body, promiseId) => {
     const res = await call(body, undefined, promiseId);
     expect(res.status).toBe(400);
@@ -174,7 +178,11 @@ describe("PATCH /api/v1/promises/[promiseId]/settings (STATE-API-03)", () => {
   it.each(["closed", "confirmed", "draft"])(
     "%s → 409 INVALID_PROMISE_STATE, allowedStates collecting",
     async (promiseStatus) => {
-      updateSettings.mockResolvedValueOnce({ kind: "invalid_state", promiseStatus, session: reread });
+      updateSettings.mockResolvedValueOnce({
+        kind: "invalid_state",
+        promiseStatus,
+        session: reread,
+      });
       const res = await call();
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({

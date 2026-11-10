@@ -113,7 +113,10 @@ describe("DELETE /api/v1/promises/[promiseId]/participants/me (STATE-API-08)", (
   });
 
   it("draft 폐기 200 { result: draft_discarded, promiseId: null }, 쿠키 Max-Age=0", async () => {
-    withdrawParticipant.mockResolvedValueOnce({ kind: "draft_discarded", session: { expiresAt: null, now: NOW } });
+    withdrawParticipant.mockResolvedValueOnce({
+      kind: "draft_discarded",
+      session: { expiresAt: null, now: NOW },
+    });
     const res = await call();
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ result: "draft_discarded", promiseId: null });
@@ -159,16 +162,21 @@ describe("DELETE /api/v1/promises/[promiseId]/participants/me (STATE-API-08)", (
     ["cancelled", 409, "PROMISE_CANCELLED"],
     ["forbidden", 403, "FORBIDDEN"],
     ["unauthenticated", 401, "UNAUTHENTICATED"],
-  ])("잠금 후 %s → %i %s, 쿠키는 잠금 후 다시 읽은 세션 기준으로 갱신", async (kind, status, code) => {
-    withdrawParticipant.mockResolvedValueOnce({
-      kind,
-      session: { expiresAt: AUTH.session.expiresAt, now: new Date(NOW.getTime() + 2000) },
-    });
-    const res = await call();
-    expect(res.status).toBe(status);
-    expect((await res.json()).code).toBe(code);
-    expect(res.headers.get("set-cookie")).toBe(`${COOKIE_PREFIX}tok${COOKIE_ATTRS}; Max-Age=3598`);
-  });
+  ])(
+    "잠금 후 %s → %i %s, 쿠키는 잠금 후 다시 읽은 세션 기준으로 갱신",
+    async (kind, status, code) => {
+      withdrawParticipant.mockResolvedValueOnce({
+        kind,
+        session: { expiresAt: AUTH.session.expiresAt, now: new Date(NOW.getTime() + 2000) },
+      });
+      const res = await call();
+      expect(res.status).toBe(status);
+      expect((await res.json()).code).toBe(code);
+      expect(res.headers.get("set-cookie")).toBe(
+        `${COOKIE_PREFIX}tok${COOKIE_ATTRS}; Max-Age=3598`,
+      );
+    },
+  );
 
   it.each([
     ["not_found", 404, "PROMISE_NOT_FOUND"],

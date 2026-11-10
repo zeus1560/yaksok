@@ -51,7 +51,9 @@ async function handle(
       case "invalid_state":
         return reply(invalidPromiseState(result.promiseStatus, ["collecting", "closed"]));
       case "ok":
-        return reply(Response.json({ promiseId: auth.promise.id, promiseStatus: result.promiseStatus }));
+        return reply(
+          Response.json({ promiseId: auth.promise.id, promiseStatus: result.promiseStatus }),
+        );
     }
   } catch (error) {
     // 연결 문자열이 섞일 수 있는 원문 메시지 대신 오류 종류만 남긴다

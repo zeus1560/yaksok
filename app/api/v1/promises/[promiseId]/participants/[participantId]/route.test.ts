@@ -34,11 +34,14 @@ function call(
   headers: Record<string, string> = { origin: BASE_URL },
   body?: string,
 ) {
-  const request = new Request(`${BASE_URL}/api/v1/promises/${promiseId}/participants/${participantId}`, {
-    method: "DELETE",
-    headers,
-    body,
-  });
+  const request = new Request(
+    `${BASE_URL}/api/v1/promises/${promiseId}/participants/${participantId}`,
+    {
+      method: "DELETE",
+      headers,
+      body,
+    },
+  );
   return DELETE(request, { params: Promise.resolve({ promiseId, participantId }) });
 }
 
@@ -85,7 +88,11 @@ describe("DELETE /api/v1/promises/[promiseId]/participants/[participantId] (MEMB
       participantLimit: 6,
       session: LOCKED,
     });
-    const res = await call({}, { origin: BASE_URL, "content-type": "application/json" }, "{not json");
+    const res = await call(
+      {},
+      { origin: BASE_URL, "content-type": "application/json" },
+      "{not json",
+    );
     expect(res.status).toBe(200);
   });
 
@@ -148,7 +155,11 @@ describe("DELETE /api/v1/promises/[promiseId]/participants/[participantId] (MEMB
   it.each(["draft", "closed", "confirmed"])(
     "%s → 409 INVALID_PROMISE_STATE, details { promiseStatus, allowedStates: [collecting] }",
     async (promiseStatus) => {
-      removeParticipant.mockResolvedValueOnce({ kind: "invalid_state", promiseStatus, session: LOCKED });
+      removeParticipant.mockResolvedValueOnce({
+        kind: "invalid_state",
+        promiseStatus,
+        session: LOCKED,
+      });
       const res = await call();
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({

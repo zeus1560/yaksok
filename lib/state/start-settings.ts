@@ -28,7 +28,10 @@ export type StartSettingsField =
 export type SettingsViolation = {
   field: StartSettingsField;
   message: string;
-  code?: "CAPACITY_BELOW_ACTIVE_COUNT" | "CAPACITY_DECREASE_NOT_ALLOWED" | "DEADLINE_SHORTEN_NOT_ALLOWED";
+  code?:
+    | "CAPACITY_BELOW_ACTIVE_COUNT"
+    | "CAPACITY_DECREASE_NOT_ALLOWED"
+    | "DEADLINE_SHORTEN_NOT_ALLOWED";
 };
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;

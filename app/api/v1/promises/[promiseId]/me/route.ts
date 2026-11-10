@@ -13,10 +13,7 @@ import { toSeoulIsoMillisString, toSeoulIsoString } from "@/lib/time/seoul";
 // MEMBER-API-05 내 참여 정보 조회. 화면 진입 시 "지금 보는 사람이 누구인지"를 서버 세션으로 확인한다
 // 읽기 요청이라 Origin을 검사하지 않는다. 허용 상태는 전체(cancelled 포함)
 // 세션 토큰·쿠키 값은 로그에 남기지 않는다
-export async function GET(
-  request: Request,
-  ctx: RouteContext<"/api/v1/promises/[promiseId]/me">,
-) {
+export async function GET(request: Request, ctx: RouteContext<"/api/v1/promises/[promiseId]/me">) {
   return noStore(await handle(request, ctx));
 }
 

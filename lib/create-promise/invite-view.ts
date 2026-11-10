@@ -12,13 +12,7 @@ export type MeOutcome = { ok: true; role: string; promiseStatus: string } | { ok
 // register: 방장 등록, waiting: 설정 중 대기, setup: 방장 설정, join: 참여자 등록·로그인,
 // arrived: 참여 완료(세션 있음), closed: 마감 안내 + 로그인, cancelled: 취소 안내
 export type InviteViewKind =
-  | "register"
-  | "waiting"
-  | "setup"
-  | "join"
-  | "arrived"
-  | "closed"
-  | "cancelled";
+  "register" | "waiting" | "setup" | "join" | "arrived" | "closed" | "cancelled";
 
 export function decideInviteView(nextAction: NextAction, me: MeOutcome | null): InviteViewKind {
   if (nextAction === "cancelled") return "cancelled";

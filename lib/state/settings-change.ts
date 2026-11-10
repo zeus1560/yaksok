@@ -135,7 +135,12 @@ export function loadActivePeople(tx: Tx, promiseId: string): Promise<ActivePerso
 // 범위 밖 슬롯 삭제·제출 해제·버전 (ERD 6.3 4~7, range-change.ts). 탈퇴자 기록은 건드리지 않는다
 export async function applyRangeChange(
   tx: Tx,
-  { before, after, now, people }: {
+  {
+    before,
+    after,
+    now,
+    people,
+  }: {
     before: CurrentSettings;
     after: CurrentSettings;
     now: Date;

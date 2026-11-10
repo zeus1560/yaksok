@@ -20,24 +20,24 @@ MVP 흐름: 약속 생성 → 참여자 등록(닉네임 + PIN) → 30분 슬롯
 
 ## 2. 전체 구조
 
-| 경로 | 역할 |
-| --- | --- |
-| `app/api/v1/**/route.ts` | API Route Handler. 같은 폴더에 `route.test.ts`가 있다 |
-| `app/page.tsx` | 홈 |
-| `app/p/[inviteToken]/page.tsx` | 초대 링크 화면 |
-| `components/<기능>/` | 기능별 클라이언트 UI |
-| `components/common/` | 공통 헤더·카드·버튼 |
-| `lib/member/` | 링크, 방장·참여자 등록, 로그인, 닉네임·PIN·세션, 세션 인증(`session-auth.ts`) |
-| `lib/state/` | 약속 상태 전환과 설정 검증 |
-| `lib/time/` | 서울 시간 헬퍼(`seoul.ts`), 슬롯 파싱(`slots.ts`), 가능 시간 제출과 현황 조회 |
-| `lib/create-promise/` | 화면용 순수 로직. 브라우저에서도 import한다 |
-| `lib/api-error.ts`, `lib/origin.ts`, `lib/no-store.ts` | 에러 응답 헬퍼, Origin 검사, `Cache-Control: no-store` |
-| `lib/prisma.ts` | Prisma Client 싱글턴. 다른 곳에서는 `import { prisma } from "@/lib/prisma"`만 쓴다 |
-| `prisma/schema.prisma`, `prisma/migrations/` | 스키마와 마이그레이션. CHECK 제약과 부분 UNIQUE 인덱스는 마이그레이션 SQL에 있다 |
-| `prisma/generated/` | 생성된 클라이언트. Git에서 제외되어 있다 |
-| `docs/` | 제품·규칙·ERD·API 명세. 입구는 `docs/README.md` |
-| `context/` | AI 작업 기록. `current-feature.md`(현재 기능과 완료 이력), `feature-list.md`, `features/NNN-*.md`(스펙) |
-| `.claude/skills/` | `/feature`(load·start·review·test·explain·complete), `/cleanup`, `/research`, `/list-components` |
+| 경로                                                   | 역할                                                                                                    |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `app/api/v1/**/route.ts`                               | API Route Handler. 같은 폴더에 `route.test.ts`가 있다                                                   |
+| `app/page.tsx`                                         | 홈                                                                                                      |
+| `app/p/[inviteToken]/page.tsx`                         | 초대 링크 화면                                                                                          |
+| `components/<기능>/`                                   | 기능별 클라이언트 UI                                                                                    |
+| `components/common/`                                   | 공통 헤더·카드·버튼                                                                                     |
+| `lib/member/`                                          | 링크, 방장·참여자 등록, 로그인, 닉네임·PIN·세션, 세션 인증(`session-auth.ts`)                           |
+| `lib/state/`                                           | 약속 상태 전환과 설정 검증                                                                              |
+| `lib/time/`                                            | 서울 시간 헬퍼(`seoul.ts`), 슬롯 파싱(`slots.ts`), 가능 시간 제출과 현황 조회                           |
+| `lib/create-promise/`                                  | 화면용 순수 로직. 브라우저에서도 import한다                                                             |
+| `lib/api-error.ts`, `lib/origin.ts`, `lib/no-store.ts` | 에러 응답 헬퍼, Origin 검사, `Cache-Control: no-store`                                                  |
+| `lib/prisma.ts`                                        | Prisma Client 싱글턴. 다른 곳에서는 `import { prisma } from "@/lib/prisma"`만 쓴다                      |
+| `prisma/schema.prisma`, `prisma/migrations/`           | 스키마와 마이그레이션. CHECK 제약과 부분 UNIQUE 인덱스는 마이그레이션 SQL에 있다                        |
+| `prisma/generated/`                                    | 생성된 클라이언트. Git에서 제외되어 있다                                                                |
+| `docs/`                                                | 제품·규칙·ERD·API 명세. 입구는 `docs/README.md`                                                         |
+| `context/`                                             | AI 작업 기록. `current-feature.md`(현재 기능과 완료 이력), `feature-list.md`, `features/NNN-*.md`(스펙) |
+| `.claude/skills/`                                      | `/feature`(load·start·review·test·explain·complete), `/cleanup`, `/research`, `/list-components`        |
 
 구현된 API와 남은 기능은 `context/feature-list.md`를 본다.
 

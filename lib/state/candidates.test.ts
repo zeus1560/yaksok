@@ -28,15 +28,17 @@ function slotsOn(day: string, ...times: string[]): Date[] {
   return times.map((time) => at(`${day}T${time}:00+09:00`));
 }
 
-function person(slots: Date[], overrides: Partial<CandidateParticipant> = {}): CandidateParticipant {
+function person(
+  slots: Date[],
+  overrides: Partial<CandidateParticipant> = {},
+): CandidateParticipant {
   return { status: "active", submittedAt: SUBMITTED, slots, ...overrides };
 }
 
 // 결과를 비교하기 쉬운 문자열로
 function summary(result: ReturnType<typeof computeCandidates>): string[] {
   return result.map(
-    (c) =>
-      `${c.startAt.toISOString()}~${c.endAt.toISOString()}:${c.availableParticipantCount}`,
+    (c) => `${c.startAt.toISOString()}~${c.endAt.toISOString()}:${c.availableParticipantCount}`,
   );
 }
 const iso = (s: string) => at(s).toISOString();
@@ -77,7 +79,11 @@ describe("computeCandidates (STATE-API-00 후보 계산 계약)", () => {
     it("구간 중간 슬롯 하나라도 비면 그 사람은 빠진다 (RESULT-03-01)", () => {
       // 90분 후보: 1번은 10:30이 빠짐
       const result = computeCandidates({
-        settings: settings({ durationMinutes: 90, dailyStartMinute: 10 * 60, dailyEndMinute: 11 * 60 + 30 }),
+        settings: settings({
+          durationMinutes: 90,
+          dailyStartMinute: 10 * 60,
+          dailyEndMinute: 11 * 60 + 30,
+        }),
         participants: [
           person(slotsOn("2026-11-10", "10:00", "11:00")),
           person(slotsOn("2026-11-10", "10:00", "10:30", "11:00")),
@@ -107,7 +113,11 @@ describe("computeCandidates (STATE-API-00 후보 계산 계약)", () => {
   describe("소요 시간", () => {
     it("30분: 슬롯 하나가 후보 하나", () => {
       const result = computeCandidates({
-        settings: settings({ durationMinutes: 30, dailyStartMinute: 10 * 60, dailyEndMinute: 11 * 60 }),
+        settings: settings({
+          durationMinutes: 30,
+          dailyStartMinute: 10 * 60,
+          dailyEndMinute: 11 * 60,
+        }),
         participants: [
           person(slotsOn("2026-11-10", "10:00", "10:30")),
           person(slotsOn("2026-11-10", "10:30")),
@@ -154,7 +164,10 @@ describe("computeCandidates (STATE-API-00 후보 계산 계약)", () => {
         }),
         participants: [
           // 다음 날 00:00 슬롯이 있어도 23:30~00:30처럼 날짜를 넘는 후보는 만들지 않는다
-          person([...slotsOn("2026-11-10", "22:00", "22:30", "23:00", "23:30"), ...slotsOn("2026-11-11", "00:00")]),
+          person([
+            ...slotsOn("2026-11-10", "22:00", "22:30", "23:00", "23:30"),
+            ...slotsOn("2026-11-11", "00:00"),
+          ]),
           person([...slotsOn("2026-11-10", "23:00", "23:30"), ...slotsOn("2026-11-11", "00:00")]),
         ],
         now: BEFORE_RANGE,
@@ -248,7 +261,9 @@ describe("computeCandidates (STATE-API-00 후보 계산 계약)", () => {
     });
 
     it("탈퇴자(cancelled)의 보존 슬롯은 세지 않는다", () => {
-      expect(count([person(both), person(both), person(both, { status: "cancelled" })])).toEqual([2]);
+      expect(count([person(both), person(both), person(both, { status: "cancelled" })])).toEqual([
+        2,
+      ]);
     });
 
     it("빈 선택 제출자는 가능 인원에 기여하지 않는다 (ERD 11절)", () => {
@@ -275,8 +290,14 @@ describe("computeCandidates (STATE-API-00 후보 계산 계약)", () => {
       const result = computeCandidates({
         settings: settings({ dateRangeEnd: "2026-11-11", durationMinutes: 30 }),
         participants: [
-          person([...slotsOn("2026-11-10", "09:00", "11:00"), ...slotsOn("2026-11-11", "09:00", "10:00")]),
-          person([...slotsOn("2026-11-10", "09:00", "11:00"), ...slotsOn("2026-11-11", "09:00", "10:00")]),
+          person([
+            ...slotsOn("2026-11-10", "09:00", "11:00"),
+            ...slotsOn("2026-11-11", "09:00", "10:00"),
+          ]),
+          person([
+            ...slotsOn("2026-11-10", "09:00", "11:00"),
+            ...slotsOn("2026-11-11", "09:00", "10:00"),
+          ]),
           person([...slotsOn("2026-11-10", "11:00"), ...slotsOn("2026-11-11", "10:00")]),
         ],
         now: BEFORE_RANGE,
@@ -309,7 +330,11 @@ describe("computeCandidates (STATE-API-00 후보 계산 계약)", () => {
       participants: [person(both), person(both)],
       now: BEFORE_RANGE,
     });
-    expect(Object.keys(candidate).sort()).toEqual(["availableParticipantCount", "endAt", "startAt"]);
+    expect(Object.keys(candidate).sort()).toEqual([
+      "availableParticipantCount",
+      "endAt",
+      "startAt",
+    ]);
   });
 
   it.each([
@@ -502,7 +527,7 @@ describe("validateCandidateStart (STATE-API-05 확정 재검증) — computeCand
   // 탈퇴자·미제출자도 섞고, now는 범위 전·첫날 하루 범위 도중(경계 아님)·정확히 경계·둘째 날 새벽에서 고른다
   function dataset(seed: number): Dataset {
     const random = rng(seed);
-    const pick = <T,>(values: T[]): T => values[Math.floor(random() * values.length)];
+    const pick = <T>(values: T[]): T => values[Math.floor(random() * values.length)];
     const startDay = pick(["2026-11-10", "2026-12-31", "2027-02-27"]);
     const days = 1 + Math.floor(random() * 3);
     const dailyStartMinute = pick([0, 9 * 60, 13 * 60 + 30, 22 * 60]);
@@ -630,12 +655,17 @@ describe("validateCandidateStart (STATE-API-05 확정 재검증) — computeCand
       ["날짜 범위 밖 (다음 날)", "2026-11-11T10:00:00+09:00", "out_of_date_range"],
       ["공통 1명 (10:30~11:30은 2번만)", "2026-11-10T10:30:00+09:00", "too_few_participants"],
     ])("%s → 거부(%s)", (_n, start, reason) => {
-      expect(validateCandidateStart({ ...base, startAt: at(start) })).toEqual({ ok: false, reason });
+      expect(validateCandidateStart({ ...base, startAt: at(start) })).toEqual({
+        ok: false,
+        reason,
+      });
     });
 
     it("시작 = now(30분 경계)는 지난 것으로 거부한다 (R-20)", () => {
       const onBoundary = { ...base, now: at("2026-11-10T09:30:00+09:00") };
-      expect(validateCandidateStart({ ...onBoundary, startAt: at("2026-11-10T09:30:00+09:00") })).toEqual({
+      expect(
+        validateCandidateStart({ ...onBoundary, startAt: at("2026-11-10T09:30:00+09:00") }),
+      ).toEqual({
         ok: false,
         reason: "not_future",
       });
@@ -663,10 +693,12 @@ describe("validateCandidateStart (STATE-API-05 확정 재검증) — computeCand
       expect(validateCandidateStart({ ...late, startAt: at("2026-11-10T23:00:00+09:00") }).ok).toBe(
         true,
       );
-      expect(validateCandidateStart({ ...late, startAt: at("2026-11-10T23:30:00+09:00") })).toEqual({
-        ok: false,
-        reason: "out_of_daily_range",
-      });
+      expect(validateCandidateStart({ ...late, startAt: at("2026-11-10T23:30:00+09:00") })).toEqual(
+        {
+          ok: false,
+          reason: "out_of_daily_range",
+        },
+      );
     });
   });
 });

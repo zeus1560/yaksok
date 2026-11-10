@@ -27,18 +27,18 @@
 
 > 아래 버전은 **고정**입니다. 임의로 올리지 마세요. 올릴 일이 생기면 이슈로 올리고 팀원이 같이 결정합니다.
 
-| 항목 | 버전 | 비고 |
-| --- | --- | --- |
-| Node.js | **24.x LTS** | `.nvmrc`와 `package.json`의 `engines`로 명시 |
-| npm | Node 24 번들 (11.x) | **12로 올리지 마세요.** lock 파일이 어긋나 팀 설치가 깨질 수 있습니다 |
-| Next.js | 16.4.6 | App Router · Turbopack. 웹과 챗봇 API를 한 프로젝트에서. 16.3.5의 보안 취약점(critical) 때문에 마이너 업데이트(030) |
-| React | 19.2.x | Next가 같이 설치 |
-| TypeScript | 5.x | TS 7이 나왔지만 생태계가 아직 5 기준입니다 |
-| prisma (CLI) | **7.10.0 고정** | ⚠️ SETUP.md「자주 터지는 오류」의 첫 번째 항목 반드시 읽기 |
-| @prisma/client | **7.10.0 고정** | CLI와 같은 버전 |
-| @prisma/adapter-pg | **7.10.0 고정** | Prisma 7부터 필수. Prisma 3종은 `package.json`에 `^` 없이 정확한 버전으로 적는다 |
-| PostgreSQL | Neon 기본값 | 개발·운영 모두 Neon. 개발은 각자 프로젝트 |
-| Tailwind CSS | 4.x | |
+| 항목               | 버전                | 비고                                                                                                                |
+| ------------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Node.js            | **24.x LTS**        | `.nvmrc`와 `package.json`의 `engines`로 명시                                                                        |
+| npm                | Node 24 번들 (11.x) | **12로 올리지 마세요.** lock 파일이 어긋나 팀 설치가 깨질 수 있습니다                                               |
+| Next.js            | 16.4.6              | App Router · Turbopack. 웹과 챗봇 API를 한 프로젝트에서. 16.3.5의 보안 취약점(critical) 때문에 마이너 업데이트(030) |
+| React              | 19.2.x              | Next가 같이 설치                                                                                                    |
+| TypeScript         | 5.x                 | TS 7이 나왔지만 생태계가 아직 5 기준입니다                                                                          |
+| prisma (CLI)       | **7.10.0 고정**     | ⚠️ SETUP.md「자주 터지는 오류」의 첫 번째 항목 반드시 읽기                                                          |
+| @prisma/client     | **7.10.0 고정**     | CLI와 같은 버전                                                                                                     |
+| @prisma/adapter-pg | **7.10.0 고정**     | Prisma 7부터 필수. Prisma 3종은 `package.json`에 `^` 없이 정확한 버전으로 적는다                                    |
+| PostgreSQL         | Neon 기본값         | 개발·운영 모두 Neon. 개발은 각자 프로젝트                                                                           |
+| Tailwind CSS       | 4.x                 |                                                                                                                     |
 
 ---
 
@@ -92,17 +92,17 @@ Next.js의 예를 들면 `/api/integrations/kakao-beta`에서 요청을 받고, 
 
 ## 프로젝트 구조
 
-| 경로 | 역할 |
-| --- | --- |
-| `app/` | 화면과 API. App Router라 폴더 구조가 곧 URL입니다 |
-| `app/api/health/route.ts` | 연결 확인용 API. DB에 붙는지 볼 때 씁니다 |
-| `lib/prisma.ts` | **Prisma 싱글턴.** DB를 쓸 때는 항상 여기서 import합니다 |
-| `prisma/schema.prisma` | DB 스키마. ERD 신버전 5개 테이블 (`docs/architecture/DATABASE.md`) |
-| `prisma/migrations/` | 마이그레이션 기록. **Git으로 공유**되고 각자 DB에 적용합니다 |
-| `prisma/generated/` | 자동 생성 코드. Git에 안 올라가고 `prisma generate`로 만듭니다 |
-| `prisma.config.ts` | Prisma CLI 설정. DB 주소를 환경변수에서 읽습니다 |
-| `AGENTS.md` / `CLAUDE.md` | AI 에이전트용 프로젝트 규칙. `CLAUDE.md`는 `@AGENTS.md` 한 줄 |
-| `.github/workflows/ci.yml` | PR마다 타입·린트·빌드를 검사 |
+| 경로                       | 역할                                                               |
+| -------------------------- | ------------------------------------------------------------------ |
+| `app/`                     | 화면과 API. App Router라 폴더 구조가 곧 URL입니다                  |
+| `app/api/health/route.ts`  | 연결 확인용 API. DB에 붙는지 볼 때 씁니다                          |
+| `lib/prisma.ts`            | **Prisma 싱글턴.** DB를 쓸 때는 항상 여기서 import합니다           |
+| `prisma/schema.prisma`     | DB 스키마. ERD 신버전 5개 테이블 (`docs/architecture/DATABASE.md`) |
+| `prisma/migrations/`       | 마이그레이션 기록. **Git으로 공유**되고 각자 DB에 적용합니다       |
+| `prisma/generated/`        | 자동 생성 코드. Git에 안 올라가고 `prisma generate`로 만듭니다     |
+| `prisma.config.ts`         | Prisma CLI 설정. DB 주소를 환경변수에서 읽습니다                   |
+| `AGENTS.md` / `CLAUDE.md`  | AI 에이전트용 프로젝트 규칙. `CLAUDE.md`는 `@AGENTS.md` 한 줄      |
+| `.github/workflows/ci.yml` | PR마다 타입·린트·빌드를 검사                                       |
 
 > ⚠️ **`new PrismaClient()`를 직접 호출하지 마세요.**
 > 개발 중 핫리로드마다 새 연결이 쌓여서 `too many connections`로 죽습니다. 항상 이렇게 가져다 쓰세요.
@@ -189,13 +189,13 @@ if (process.env.NODE_ENV !== "production") {
 
 #### "항상 켜져 있어야 한다"의 정확한 의미
 
-| 배포 방식 | 가능 여부 | 주의점 |
-| --- | --- | --- |
-| 24시간 실행되는 Next.js 서버 | 가장 안정적 | 호출 즉시 처리 가능 |
-| Vercel·AWS Lambda 등의 서버리스 | 가능 | 콜드 스타트까지 포함해 제한 시간 안에 응답해야 함 |
-| 일정 시간 후 잠드는 무료 서버 | 비추천 | 첫 요청 때 서버를 깨우느라 5초를 넘길 수 있음 |
-| 개발자 MacBook·로컬 서버 | 운영 불가 | 외부 접근성과 지속성이 보장되지 않음 |
-| 오픈빌더에 저장된 고정 응답만 사용 | 별도 서버 불필요 | DB 조회나 약속 현황 같은 동적 기능은 구현 불가 |
+| 배포 방식                          | 가능 여부        | 주의점                                            |
+| ---------------------------------- | ---------------- | ------------------------------------------------- |
+| 24시간 실행되는 Next.js 서버       | 가장 안정적      | 호출 즉시 처리 가능                               |
+| Vercel·AWS Lambda 등의 서버리스    | 가능             | 콜드 스타트까지 포함해 제한 시간 안에 응답해야 함 |
+| 일정 시간 후 잠드는 무료 서버      | 비추천           | 첫 요청 때 서버를 깨우느라 5초를 넘길 수 있음     |
+| 개발자 MacBook·로컬 서버           | 운영 불가        | 외부 접근성과 지속성이 보장되지 않음              |
+| 오픈빌더에 저장된 고정 응답만 사용 | 별도 서버 불필요 | DB 조회나 약속 현황 같은 동적 기능은 구현 불가    |
 
 즉, 서버리스도 사용 가능하므로 "컴퓨터 한 대가 계속 켜져 있어야 한다"는 뜻은 아닙니다. 하지만 사용자 입장에서는 언제 호출해도 바로 응답해야 하므로 **논리적으로는 상시 가용 상태**여야 합니다.
 
@@ -222,12 +222,12 @@ if (process.env.NODE_ENV !== "production") {
 
 ## 기술 선택 기록
 
-| 선택지 | 구성 | 장점 | 단점 |
-| --- | --- | --- | --- |
-| **Next.js 풀스택** | Next.js + TypeScript + PostgreSQL | 프론트/백을 한 프로젝트에서 개발, 코드량 적음, AI가 기능 단위로 한 번에 구현하기 좋음, 배포 간단, MVP 매우 빠름 | Next/React/Node/TS를 전부 새로 알아야 함, 프론트/백 경계가 흐려질 수 있음, AI가 만든 구조를 사람이 이해 못 할 위험 |
-| **Next.js + FastAPI** | Next.js + TS / FastAPI + Python / PostgreSQL | 프론트·백 경계 명확, Python이라 백엔드 이해 쉬움, Spring보다 코드 짧음, AI가 FastAPI를 잘 다룸 | 프론트와 백 두 앱 관리, API DTO 중복 가능, Next 풀스택보다 구현량 많음 |
-| **Next.js + Spring Boot** | Next.js + TS / Spring Boot + Java / PostgreSQL | 본인이 백엔드를 이해 가능, 구조 명확, Transaction/권한/복잡한 비즈니스 로직에 강함, 포트폴리오 좋음 | 코드량 많음, Controller/Service/DTO 등 계층이 많음, MVP 속도가 상대적으로 느림 |
-| **React + FastAPI** | React + TS / FastAPI + Python | 구조 단순, 백엔드 가벼움, SPA 개념이 명확 | Next.js가 제공하는 라우팅/SSR/서버 기능 등을 따로 처리, 요즘 새 MVP에서 굳이 React만 쓸 이유가 적음 |
-| **Python 중심 풀스택** | Django 또는 Streamlit 등 | Python 하나 위주로 사용 가능, 본인이 코드 읽기 쉬움 | 일반적인 현대 웹 UI 개발에는 불리함, Streamlit은 제품형 웹서비스 UI에 부적합, AI가 예쁜/복잡한 UX 만들기 어려움 |
+| 선택지                    | 구성                                           | 장점                                                                                                            | 단점                                                                                                               |
+| ------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Next.js 풀스택**        | Next.js + TypeScript + PostgreSQL              | 프론트/백을 한 프로젝트에서 개발, 코드량 적음, AI가 기능 단위로 한 번에 구현하기 좋음, 배포 간단, MVP 매우 빠름 | Next/React/Node/TS를 전부 새로 알아야 함, 프론트/백 경계가 흐려질 수 있음, AI가 만든 구조를 사람이 이해 못 할 위험 |
+| **Next.js + FastAPI**     | Next.js + TS / FastAPI + Python / PostgreSQL   | 프론트·백 경계 명확, Python이라 백엔드 이해 쉬움, Spring보다 코드 짧음, AI가 FastAPI를 잘 다룸                  | 프론트와 백 두 앱 관리, API DTO 중복 가능, Next 풀스택보다 구현량 많음                                             |
+| **Next.js + Spring Boot** | Next.js + TS / Spring Boot + Java / PostgreSQL | 본인이 백엔드를 이해 가능, 구조 명확, Transaction/권한/복잡한 비즈니스 로직에 강함, 포트폴리오 좋음             | 코드량 많음, Controller/Service/DTO 등 계층이 많음, MVP 속도가 상대적으로 느림                                     |
+| **React + FastAPI**       | React + TS / FastAPI + Python                  | 구조 단순, 백엔드 가벼움, SPA 개념이 명확                                                                       | Next.js가 제공하는 라우팅/SSR/서버 기능 등을 따로 처리, 요즘 새 MVP에서 굳이 React만 쓸 이유가 적음                |
+| **Python 중심 풀스택**    | Django 또는 Streamlit 등                       | Python 하나 위주로 사용 가능, 본인이 코드 읽기 쉬움                                                             | 일반적인 현대 웹 UI 개발에는 불리함, Streamlit은 제품형 웹서비스 UI에 부적합, AI가 예쁜/복잡한 UX 만들기 어려움    |
 
 **선택 결과: Next.js 풀스택**

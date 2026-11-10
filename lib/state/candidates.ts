@@ -81,8 +81,7 @@ export function computeCandidates(input: {
 }
 
 export type CandidateVerdict =
-  | { ok: true; candidate: Candidate }
-  | { ok: false; reason: CandidateRejection };
+  { ok: true; candidate: Candidate } | { ok: false; reason: CandidateRejection };
 
 // 확정 직전 재검증 (STATE-API-05 처리 순서 4·5·6). 시작 시각 하나가 computeCandidates 결과에 들어갈 후보인지 판정한다
 // computeCandidates와 같은 evaluateStart를 쓰므로 "후보 목록에 있다 ⇔ 통과"다. 순위(상위 5개)는 보지 않는다
@@ -134,7 +133,10 @@ function evaluateStart(context: CandidateContext, start: number): CandidateVerdi
     return { ok: false, reason: "out_of_date_range" };
   }
   const minute = (start - day) / MINUTE_MS;
-  if (minute < settings.dailyStartMinute || minute + settings.durationMinutes > settings.dailyEndMinute) {
+  if (
+    minute < settings.dailyStartMinute ||
+    minute + settings.durationMinutes > settings.dailyEndMinute
+  ) {
     return { ok: false, reason: "out_of_daily_range" };
   }
 
