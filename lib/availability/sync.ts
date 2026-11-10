@@ -1,4 +1,6 @@
 import { toSeoulIsoString } from "@/lib/time/seoul";
+import { isSlotInRange, type SlotRange } from "@/lib/time/slots";
+import { timeToMinute } from "./grid";
 
 // 가능 시간 입력 화면의 로컬 임시 입력·서버 동기화 (TIME-10-02·10-04·11-02). 브라우저에서도 import하는 순수 함수다
 // 슬롯은 epoch ms로 다룬다. 서버 표기(초 단위·밀리초 3자리)가 달라도 같은 시각이면 같은 값이다
@@ -112,6 +114,41 @@ export function nextDraft(
   const slots = [...new Set(selection)].sort((a, b) => a - b);
   if (sameSlots(slots, me.slots)) return null;
   return { baseVersion: current?.baseVersion ?? me.version, slots };
+}
+
+// 화면이 받은 설정(TIME-API-02 settings) → 슬롯 범위. 하루 시각 "HH:mm"(24:00 = 1440)
+export function settingsRange(settings: {
+  dateRangeStart: string;
+  dateRangeEnd: string;
+  dailyStartTime: string;
+  dailyEndTime: string;
+}): SlotRange {
+  return {
+    startDate: settings.dateRangeStart,
+    endDate: settings.dateRangeEnd,
+    dailyStartMinute: timeToMinute(settings.dailyStartTime),
+    dailyEndMinute: timeToMinute(settings.dailyEndTime),
+  };
+}
+
+// 새 설정 범위 밖 칸을 제출 전 입력에서 지운다 (028, STATE-09-03)
+// 방장이 범위를 줄여도 서버는 저장된 슬롯만 정리하고 버전을 올린다. 그 범위에 저장된 슬롯이 없던 참여자는
+// 버전이 그대로라 로컬 입력이 유지되므로(decideDraft keep), 화면이 같은 기준(isSlotInRange)으로 잘라 낸다
+// 지난 칸은 시각과 무관하게 범위만 본다(서버 범위 정리와 같은 기준)
+export function clipDraftToRange(
+  draft: LocalDraft,
+  range: SlotRange,
+): { draft: LocalDraft; removed: number } {
+  const slots = draft.slots.filter((ms) => isSlotInRange(ms, range));
+  if (slots.length === draft.slots.length) return { draft, removed: 0 };
+  return {
+    draft: { baseVersion: draft.baseVersion, slots },
+    removed: draft.slots.length - slots.length,
+  };
+}
+
+export function rangeClippedNotice(removed: number): string {
+  return `약속 설정이 바뀌어 범위 밖 입력 ${removed}칸을 지웠어요. 제출 전이에요.`;
 }
 
 export type SubmissionState = "not_submitted" | "editing" | "submitted" | "editing_resubmit";

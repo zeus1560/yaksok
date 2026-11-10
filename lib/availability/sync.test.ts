@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clipDraftToRange,
   decideDraft,
   draftStorageKey,
   estimateServerNow,
@@ -9,6 +10,7 @@ import {
   parseDraft,
   parseSlotList,
   serializeDraft,
+  settingsRange,
   submissionState,
   SUBMISSION_LABELS,
   toSlotStrings,
@@ -153,5 +155,83 @@ describe("서버 시각·남은 시간", () => {
   it("마감 시각은 한국 시간으로 표기", () => {
     expect(formatSeoulDateTime(ms("2026-11-10T23:59:00+09:00"))).toBe("11/10(화) 23:59");
     expect(formatSeoulDateTime(ms("2026-11-10T15:00:00Z"))).toBe("11/11(수) 00:00");
+  });
+});
+
+describe("clipDraftToRange", () => {
+  const range = {
+    startDate: "2026-11-20",
+    endDate: "2026-11-21",
+    dailyStartMinute: 9 * 60,
+    dailyEndMinute: 12 * 60,
+  };
+  const at = (iso: string) => Date.parse(iso);
+
+  it("범위가 바뀌면 제출 전 입력에서 범위 밖 칸을 지운다", () => {
+    const draft = {
+      baseVersion: 3,
+      slots: [
+        at("2026-11-20T09:00:00+09:00"),
+        at("2026-11-20T12:00:00+09:00"), // 하루 범위 밖(12:00 종료)
+        at("2026-11-21T11:30:00+09:00"),
+        at("2026-11-22T09:00:00+09:00"), // 날짜 범위 밖
+      ],
+    };
+    expect(clipDraftToRange(draft, range)).toEqual({
+      draft: {
+        baseVersion: 3,
+        slots: [at("2026-11-20T09:00:00+09:00"), at("2026-11-21T11:30:00+09:00")],
+      },
+      removed: 2,
+    });
+  });
+
+  it("범위 안 칸만 있으면 같은 입력을 그대로 돌려준다", () => {
+    const draft = { baseVersion: 1, slots: [at("2026-11-20T09:00:00+09:00")] };
+    const clipped = clipDraftToRange(draft, range);
+    expect(clipped.removed).toBe(0);
+    expect(clipped.draft).toBe(draft);
+  });
+
+  it("모든 칸이 범위 밖이면 빈 입력(기준 버전 유지)", () => {
+    expect(
+      clipDraftToRange({ baseVersion: 2, slots: [at("2026-11-19T09:00:00+09:00")] }, range),
+    ).toEqual({ draft: { baseVersion: 2, slots: [] }, removed: 1 });
+  });
+
+  it("24:00 종료면 23:30 칸은 남고, 하루 시작 전 칸은 지운다", () => {
+    const allDay = settingsRange({
+      dateRangeStart: "2026-11-20",
+      dateRangeEnd: "2026-11-20",
+      dailyStartTime: "09:00",
+      dailyEndTime: "24:00",
+    });
+    expect(allDay).toEqual({
+      startDate: "2026-11-20",
+      endDate: "2026-11-20",
+      dailyStartMinute: 540,
+      dailyEndMinute: 1440,
+    });
+    const draft = {
+      baseVersion: 0,
+      slots: [at("2026-11-20T08:30:00+09:00"), at("2026-11-20T23:30:00+09:00")],
+    };
+    expect(clipDraftToRange(draft, allDay)).toEqual({
+      draft: { baseVersion: 0, slots: [at("2026-11-20T23:30:00+09:00")] },
+      removed: 1,
+    });
+  });
+
+  it("잘라 낸 입력이 서버 값과 같아지면 decideDraft가 조용히 지운다(선택 N칸 = 화면)", () => {
+    const server = { version: 4, submitted: true, slots: [at("2026-11-20T09:00:00+09:00")] };
+    const draft = {
+      baseVersion: 4,
+      slots: [at("2026-11-20T09:00:00+09:00"), at("2026-11-22T09:00:00+09:00")],
+    };
+    const clipped = clipDraftToRange(draft, range).draft;
+    expect(decideDraft(clipped, server, "collecting", 0)).toEqual({
+      kind: "drop",
+      reason: "same",
+    });
   });
 });

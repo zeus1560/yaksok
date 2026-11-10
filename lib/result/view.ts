@@ -21,8 +21,8 @@ export type RoomMe = {
 export type RoomView =
   // 첫 상태 조회 전(또는 확정 값이 아직 없는 응답)
   | { kind: "loading" }
-  // collecting: 시간 입력 화면. canClose면 방장 마감 버튼
-  | { kind: "input"; canClose: boolean }
+  // collecting: 시간 입력 화면. 방장 마감 버튼은 방장 메뉴(027)가 canManage로 따로 판단한다
+  | { kind: "input" }
   // closed: 후보 화면. canConfirm이면 후보마다 확정 버튼
   | { kind: "candidates"; canConfirm: boolean }
   // confirmed: 결과 화면
@@ -39,7 +39,7 @@ export function decideRoomView(detail: RoomDetail | null, me: RoomMe): RoomView 
   const manager = canManage(me);
   switch (detail.promiseStatus) {
     case "collecting":
-      return { kind: "input", canClose: manager };
+      return { kind: "input" };
     case "closed":
       return { kind: "candidates", canConfirm: manager };
     case "confirmed": {
@@ -56,4 +56,18 @@ export function decideRoomView(detail: RoomDetail | null, me: RoomMe): RoomView 
     default:
       return { kind: "relink" };
   }
+}
+
+export const PROMOTED_NOTICE =
+  "이전 방장이 약속에서 나가 이제 내가 방장이에요. 위쪽 방장 메뉴를 쓸 수 있어요.";
+
+// 명단(MEMBER-API-06)의 내 행 역할이 화면이 가진 /me 역할과 다르면 /me를 다시 불러야 한다 (028)
+// 방장이 나가 자동 승계되면(MEMBER-12-03) 후임자의 열린 화면은 명단 폴링에서 먼저 알게 된다
+// 내 행이 없으면(탈퇴·내보내짐) 판단하지 않는다 — 다른 요청의 401이 링크 재조회로 보낸다
+export function roleChanged(
+  me: Pick<RoomMe, "role">,
+  rows: readonly { isMe: boolean; role: string }[] | null,
+): boolean {
+  const mine = rows?.find((row) => row.isMe);
+  return mine !== undefined && mine.role !== me.role;
 }

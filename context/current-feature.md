@@ -1,4 +1,4 @@
-# 현재 기능: 방장 관리 화면 (화면 PR 5a)
+# 현재 기능: 참여자 화면 마무리 (화면 PR 5b)
 
 ## 상태
 
@@ -6,21 +6,21 @@
 
 ## 스펙
 
-`context/features/027-host-manage-ui.md`
+`context/features/028-participant-finish-ui.md`
 
 ## 목표
 
-방장 전용 메뉴(화면 위쪽, `/me` 기준)에서 모집 중 설정 변경(STATE-API-03)·재조율(STATE-API-06)·약속 취소(STATE-API-07)를 하고, 모든 참여자가 명단(MEMBER-API-06)과 정원 현황을 보며, 방장은 모집 중에 참여자를 내보낸다(MEMBER-API-08). API·DB 변경 없음. 탈퇴·로그아웃·시간 입력 화면 버그는 다음 PR(5b).
+참여자가 할 수 있는 마지막 두 기능(약속 나가기 STATE-API-08, 로그아웃 MEMBER-API-07)의 화면을 만들고, 쌓인 화면 문제(시간 입력 "선택 N칸"이 범위 변경 뒤 화면보다 많이 셈, 후임 방장 화면에 방장 메뉴가 새로고침 전까지 안 나타남, 쓰지 않는 `canClose`)를 고친다. API·DB 변경 없음.
 
 ## 수용 기준
 
-스펙 `context/features/027-host-manage-ui.md` AC-1~8 참고.
+스펙 `context/features/028-participant-finish-ui.md` AC-1~6 참고.
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-방장관리-화면` (`main` 9ed4e75에서 생성, 026 PR #31 병합 포함)
-- 시작 시 작업 트리: 깨끗함(`ahn/fix-공통가드-정리`에서 `main`으로 전환 후 `git fetch --prune`·`git pull`). 원격이 사라진 로컬 `ahn/` 브랜치 없음(원격이 남은 로컬 `ahn/` 브랜치는 그대로 둠)
-- 첫 커밋은 026 완료 기록(스펙 026 상태, 완료 이력, feature-list) — 스테이징해 둠
+- 브랜치: `ahn/feat-참여자화면-마무리` (`main` ee3ba06에서 생성, 027 PR #32 병합 포함)
+- 시작 시 작업 트리: 깨끗함(`ahn/feat-방장관리-화면`에서 `main`으로 전환 후 `git fetch --prune`·`git pull`). 원격이 사라진 로컬 `ahn/` 브랜치 없음(원격이 남은 로컬 `ahn/` 브랜치는 그대로 둠)
+- 첫 커밋은 027 완료 기록(스펙 027 상태, 완료 이력, feature-list) — 스테이징해 둠
 
 ## 검증 결과
 
@@ -28,24 +28,30 @@
 
 | 단계 | 명령 | 결과 |
 | --- | --- | --- |
-| RED | `npx vitest run lib/manage` (빈 구현: `buildSettingsBody`가 `{}`, `classifyCancelFailure`가 retry) | 2건 실패. 「설정 변경은 바꾼 필드만 보내고 날짜 범위를 안 바꿨으면 dateRange를 보내지 않는다」 `AssertionError: expected {} to deeply equal { participantLimit: 6, …(1) }`, 「취소 요청 뒤 409 PROMISE_CANCELLED는 성공으로 처리한다」 `AssertionError: expected { kind: 'retry', message: '' } to deeply equal { kind: 'done' }` |
-| GREEN | 같은 명령 | 2건 통과(바꾼 필드만 모으는 `changedFields` + 마감 분 단위 비교, 취소 409 `PROMISE_CANCELLED` → done) |
-| REFACTOR | 실패 분기·폼 검증·미리 보기·안내 문구 테스트 추가(`lib/manage` 69건), prettier / `npm run test` | 73 파일, 1594 테스트 통과(1525 + 69, 기존 기대값 수정 없음). `$env:TZ` `UTC`(오프셋 0)·`America/Los_Angeles`(오프셋 480)에서도 1594건 통과 |
+| RED | `npx vitest run lib/leave/confirm.test.ts lib/availability/sync.test.ts -t "방장이 나가기 전\|범위가 바뀌면"` (빈 구현: `leaveConfirm`이 빈 문구, `clipDraftToRange`가 입력 그대로) | 2건 실패. 「방장이 나가기 전 확인 창은 명단의 다음 사람 이름으로 승계를 안내한다」 `AssertionError: expected '' to be '철수님이 방장이 돼요' // Object.is equality`, 「범위가 바뀌면 제출 전 입력에서 범위 밖 칸을 지운다」 `AssertionError: expected { …(2) } to deeply equal { …(2) }`(slots에 범위 밖 2칸이 남고 `removed: 0`) |
+| GREEN | 같은 명령 | 2건 통과(본인을 뺀 첫 행 이름, `isSlotInRange`로 거르기) |
+| REFACTOR | 상황별 문구·실패 분기·저장 키·범위 정리 경계·역할 비교 테스트 추가, prettier / `npm run test` | 76 파일, 1622 테스트 통과(1594 + 28). 기존 기대값 수정은 `lib/result/view.test.ts` 2건(`canClose` 제거 — `{ kind: "input", canClose }` → `{ kind: "input" }`, 방장 판단은 `canManage` 기대값으로 옮김). `$env:TZ` `UTC`(오프셋 0)·`America/Los_Angeles`(오프셋 480)에서도 1622건 통과 |
 | | `npm run lint` / `npm run typecheck` | 통과 |
 | | `npm run build` | 통과(dev 서버 종료·3000 포트 비어 있음 확인 후) |
 
-| 브라우저 (dev 서버, Playwright + 로컬 Chromium, 방장 1280px·참여자 390px) | 결과 |
+| 브라우저 (dev 서버, Playwright 1.56.1 + 로컬 Chromium, 1280px·390px) | 결과 |
 | --- | --- |
-| `scripts/verify/027-host-manage.mjs` 74개 항목 3회 통과 → 메뉴로 옮긴 응답 마감하기 10개 항목 추가 후 84개 항목 2회 전부 통과(추가 직후 첫 회는 dev 서버를 막 띄워 첫 화면 컴파일이 늦어 2건 시간 초과, 코드 변경 없이 다시 돌려 통과) | **방장 메뉴:** 방장만 "약속 관리"가 보이고 시간 입력 화면보다 위, 참여자에게는 없음. **명단:** 참여자 390px에서 3 / 6명·등록순·방장·나, 제출 여부·내보내기 버튼 없음, 방장은 본인 행 제외 2개 행에만 내보내기. **설정 변경:** 정원 − 비활성·마감 `min` = 현재 마감·바꾼 내용 없으면 저장 비활성, 마감 때문에 막히는 축소 안내·저장 비활성, 마감 단축은 안내만·PATCH 없음·DB 그대로, 정원 증가·마감 연장은 `participantLimit`·`votingDeadlineAt`만 전송·DB 반영·참여자 화면 정원·마감 머리글 반영 1.9~3.0초, 범위 축소 미리 보기(삭제만) → `dateRange`만 전송 → "범위 밖 입력 1칸을 지웠어요"·DB 슬롯 0·참여자 화면 날짜 칸 4 → 3, 범위 확대 미리 보기(재제출만) → "모든 참여자의 제출이 해제되어…"·참여자 날짜 칸 5. **내보내기:** 확인 창 → 명단 2명·2 / 7명, 내보내진 사람 화면은 다음 폴링 401로 링크 재조회 → 참여 화면, 대상 DB cancelled, DB로 마감 경과시키면 후보 화면·내보내기 버튼 없음·메뉴는 다시 열기·취소. **재조율:** closed(마감 경과 collecting)에서 새 마감 없으면 안내, 새 마감만 전송 → 방장·참여자 시간 입력 화면(5초 안)·DB collecting. confirmed에서 확정 해제 안내, 설정도 바꾸기 → 정원 하한 = 현재 인원 2, 범위 이동 미리 보기(삭제·재제출 둘 다), 정원·`dateRange`·새 마감만 전송 → "확정된 일정을 해제했어요"·DB 확정 NULL·참여자 화면 시간 입력. **취소:** 확인 창(되돌릴 수 없음), 요청 중 "취소하는 중…" 비활성, 요청 1회 → 취소 안내·DB cancelled·참여자 화면 취소 안내(5초 안). 응답 유실(closed 약속, Playwright route로 서버 200 뒤 응답 끊음) → "취소하지 못했어요" 화면 유지 → 다시 누름 409 `PROMISE_CANCELLED` → 취소 안내. **응답 마감하기(메뉴로 옮김):** 모집 중 방장 메뉴에만 보이고 일반 참여자에게 없음, 확인 창(요청 전 0회) → 마감 요청 1회·DB closed → 방장 화면 바로·참여자 화면 5초 안 후보 화면(018과 같은 흐름), 마감 후 메뉴에서 응답 마감하기가 사라지고 다시 열기·약속 취소만(설정 변경 없음), 참여자 390px 가로 스크롤 없음. **공통:** 390px 가로 스크롤 없음(명단·설정 변경 뒤·결과·취소 안내), 1280px도 없음, 콘솔 오류 없음(의도한 401·409·끊은 요청의 리소스 로드 메시지만) |
-| 정리 | 회차마다 확인 링크 4·약속 4·참여자 9·세션 9·슬롯 4 삭제(84개 항목 판은 링크 5·약속 5·참여자 11·세션 11·슬롯 4), 6개 테이블(`_prisma_migrations` 포함) 행 수·md5가 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
+| `scripts/verify/028-participant-finish.mjs` 75개 항목 — 첫 회 74 통과·1 실패(아래 수정) → 수정 뒤 2회 연속 75개 전부 통과. 시작할 때 쓰는 API 13종과 화면 6종(시간 입력·후보·취소 안내·설정·방장 등록·참여)을 미리 열어 컴파일(27~47초) | **일반 참여자 나가기(390px):** 확인 창 "약속에서 나가면 다시 참여할 수 없어요", 열기·돌아가기만으로 요청 0회, 나가기 1회 → 참여 화면 + "약속에서 나갔어요…", 이 약속 저장값 0개, DB cancelled, 같은 닉네임 재등록 → "참여가 끝난 닉네임이에요". **방장 + 다른 참여자(1280px):** 확인 창 "{등록순 다음 사람}님이 방장이 돼요", 응답 `hostTransferred`·후임 id, 나간 방장은 참여 화면, 후임자 390px 화면에 새로고침 없이 방장 메뉴 + "이제 내가 방장이에요"(나가기 응답부터 3.1·3.4·3.6초), DB 후임 host·옛 방장 member+cancelled. **혼자인 방장:** "약속이 취소돼요" → 취소 안내 + "다른 참여자가 없어 약속을 취소하고 나왔어요", DB cancelled. **draft 방장:** 카운트다운 기준값을 넣은 설정 화면에서 "약속 만들기 그만두기" → "만들던 약속이 삭제돼요" → 방장 등록 화면 + 삭제 안내, DB 약속 없음, 기준값 삭제, 같은 링크 방장 등록 201. **나가기 응답 유실:** 서버 200 뒤 응답 끊음 → "나가지 못했어요…" 화면 유지(DB 이미 cancelled) → 다시 누름 401 `UNAUTHENTICATED` → 나감 안내 참여 화면·저장값 삭제. **로그아웃 이 기기:** 확인 없이 로그인 화면 + "로그아웃했어요…", `allDevices` 없음, 저장값 삭제, DB 세션 2 → 1·참여자 active, 다른 브라우저는 6초 뒤에도 시간 입력 화면·`/me` 200, 같은 닉네임·PIN 재로그인 → 시간 입력. **모든 기기:** 확인 창(다시 로그인 가능, 재참여 불가 문구 없음, 열기만으로 요청 0회) → `allDevices=true` 1회, 이 기기 로그인 화면, DB 세션 0, 다른 브라우저도 다음 폴링에서 참여·로그인 화면 → 같은 닉네임·PIN 재로그인, 유효 세션 1. **선택 N칸:** 하루 전체 18칸 선택(제출 전) → 방장이 하루 09–18 → 09–12 축소(PATCH 200, 저장 슬롯 없어 버전 그대로) → 다음 폴링에서 "선택 6칸" = 화면 6칸, "범위 밖 입력 12칸을 지웠어요", 저장소 입력 6칸, "입력 중 · 제출 전" 유지. **공통:** 390px·1280px 가로 스크롤 없음, 콘솔 오류 없음(의도한 401·409·403과 끊은 요청의 리소스 로드 메시지만) |
+| 첫 회 실패와 수정 | 「다시 누름 401 → 나감 안내 참여 화면」: 붙잡아 둔 폴링이 풀리며 401로 일반 링크 재조회(안내 없음)를 따로 시작해 나가기 처리의 재조회 결과를 덮었다. 실제로도 나가는 순간 폴링이 401을 받으면 생길 수 있어 `invite-flow.tsx`에서 나가기·로그아웃 처리 중에는 일반 재조회를 무시하고, 겹친 재조회는 마지막에 시작한 결과만 반영하게 고침 |
+| 027 회귀 `scripts/verify/027-host-manage.mjs` 84개 항목 | 처음 2회는 「재조율 뒤 방장 화면 시간 입력·안내」 1건 실패(83 통과) → 이후 원본 2회 연속 84개 전부 통과. 실패 회차에 1.5초 더 기다린 화면은 안내·시간 입력 둘 다 정상, 같은 흐름에서 소요 시간을 잰 사본 2회는 2.4·2.9초(기준 7초). 원인은 확정하지 못함(아래 메모) |
+| 027 원인 확인(미리 컴파일 추가, `.next` 삭제 후 새 dev 서버, 3회 연속) | 1회 통과·2회 실패(방장 화면 7.1초, 참여자 화면 5초 초과). 실패 시점 요청 순서에 링크 재조회·`/me`가 없고 재조율 뒤 약 7초 동안 `/availability`가 없음 → `invite-flow.tsx`가 아니라 SWR `onSuccess`가 요청을 시작한 화면에만 불리는 문제. 아래 fix로 수정(`context/fixes/001-availability-swr-join.md`) |
+| fix RED | `npx vitest run lib/availability/intake.test.ts` (빈 구현: `createIntake`가 항상 null) — 2건 실패. 「같은 주소 요청이 진행 중일 때 새로 그려진 시간 입력 화면도 그 응답으로 채워진다」 `AssertionError: expected null to deeply equal { …(2) }`, 「같은 응답으로 다시 그려져도 decidePoll은 한 번만 실행된다」 `AssertionError: expected "vi.fn()" to be called 1 times, but got 0 times` |
+| fix GREEN·REFACTOR | 같은 명령 2건 통과 → 경계 테스트 6건 추가(8건). 세 화면을 SWR `data` + `createIntake`로 변경. `npm run test` 77 파일 1630건, `TZ=UTC`·`America/Los_Angeles`에서도 1630건. lint·typecheck 통과, build 통과(3000 포트 비어 있음 확인 후) |
+| fix 브라우저 (`.next` 삭제 후 새 dev 서버) | **027** 3회 연속 84/84(재조율 뒤 전환 1.3·2.2·1.4초). **028** 75/75 — 2회차가 4절 뒤 네트워크 끊김(`Connection terminated unexpectedly`, 이어서 Neon 주소 DNS `ENOTFOUND`)으로 중단 → 연결 복구 뒤 남은 확인 데이터(링크 9·약속 7·참여자 13·세션 13, 그 회차 실행 구간에 만든 것만) 삭제, 다시 2회 연속 75/75. **012 회귀** `scripts/verify/fix-availability-intake.mjs` 21개 항목 — 첫 조회 1회(합류 아니면 추가 요청 없음), 로컬 입력 유지(폴링 한 주기·새로고침), 다른 기기 변경 안내·서버 값으로 다시 그림, 409 충돌 안내·details로 다시 그림·뒤 폴링에도 유지, 제출, 같은 주소 요청에 합류시킨 재조율 5회. 첫 실행은 합류 측정 1건 실패(5회 3.0~3.4초, 기준 3초) — 요청 순서상 재조율 API 자체 약 1초 + 상태 조회 약 0.9초 + 가능 시간 조회 약 1초로, 5초 폴링 대기는 없었고 측정 시작점을 재조율 API 호출 전으로 잡은 스크립트 잘못. 기준(3초)은 두고 시작점만 재조율 응답으로 바꿔 2회 연속 21/21(1.9~2.3초) |
+| 정리 | 회차마다 확인 링크 11·약속 9·참여자 18·세션 18 삭제(027은 링크 5·약속 5·참여자 11·세션 11·슬롯 4), 6개 테이블(`_prisma_migrations` 포함) 행 수·md5가 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
 
 ## 메모
 
-- 사용자 지시로 정한 것: 범위(방장 메뉴·설정 변경·재조율·취소·명단·내보내기), 바꾼 필드만·범위는 바꿨을 때만, 취소 409 성공 처리, `/me` 기준 방장 판단(`deadlinePassed` 미사용), 탈퇴·로그아웃·시간 입력 버그는 5b
-- `lib/state/range-change.ts`는 서버 전용 의존성이 없어 화면에서 그대로 import(보고 대상 아님). 화면 검증도 서버 `settings-patch.ts`·`start-settings.ts` 함수 재사용
-- 이번 구현 판단(R-33): 018 "응답 마감하기"를 방장 메뉴로 옮김, 명단 기본 접힘·5초 폴링, 미리 보기 "삭제" 안내는 칸 기준, 설정 변경·재조율 400 `INVALID_REQUEST`는 입력 확인 안내(018은 링크 재조회), 내보내기 404는 `PARTICIPANT_NOT_FOUND`만 재조회
-- 문서: DECISION_CONFLICTS R-33 신설, 스펙 027 신설
-- 검증 스크립트: `scripts/verify/027-host-manage.mjs`(Git 제외). dev 서버를 띄운 뒤 `PLAYWRIGHT_DIR=… CHROMIUM_PATH=… node scripts/verify/027-host-manage.mjs`, `SCREENSHOT_DIR`를 주면 주요 화면 4장 저장
+- 사용자 지시로 정한 것: 범위(나가기·로그아웃·선택 N칸·후임 방장 메뉴·`canClose`), 확인 문구 4종, 나가기 뒤 401 성공 처리, 저장값 삭제 대상, 실패 분기 순수 함수
+- 다르게 판단한 것(R-34): ① `/me`를 따로 폴링하지 않고 이미 5초마다 오는 명단의 내 `role`이 바뀌었을 때만 `/me`를 다시 부름 — 요청 수가 늘지 않는다(시간 입력 화면 기준 5초마다 상태·명단·가능 시간 3건 그대로, `/me` 폴링이면 4건). ② 나가기 재요청의 409 `PROMISE_CANCELLED`(혼자인 방장)·404 `PROMISE_NOT_FOUND`(draft 방장)도 401과 같이 완료로 처리. ③ 로그아웃 401(쿠키 없음)도 완료. ④ 모든 기기 로그아웃 뒤 다른 브라우저는 일반 링크 재조회라 참여 화면(등록 모드, 로그인 전환 가능)으로 간다 — 로그인 모드로 바로 열지 않음
+- 027 회귀 실패 원인(확인됨): SWR은 같은 주소 요청에 합류한 화면에 `onSuccess`를 부르지 않는다. 시간 입력 화면·상태 조회·명단 세 곳을 SWR `data`로 받도록 고침(fix 커밋, `context/fixes/001-availability-swr-join.md`). 027 스크립트에 미리 컴파일 단계와 실패 진단(요청 순서·화면 텍스트) 추가
+- 정리: 모든 회차 뒤 6개 테이블 스냅샷이 시작 상태와 동일. 네트워크로 중단된 028 회차의 남은 데이터는 그 실행 구간에 만든 링크 기준으로 지웠고, 이후 DB는 그날 작업 전 스냅샷과 동일(오늘 만든 링크·약속·참여자 0). dev 서버 종료, 3000 포트·`next` 프로세스 없음
+- 검증 스크립트: `scripts/verify/028-participant-finish.mjs`, `scripts/verify/fix-availability-intake.mjs`(Git 제외). dev 서버를 띄운 뒤 `PLAYWRIGHT_DIR=… CHROMIUM_PATH=… node scripts/verify/028-participant-finish.mjs`, `SCREENSHOT_DIR`를 주면 주요 화면 6장 저장
 
 ## 완료 이력
 
@@ -258,3 +264,11 @@
 - 변경: 구현된 API 20개 점검표 `docs/development/GUARD_MATRIX.md` 신설, 설정 완료(STATE-API-02) 잠금 후 세션·참여자 재확인(로그아웃과 겹치면 401·쿠키 Max-Age=0, 비활성 참여자 403 → 401), 취소된 링크 방장 등록(MEMBER-API-02) 409 `PROMISE_CANCELLED`, 제출(TIME-API-01) 잠금 후 재확인을 상태·마감 판정보다 먼저(N-2 — 무효 세션이면 마감이 지났어도 401·closed 저장 없음). 문서: state.md·member.md·time.md 처리 순서, DECISION_CONFLICTS R-32 신설·R-22·R-31 후속
 - 검증: Vitest 1525건(이번 16건 순증), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 개발 DB 실제 호출 71개 항목 2회(잠금 대기 중 로그아웃·세션 만료 재현, 대조군 포함), 025 확인 스크립트 139개 항목 회귀 통과. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
 - 남은 제한: N-1(링크 조회 effectiveStatus)·N-3(현황 조회 draft 판정 순서)·N-4(잠금 후 cancelled 쿠키)·N-5(방장 등록 화면 409 분기)·R-30·C-07·C-12는 기록만, 팀 확인 필요
+
+### 2026-11-10 — 방장 관리 화면 (화면 PR 5a)
+
+- 스펙: `context/features/027-host-manage-ui.md`
+- 브랜치: `ahn/feat-방장관리-화면` (PR #32 병합)
+- 변경: 화면 위쪽 방장 메뉴 `components/manage/host-menu.tsx`(현재 방장만, 상태 조회 `promiseStatus` 기준 — collecting: 응답 마감(018 버튼 이동)·설정 변경·취소, closed·confirmed: 다시 열기·취소), 설정 변경·재조율 공용 폼 `settings-panel.tsx`(바꾼 필드만·범위는 바꿨을 때만 `dateRange`(R-26), 정원 감소·마감 단축 막음, 마감 때문에 막히는 축소 안내, 범위 미리 보기는 `range-change.ts` 재사용, 저장 뒤 `changeImpact` 안내), 취소 `cancel-panel.tsx`(확인 1회·409 `PROMISE_CANCELLED` 성공 처리, R-25), 명단·내보내기 `participant-list.tsx`(모두에게 정원 현황·등록순·방장·나, 5초 폴링, 방장·모집 중·본인 제외 내보내기). 순수 로직 `lib/manage/{settings-form,impact,failure}.ts`. 문서: DECISION_CONFLICTS R-33 신설
+- 검증: Vitest 1594건(이번 69건, 기존 기대값 수정 없음), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 브라우저 `scripts/verify/027-host-manage.mjs` 84개 항목 2회 통과(방장 1280px·참여자 390px, 응답 유실 재요청 포함). 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
+- 남은 제한: 탈퇴·로그아웃 버튼, 시간 입력 화면 "선택 N칸" 버그, 후임 방장 화면의 방장 메뉴(새로고침 필요)는 5b(028), 명단 기본 접힘·5초 폴링·미리 보기 칸 기준 안내는 팀 확인 필요(R-33)

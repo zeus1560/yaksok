@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, NoticeCard } from "@/components/common/ui";
 import {
   callApi,
   readStorage,
   removeStorage,
+  storageKeys,
   type LinkStatus,
   type MyParticipation,
   type StartedSettings,
@@ -18,8 +19,10 @@ import { DRAFT_POLL_FALLBACK_MS } from "@/components/create-promise/constants";
 import { ArrivedCard } from "@/components/participate/arrived-card";
 import { ParticipantAuthCard } from "@/components/participate/participant-auth-card";
 import { setupStorageKey } from "@/lib/create-promise/countdown";
+import { promiseStorageKeys } from "@/lib/leave/storage";
 import { decideInviteView, setupCountdownBase } from "@/lib/create-promise/invite-view";
 import { BLOCKED_NOTICES, type BlockedReason } from "@/lib/participate/failure";
+import type { AuthMode } from "@/components/participate/participant-auth-card";
 
 // /p/[inviteToken] 화면 분기 (MEMBER-API-01 화면 분기 표, DECISION_CONFLICTS R-15·R-17·R-18)
 // 링크 조회 → promiseId가 있으면 /me(MEMBER-API-05)로 본인을 확인해 화면을 정한다
@@ -33,10 +36,11 @@ type View =
   // localExpiresAt이 null이면 이 기기에 기준값이 없다(다른 기기·저장소 삭제) — 카운트다운을 숨긴다
   | { kind: "setup"; promiseId: string; localExpiresAt: number | null }
   | { kind: "done"; settings: StartedSettings }
-  | { kind: "join"; promiseId: string }
+  // notice·mode: 나가기·로그아웃 뒤(028) 안내와 첫 화면(로그아웃은 로그인)
+  | { kind: "join"; promiseId: string; notice: string | null; mode: AuthMode }
   | { kind: "arrived"; promiseId: string; me: MyParticipation }
-  | { kind: "closed"; promiseId: string }
-  | { kind: "cancelled" }
+  | { kind: "closed"; promiseId: string; notice: string | null }
+  | { kind: "cancelled"; notice: string | null }
   | { kind: "blocked"; promiseId: string; reason: BlockedReason }
   | { kind: "invalid" }
   | { kind: "expired" }
@@ -49,7 +53,11 @@ async function fetchMe(promiseId: string): Promise<MyParticipation | null> {
   return result.ok ? result.data : null;
 }
 
-async function lookup(inviteToken: string, notice: string | null = null): Promise<View> {
+async function lookup(
+  inviteToken: string,
+  notice: string | null = null,
+  mode: AuthMode = "register",
+): Promise<View> {
   const storageKey = setupStorageKey(inviteToken);
   const result = await callApi<LinkStatus>(`/api/v1/links/${encodeURIComponent(inviteToken)}`);
   if (!result.ok) {
@@ -82,13 +90,13 @@ async function lookup(inviteToken: string, notice: string | null = null): Promis
         notice,
       };
     case "join":
-      return { kind: "join", promiseId: promiseId as string };
+      return { kind: "join", promiseId: promiseId as string, notice, mode };
     case "arrived":
       return { kind: "arrived", promiseId: promiseId as string, me: me as MyParticipation };
     case "closed":
-      return { kind: "closed", promiseId: promiseId as string };
+      return { kind: "closed", promiseId: promiseId as string, notice };
     case "cancelled":
-      return { kind: "cancelled" };
+      return { kind: "cancelled", notice };
   }
 }
 
@@ -96,9 +104,17 @@ export function InviteFlow({ inviteToken }: { inviteToken: string }) {
   const storageKey = setupStorageKey(inviteToken);
   const [view, setView] = useState<View>({ kind: "loading" });
 
+  // 재조회가 겹치면 마지막에 시작한 결과만 반영한다(예: 폴링 401 재조회가 나가기 뒤 안내 화면을 덮지 않게)
+  const lookupSeqRef = useRef(0);
+  // 나가기·로그아웃 처리 중에는 참여 화면이 보내는 일반 재조회(폴링 401 등)를 무시한다
+  const exitingRef = useRef(false);
+
   const reload = useCallback(
     async (notice: string | null = null) => {
-      setView(await lookup(inviteToken, notice));
+      if (exitingRef.current) return;
+      const seq = ++lookupSeqRef.current;
+      const next = await lookup(inviteToken, notice);
+      if (seq === lookupSeqRef.current) setView(next);
     },
     [inviteToken],
   );
@@ -128,6 +144,27 @@ export function InviteFlow({ inviteToken }: { inviteToken: string }) {
       window.clearTimeout(timer);
     };
   }, [view, inviteToken]);
+
+  // 나가기·로그아웃 완료(028): 참여 화면을 먼저 내려 폴링을 멈추고, 이 약속의 저장값(제출 전 입력·카운트다운 기준값)을
+  // 지운 뒤 링크를 다시 조회한다. 내리기 직전에 끝난 조회가 입력을 다시 쓸 수 있어 조회 뒤에 한 번 더 지운다
+  const exit = useCallback(
+    async (promiseId: string, notice: string, mode: AuthMode) => {
+      const clear = () => {
+        for (const key of promiseStorageKeys(storageKeys(), promiseId, inviteToken)) {
+          removeStorage(key);
+        }
+      };
+      exitingRef.current = true;
+      const seq = ++lookupSeqRef.current;
+      setView({ kind: "loading" });
+      clear();
+      const next = await lookup(inviteToken, notice, mode);
+      clear();
+      exitingRef.current = false;
+      if (seq === lookupSeqRef.current) setView(next);
+    },
+    [inviteToken],
+  );
 
   // 등록·로그인 성공: 세션 쿠키를 받았으므로 링크 조회 + /me로 다음 화면을 정한다
   // 방장이 draft에서 로그인했으면 설정 화면(카운트다운은 같은 promiseId의 저장값이 있을 때만)
@@ -177,6 +214,7 @@ export function InviteFlow({ inviteToken }: { inviteToken: string }) {
             removeStorage(storageKey);
             void reload(notice);
           }}
+          onLeft={(notice) => void exit(view.promiseId, notice, "register")}
         />
       );
     case "done":
@@ -187,8 +225,11 @@ export function InviteFlow({ inviteToken }: { inviteToken: string }) {
     case "join":
       return (
         <ParticipantAuthCard
+          // 같은 약속에서 나간 뒤 다시 그려도 안내·모드를 새로 적용한다
+          key={`${view.promiseId}:${view.mode}:${view.notice ?? ""}`}
           promiseId={view.promiseId}
-          initialMode="register"
+          initialMode={view.mode}
+          intro={view.notice ?? undefined}
           allowRegister
           onAuthenticated={afterAuth}
           onReload={afterAuth}
@@ -204,6 +245,7 @@ export function InviteFlow({ inviteToken }: { inviteToken: string }) {
           inviteToken={inviteToken}
           me={view.me}
           onRelink={afterAuth}
+          onExit={(notice, mode) => void exit(view.promiseId, notice, mode)}
         />
       );
     case "closed":
@@ -211,13 +253,18 @@ export function InviteFlow({ inviteToken }: { inviteToken: string }) {
         <LoginBehindNotice
           promiseId={view.promiseId}
           title="응답이 마감된 약속이에요"
-          body="참여자라면 로그인해서 내 참여 정보를 볼 수 있어요."
+          body={`${view.notice ? `${view.notice} ` : ""}참여자라면 로그인해서 내 참여 정보를 볼 수 있어요.`}
           onAuthenticated={afterAuth}
           onBlocked={onBlocked(view.promiseId)}
         />
       );
     case "cancelled":
-      return <NoticeCard title="취소된 약속이에요" body="방장이 이 약속을 취소했어요." />;
+      return (
+        <NoticeCard
+          title="취소된 약속이에요"
+          body={view.notice ?? "방장이 이 약속을 취소했어요."}
+        />
+      );
     case "blocked": {
       const notice = BLOCKED_NOTICES[view.reason];
       // 마감 뒤에는 새로 참여할 수 없지만 기존 참여자는 로그인할 수 있다
