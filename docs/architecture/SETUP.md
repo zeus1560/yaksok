@@ -114,7 +114,9 @@ npm ci
 >
 > 이런 모양이면 맞습니다.
 >
-> `postgresql://neondb_owner:비밀번호@ep-무언가.ap-southeast-1.aws.neon.tech/neondb?sslmode=require`
+> `postgresql://neondb_owner:비밀번호@ep-무언가.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require`
+>
+> `.env`에 넣을 때는 **`sslmode=require`를 `sslmode=verify-full`로 바꿉니다**(아래 1-4).
 >
 > **비밀번호가 들어 있으니 채팅방이나 문서에 붙여넣지 마세요.**
 >
@@ -137,6 +139,8 @@ Copy-Item .env.example .env
 ```
 
 `.env`를 열어서 `DATABASE_URL`을 **본인 Neon 연결 문자열**로 바꿉니다. 나머지 값은 아직 비워둬도 됩니다.
+
+> 🔒 **`sslmode`는 `verify-full`로 적습니다.** Neon 화면이 주는 `sslmode=require`는 앱이 쓰는 `pg` 8에서 `verify-full`(인증서·호스트 이름 확인)의 별칭으로 처리되지만, 연결할 때 `SECURITY WARNING: The SSL modes ... are treated as aliases for verify-full` 경고가 나옵니다. `pg` 9부터는 `require`가 표준 libpq 뜻(암호화만, 인증서 확인 안 함)으로 바뀌어 보안이 약해집니다. 지금 동작(확인함)을 유지하려는 것이므로 `verify-full`로 명시합니다. Neon 인증서는 공인 CA라 따로 인증서 파일이 필요 없고, Prisma CLI(`migrate`)도 같은 값으로 동작합니다. `channel_binding=require`는 그대로 둡니다. `DIRECT_URL`을 채울 때도 같습니다.
 
 > 🔥 `.env`는 `.gitignore`에 들어 있어 Git에 올라가지 않습니다. **절대 이 설정을 풀지 마세요.** 한 번 커밋되면 히스토리에 영원히 남아서 키를 재발급하는 것 말고는 방법이 없습니다.
 
@@ -324,6 +328,7 @@ npx prisma studio   # 브라우저로 DB 테이블 보기 · 값 직접 입력 �
 | `new PrismaClient()`에 타입 에러 | Prisma 7부터 드라이버 어댑터를 넘겨야 합니다. `lib/prisma.ts`처럼 `adapter: new PrismaPg({ connectionString })`을 전달하세요 |
 | `@/prisma/generated/client`를 못 찾음 | `npx prisma generate`를 안 돌린 경우. 돌린 뒤에도 빨간 줄이 남으면 VS Code에서 `Ctrl+Shift+P` → `TypeScript: Restart TS Server` |
 | `Environment variable not found: DATABASE_URL` | `.env`가 없거나 `DATABASE_URL` 줄이 비어 있음. `.env.example`을 복사했는지 확인 |
+| 연결할 때 `SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'` | 연결 문자열이 `sslmode=require`. `.env`의 `DATABASE_URL`(과 `DIRECT_URL`)을 `sslmode=verify-full`로 바꾸세요(1-4) |
 | `too many connections` | `new PrismaClient()`를 여러 곳에서 호출. 전부 `@/lib/prisma` import로 교체 |
 | `npm run lint`가 끝나지 않음 | `eslint.config.mjs`의 무시 목록에 `prisma/generated/**`가 있는지 확인. 없으면 생성 코드 수천 줄을 검사하느라 멈춥니다 |
 | CI만 `Cannot find name 'LayoutProps'`로 실패 | Next 16이 자동 생성하는 타입이라 `.next`가 없는 CI에서만 납니다. CI에 `npx next typegen` 단계가 있는지 확인 |
