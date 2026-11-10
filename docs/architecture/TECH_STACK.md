@@ -31,7 +31,7 @@
 | --- | --- | --- |
 | Node.js | **24.x LTS** | `.nvmrc`와 `package.json`의 `engines`로 명시 |
 | npm | Node 24 번들 (11.x) | **12로 올리지 마세요.** lock 파일이 어긋나 팀 설치가 깨질 수 있습니다 |
-| Next.js | 16.3.5 | App Router · Turbopack. 웹과 챗봇 API를 한 프로젝트에서 |
+| Next.js | 16.4.6 | App Router · Turbopack. 웹과 챗봇 API를 한 프로젝트에서. 16.3.5의 보안 취약점(critical) 때문에 마이너 업데이트(030) |
 | React | 19.2.x | Next가 같이 설치 |
 | TypeScript | 5.x | TS 7이 나왔지만 생태계가 아직 5 기준입니다 |
 | prisma (CLI) | **7.10.0 고정** | ⚠️ SETUP.md「자주 터지는 오류」의 첫 번째 항목 반드시 읽기 |
