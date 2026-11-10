@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Button, Card } from "@/components/common/ui";
+import { useHeaderIdentity, type Identity } from "@/components/common/identity";
+import { Badge, Button, Card } from "@/components/common/ui";
 import type { StartedSettings } from "@/components/create-promise/api";
 import {
   formatDailyRange,
@@ -11,7 +12,10 @@ import {
   timeToMinute,
 } from "@/lib/create-promise/format";
 
-// 설정 완료 (Figma 35:379). 약속 이름 대신 날짜 범위·정원 요약을 제목으로 쓴다 (R-15)
+// 설정 완료 (Figma 35:379, 04). 약속 이름 대신 날짜 범위·정원 요약을 제목으로 쓴다 (R-15)
+// 복사가 되면 버튼이 2초 동안 어두운 "복사 완료" 상태가 된다(Figma 04). 복사하지 못하면 링크를 선택하고 알림으로 안내한다
+
+const COPIED_MS = 2000;
 
 function inviteUrlOf(inviteToken: string): string {
   // MEMBER-API-09의 inviteUrl과 같은 기준(NEXT_PUBLIC_BASE_URL)으로 조립한다
@@ -22,13 +26,17 @@ function inviteUrlOf(inviteToken: string): string {
 export function DoneCard({
   inviteToken,
   settings,
+  identity,
   onStartInput,
 }: {
   inviteToken: string;
   settings: StartedSettings;
+  identity: Identity;
   onStartInput: () => void;
 }) {
+  useHeaderIdentity(identity);
   const [inviteUrl] = useState(() => inviteUrlOf(inviteToken));
+  const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const timer = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -40,32 +48,35 @@ export function DoneCard({
     [],
   );
 
-  function showToast(message: string) {
-    setToast(message);
+  function later(fn: () => void) {
     if (timer.current !== null) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setToast(null), 2000);
+    timer.current = window.setTimeout(fn, COPIED_MS);
   }
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(inviteUrl);
-      showToast("링크를 복사했어요");
+      setToast(null);
+      setCopied(true);
+      later(() => setCopied(false));
     } catch {
       // 클립보드 권한이 없으면 직접 복사할 수 있게 선택해 둔다
       inputRef.current?.select();
-      showToast("링크를 선택했어요. 길게 눌러 복사해 주세요");
+      setCopied(false);
+      setToast("링크를 선택했어요. 길게 눌러 복사해 주세요");
+      later(() => setToast(null));
     }
   }
 
   const { dateRange, dailyTimeRange } = settings;
   return (
     <>
-      <Card className="mx-auto max-w-lg">
+      <Card center>
         <h1 className="text-[28px] font-bold leading-snug">약속이 만들어졌어요</h1>
         <p className="mt-2 text-sub">친구들에게 링크를 보내고, 가능한 시간을 함께 골라보세요.</p>
-        <span className="mt-5 inline-block rounded-lg bg-blue-soft px-4 py-1.5 text-xs font-medium text-ink">
+        <Badge size="status" className="mt-5">
           조율 중
-        </span>
+        </Badge>
         <h2 className="mt-5 text-xl font-bold">
           {formatSummaryTitle(dateRange.startDate, dateRange.endDate, settings.participantLimit)}
         </h2>
@@ -89,12 +100,12 @@ export function DoneCard({
           ref={inputRef}
           readOnly
           value={inviteUrl}
-          className="mt-6 h-12 w-full rounded-lg border border-line bg-faint px-4 text-sm"
+          className="mt-6 h-field w-full rounded-field border border-line bg-paper px-4 text-sm"
           onFocus={(e) => e.currentTarget.select()}
         />
         <div className="mt-4 space-y-3">
-          <Button variant="secondary" onClick={copy}>
-            초대 링크 복사
+          <Button variant={copied ? "dark" : "secondary"} onClick={copy} aria-live="polite">
+            {copied ? "링크를 복사했어요" : "초대 링크 복사"}
           </Button>
           <Button onClick={onStartInput}>내 가능 시간 입력하기</Button>
         </div>
@@ -102,7 +113,7 @@ export function DoneCard({
       <div
         role="status"
         aria-live="polite"
-        className={`fixed inset-x-4 bottom-6 mx-auto max-w-sm rounded-lg bg-text px-4 py-3 text-center text-sm text-white transition-opacity ${
+        className={`fixed inset-x-4 bottom-6 mx-auto max-w-md rounded-field bg-text px-4 py-3 text-center text-sm text-white transition-opacity ${
           toast ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       >

@@ -1,8 +1,8 @@
-# 현재 기능: Figma 대조와 화면 다듬기 (1단계: 차이 목록)
+# 현재 기능: Figma 대조와 화면 다듬기 (029)
 
 ## 상태
 
-진행 중
+검토 중
 
 ## 스펙
 
@@ -10,34 +10,50 @@
 
 ## 목표
 
-Figma 와이어프레임(`docs/design/figma/`)과 지금 화면을 같은 상태로 나란히 찍어 차이를 분류한 목록(`docs/design/FIGMA_DIFF.md`)을 만든다. 1단계는 코드 변경 없음. 목록을 보고 고칠 범위를 정한 뒤 2단계에서 고친다.
+1단계: Figma 와이어프레임(`docs/design/figma/`)과 지금 화면을 같은 상태로 찍어 차이 63개를 분류한다(`docs/design/FIGMA_DIFF.md`). 2단계: 사용자가 고른 범위를 고친다 — 시각 18개, 구성 중 사용성·일관성에 도움이 되는 것, 공통 확인 모달, 헤더 「닉네임 · 역할」, 설정 달력 반 폭. API·DB 변경 없음.
 
 ## 수용 기준
 
-스펙 `context/features/029-figma-polish.md` AC-1~6(1단계) 참고. AC-7은 2단계.
+스펙 `context/features/029-figma-polish.md` AC-1~7 참고.
 
 ## 작업 기준점
 
 - 브랜치: `ahn/feat-figma-대조` (`main` 1a29e05에서 생성, 028 PR #33 병합 포함)
-- 시작 시 작업 트리: 추적 파일 변경 없음, 추적하지 않는 `docs/design/`(사용자가 넣은 Figma PNG)만 있음 — 이번 작업 자료라 그대로 두고 진행. `main`에서 `git fetch --prune`·`git pull`(ee3ba06 → 1a29e05). 원격이 사라진 로컬 `ahn/` 브랜치 없음(원격이 남은 로컬 `ahn/` 브랜치 24개는 그대로 둠)
-- 첫 커밋 f9333d9 `docs: 028 완료 기록`
+- 시작 시 작업 트리: 추적 파일 변경 없음, 추적하지 않는 `docs/design/`(사용자가 넣은 Figma PNG)만 있음. 원격이 사라진 로컬 `ahn/` 브랜치 없음
+- 커밋: f9333d9 `docs: 028 완료 기록`, 0c3b121 `docs: Figma 대조 차이 목록`(이미지 4.3MB 포함). 2단계 코드는 커밋 전(사용자 확인 뒤 커밋)
 
 ## 검증 결과
 
-2026-11-10, Node.js 24. 코드 변경이 없어 test·lint·typecheck·build는 돌리지 않았다.
+2026-11-10, Node.js 24
 
-| 항목 | 결과 |
+| 단계 | 명령 | 결과 |
+| --- | --- | --- |
+| RED | `npx vitest run lib/ui/modal.test.ts -t "요청 중 Esc\|요청 중이 아니면 Esc\|바깥을 눌렀다"` (빈 구현: 늘 none·false) | 2건 실패 — 「요청 중이 아니면 Esc로 닫힌다」 `AssertionError: expected { kind: 'none' } to deeply equal { kind: 'close' }`, 「바깥을 눌렀다 바깥에서 떼면 닫힌다」 `AssertionError: expected false to be true // Object.is equality`. 빈 구현에서는 「모달은 요청 중 Esc로 닫히지 않는다」가 우연히 통과해, busy를 무시하는 단순 구현으로 바꿔 다시 확인 |
+| RED (단순 구현) | `npx vitest run lib/ui/modal.test.ts -t "요청 중 Esc\|요청 중에는 바깥"` (Esc면 항상 close, 바깥에서 떼면 항상 닫기) | 2건 실패 — 「모달은 요청 중 Esc로 닫히지 않는다」 `AssertionError: expected { kind: 'close' } to deeply equal { kind: 'none' }`, 「요청 중에는 바깥 클릭으로 닫히지 않는다」 `AssertionError: expected true to be false // Object.is equality` |
+| GREEN | `npx vitest run lib/ui/modal.test.ts` | 11건 통과(Esc·바깥 클릭 busy 막기, Tab 처음↔끝, 창 밖 포커스, 누를 요소 0개면 창에 머묾, 창 안에서 누르고 바깥에서 뗀 경우 닫지 않음) |
+| REFACTOR | 선택 요약 `summary.test.ts` 5건, `maxAvailable` 1건 추가, prettier / `npm run test` | 79 파일, 1647 테스트 통과(1630 + 17). 기존 기대값 수정 없음. PowerShell `$env:TZ` `UTC`(오프셋 0)·`America/Los_Angeles`(오프셋 480)에서도 1647건 통과 — Git Bash `TZ=America/Los_Angeles`는 적용되지 않아(오프셋 -540) PowerShell로 다시 돌림 |
+| | `npm run lint` / `npm run typecheck` | 통과 |
+| | `npm run build` | 통과(dev 서버 종료·3000 포트 비어 있음 확인 후) |
+| 관찰 2건 | 버그 2건(취소 직후 첫 드래그, 드래그 뒤 글자 선택)은 렌더링 테스트 환경이 없어 브라우저 재현으로 확인 | 재현 안 됨 → 테스트·코드 변경 없음(아래) |
+
+| 브라우저 (dev 서버, Playwright 1.56.1 + 로컬 Chromium) | 결과 |
 | --- | --- |
-| 이미지 용량 | `docs/design/figma/` 파일 245개·4.3MB(20MB 이하) → 커밋 대상 |
-| 촬영 `scripts/verify/029-figma-capture.mjs`(Playwright 1.56.1 + 로컬 Chromium, dev 서버) | 23장 저장(`docs/design/compare/ours/`): 설정 3·완료·참여·닉네임 중복·보드 선택 전·빈 제출 확인·드래그 뒤·저장 실패·히트맵·390px 3·마감(방장·참여자 2)·확정 확인·확정(방장·참여자)·잘못된 링크·정원 초과·취소. Figma 대응 프레임 17장은 `docs/design/compare/figma/`. 폴더는 `.gitignore`에 추가 |
-| 픽셀 측정 | Pillow(scratchpad 설치)로 컴포넌트 PNG의 색·크기·모서리를 잼 → FIGMA_DIFF 4절 |
-| 정리 | 확인 링크 3·약속 3·참여자 8·세션 8·슬롯 30 삭제, 6개 테이블(`_prisma_migrations` 포함) 행 수·md5 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
+| `scripts/verify/029-bug-repro.mjs` | [1] 처음 촬영 조건: 18:00 칸 중심(y=903)의 맨 위 요소가 아래 고정 제출 바의 글자(P 「아직 제출하지 않았어요」) → 선택 0칸, 글자 선택 「모두의 가능 시간…」. [2] 칸이 보이게 스크롤: 확인 창 취소 직후 첫 드래그 3칸(기대 3). [3] 칸에서 시작해 패널 글자 위까지 끌기: 글자 선택 없음. [4] 칸 안 드래그: 글자 선택 없음 → 원인은 촬영 스크립트(가려진 칸 좌표를 누름). 코드 변경 없음 |
+| `scripts/verify/029-modal-check.mjs` 29개 항목 | 헤더 「모달방장 · 방장」·390px 「모달참여 · 참여자」, 열면 「돌아가기」로 포커스, aria-modal·제목 연결, Tab·Shift+Tab 5번에도 창 안, Esc·바깥 클릭으로 닫힘 + 연 버튼으로 복귀, 창 안 클릭은 닫지 않음, 요청 중(마감 요청을 붙잡아 둠) Esc·바깥 클릭 무시·✕·돌아가기·확인 버튼 막힘·Tab에도 창 안, 마감 요청 1회 뒤 창 닫힘·후보 화면, 모든 기기 로그아웃 창, 390px 창이 화면 안·가로 스크롤 없음, 빈 제출 창 닫히면 제출 버튼으로 복귀·「가능 시간 없음으로 제출」 뒤 제출됨, 콘솔 오류 없음. 첫 실행 1건은 스크립트 대기 조건 잘못(마감 뒤 화면에 없는 글자를 기다림) → 헤더로 바꿔 29/29 |
+| `scripts/verify/029-figma-capture.mjs` | `CAPTURE_DIR=docs/design/compare/after`로 35장(대조 23 + 18 칸 상세 + Figma에 없는 화면·확인 창 11). 드래그 3번 모두 반영 「3일 · 총 5시간 30분 선택」 |
+| 027 회귀 84개 항목 | 선택자 수정 뒤 84/84 |
+| 028 회귀 75개 항목 | 선택자 수정 뒤 75/75 |
+| fix-availability-intake 회귀 21개 항목 | 20/21 — 「재조율 뒤 시간 입력 화면 채워짐 5회(기준 3초)」가 회차마다 5회 중 0~2회 5.1~6.1초. 같은 측정만 뗀 스크립트로 A/B: 지금 코드 20회 중 5회, `main` 코드(변경을 stash) 20회 중 4회 3초 초과 → 이번 변경과 무관한 기존 타이밍 문제로 판단(포커스 이벤트 뒤 상태 조회가 바로 나가지 않고 다음 5초 폴링을 기다리는 회차). 아래 메모 |
+| 정리 | 실행마다 확인 링크·약속·참여자·세션·슬롯 삭제, 6개 테이블 행 수·md5 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
 
 ## 메모
 
-- 차이 63개: 시각 18, 구성 25, 규칙 충돌 16(고치지 않음), 미구현 4. 큰 작업 8개(G-2·01-6·07-1·07-2·07-4·19-1·21-1·23-1)
-- 촬영 중 관찰(재현 미확인): 빈 제출 확인 "취소" 직후 첫 드래그 1회 미반영, 드래그 뒤 오른쪽 패널 글자가 선택된 채 남음 — FIGMA_DIFF 2절 끝
-- Figma 쪽 불일치(04 헤더 "민수 · 참여자", 21 사이드바 "조율 중", 07 제출 비활성 vs 22 빈 제출 가능)는 고칠 때 Figma 원본 확인 필요
+- 회귀 스크립트 선택자 수정(동작 기대값은 그대로): ① 시간 입력 화면 확인 `{닉네임}님의 가능 시간` → 헤더 「{닉네임} · 」 + 제목 「가능한 시간을 골라 주세요」(`inputScreen`, 027 13곳·028 2곳·fix 1곳), 027 보드 위치 기준 제목 1곳 ② 확인 창이 모달(body에 붙음)로 옮겨져 `menuOf/mineOf(page)·명단.getByRole("alertdialog")` → `page.getByRole("alertdialog")`(027 5곳·028 6곳) ③ 선택 칸 수 `선택 N칸` 글자 → `data-selected-slots` 속성(028·fix 각 1곳) ④ 버튼 문구 「참여하기」 → 「참여하고 시간 선택하기」(028 1곳), 「이미 참여하셨나요? 로그인」 → 「이미 참여했어요 · 다시 로그인」(028 1곳), 「제출하기」 → 「가능 시간 제출」(fix 1곳)
+- 다르게 판단한 것(R-35): 입력란 글자는 휴대폰 16px(iOS 확대 방지)·넓은 화면 14px, 주황 대신 회색 주의 안내, 결과 날짜는 후보 목록과 같은 「11월 12일 (목)」, 시간 입력 제목 「골라 주세요」(휴대폰은 끌지 않음), 확인 창 취소 문구 「돌아가기」로 통일, 결과 화면 링크 복사도 04처럼 버튼이 어두워짐
+- fix 회귀 1건: SWR 포커스 재조회가 가끔 새 요청을 보내지 않는 회차가 있다(요청 시각 기록상 포커스 직후 요청이 없고 다음 정기 폴링에서 반영). `main`에서도 같은 비율이라 이번 범위에서 고치지 않았다. 기준(3초)을 바꾸지 않았다
+- 실수와 되돌림: prettier를 `app` 폴더 전체에 돌려 API 라우트 12개 파일의 줄바꿈이 바뀌었다 → 서식 변경만인 것을 확인하고 `git checkout -- app/api`로 되돌림
+- 마지막 수정(보드 안내 종류 이름 `warn` → `attention`, 동작 같음)은 브라우저 확인 뒤에 했다. 그 뒤 test·lint·typecheck·build는 다시 돌려 통과
+- 검증 스크립트(Git 제외): `scripts/verify/029-figma-capture.mjs`(`CAPTURE_DIR` 주면 after 모드), `029-modal-check.mjs`, `029-bug-repro.mjs`
 
 ## 완료 이력
 

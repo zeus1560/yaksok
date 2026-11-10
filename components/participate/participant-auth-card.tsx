@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type SubmitEvent } from "react";
-import { Button, Card, FieldError } from "@/components/common/ui";
+import { Button, Card, FIELD, FieldError } from "@/components/common/ui";
 import { callApi } from "@/components/create-promise/api";
 import { validateNickname } from "@/lib/member/nickname";
 import {
@@ -21,14 +21,13 @@ export type AuthMode = "register" | "login";
 
 const PIN = /^[0-9]{4}$/;
 
-const INPUT =
-  "h-12 w-full rounded-lg border border-line bg-paper px-4 text-base outline-none focus:border-blue aria-invalid:border-danger";
+const INPUT = FIELD;
 
 const TEXT: Record<AuthMode, { title: string; intro: string; submit: string; pending: string }> = {
   register: {
     title: "약속에 참여해 볼까요",
     intro: "닉네임과 PIN을 정하면 바로 참여할 수 있어요. 약속 내용은 참여한 뒤에 보여요.",
-    submit: "참여하기",
+    submit: "참여하고 시간 선택하기",
     pending: "참여하는 중…",
   },
   login: {
@@ -154,7 +153,7 @@ export function ParticipantAuthCard(props: {
   }
 
   return (
-    <Card className="mx-auto max-w-lg">
+    <Card center>
       <h1 className="text-[28px] font-bold leading-snug">{props.title ?? text.title}</h1>
       <p className="mt-2 text-sub">{props.intro ?? text.intro}</p>
 
@@ -170,18 +169,33 @@ export function ParticipantAuthCard(props: {
             onChange={(e) => setNickname(e.target.value)}
             placeholder="닉네임을 입력하세요"
             autoComplete="off"
-            aria-invalid={errors.nickname ? true : undefined}
-            aria-describedby={errors.nickname ? "nickname-error" : undefined}
+            aria-invalid={errors.nickname || takenNotice ? true : undefined}
+            aria-describedby={
+              errors.nickname ? "nickname-error" : takenNotice ? "nickname-taken" : undefined
+            }
           />
           <FieldError id="nickname-error" message={errors.nickname} />
+          {/* 닉네임 중복(06-1): 입력란 바로 아래 빨간 안내. 본인일 수 있어 로그인 전환을 함께 둔다(R-18) */}
+          {takenNotice && (
+            <div id="nickname-taken" role="alert" className="mt-1.5 text-xs text-danger">
+              <p>{takenNotice}</p>
+              <button
+                type="button"
+                onClick={() => switchMode("login", nickname)}
+                className="mt-1 font-medium text-ink underline underline-offset-2"
+              >
+                이 닉네임으로 로그인하기
+              </button>
+            </div>
+          )}
         </div>
         <div>
           <label htmlFor="pin" className="mb-2 block text-sm font-medium">
-            PIN (숫자 4자리)
+            내 응답 수정용 PIN (숫자 4자리)
           </label>
           <input
             id="pin"
-            className={`${INPUT} tracking-[0.4em]`}
+            className={`${INPUT} !text-lg tracking-[0.4em]`}
             type="password"
             inputMode="numeric"
             pattern="[0-9]*"
@@ -196,23 +210,10 @@ export function ParticipantAuthCard(props: {
           <FieldError id="pin-error" message={errors.pin} />
           {mode === "register" && (
             <p id="pin-hint" className="mt-2 text-xs text-sub">
-              다른 기기에서 다시 들어올 때 같은 닉네임과 PIN을 써요
+              다시 방문할 때 같은 닉네임과 PIN으로 응답을 수정해요.
             </p>
           )}
         </div>
-
-        {takenNotice && (
-          <div role="alert" className="rounded-lg bg-blue-soft px-4 py-3 text-sm text-ink">
-            <p>{takenNotice}</p>
-            <button
-              type="button"
-              onClick={() => switchMode("login", nickname)}
-              className="mt-2 font-medium text-blue underline underline-offset-2"
-            >
-              이 닉네임으로 로그인하기
-            </button>
-          </div>
-        )}
 
         <Button type="submit" disabled={pending}>
           {pending ? text.pending : text.submit}
@@ -224,36 +225,22 @@ export function ParticipantAuthCard(props: {
         )}
       </form>
 
-      <div className="mt-5 space-y-2 text-center text-sm">
+      {/* 05-2: 로그인·참여 전환은 전체 폭 보조 버튼(Figma 05 "이미 참여했어요 · 내 응답 찾기") */}
+      <div className="mt-4 space-y-3">
         {props.allowRegister && mode === "register" && (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => switchMode("login", "")}
-            className="text-sub underline underline-offset-2 hover:text-ink"
-          >
-            이미 참여하셨나요? 로그인
-          </button>
+          <Button variant="secondary" disabled={pending} onClick={() => switchMode("login", "")}>
+            이미 참여했어요 · 다시 로그인
+          </Button>
         )}
         {props.allowRegister && mode === "login" && (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => switchMode("register", "")}
-            className="text-sub underline underline-offset-2 hover:text-ink"
-          >
-            처음이신가요? 참여하기
-          </button>
+          <Button variant="secondary" disabled={pending} onClick={() => switchMode("register", "")}>
+            처음이에요 · 참여하기
+          </Button>
         )}
         {props.onBack && (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={props.onBack}
-            className="block w-full text-sub underline underline-offset-2 hover:text-ink"
-          >
+          <Button variant="secondary" disabled={pending} onClick={props.onBack}>
             돌아가기
-          </button>
+          </Button>
         )}
       </div>
     </Card>

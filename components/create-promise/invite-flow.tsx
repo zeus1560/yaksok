@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, NoticeCard } from "@/components/common/ui";
+import type { Identity } from "@/components/common/identity";
+import { Button, LinkButton, NoticeCard } from "@/components/common/ui";
 import {
   callApi,
   readStorage,
@@ -34,8 +34,9 @@ type View =
   | { kind: "register"; notice: string | null }
   | { kind: "waiting"; promiseId: string | null; pollMs: number; notice: string | null }
   // localExpiresAt이 null이면 이 기기에 기준값이 없다(다른 기기·저장소 삭제) — 카운트다운을 숨긴다
-  | { kind: "setup"; promiseId: string; localExpiresAt: number | null }
-  | { kind: "done"; settings: StartedSettings }
+  // identity: 헤더 "닉네임 · 방장"(029 G-2). /me 또는 방금 등록한 닉네임
+  | { kind: "setup"; promiseId: string; localExpiresAt: number | null; identity: Identity }
+  | { kind: "done"; settings: StartedSettings; identity: Identity }
   // notice·mode: 나가기·로그아웃 뒤(028) 안내와 첫 화면(로그아웃은 로그인)
   | { kind: "join"; promiseId: string; notice: string | null; mode: AuthMode }
   | { kind: "arrived"; promiseId: string; me: MyParticipation }
@@ -75,7 +76,8 @@ async function lookup(
       const id = promiseId as string;
       const localExpiresAt = setupCountdownBase(readStorage(storageKey), id, Date.now());
       if (localExpiresAt === null) removeStorage(storageKey);
-      return { kind: "setup", promiseId: id, localExpiresAt };
+      const identity = me ? { nickname: me.nickname, role: me.role } : null;
+      return { kind: "setup", promiseId: id, localExpiresAt, identity };
     }
     case "register":
       // 링크가 다시 비었다(만료 draft 포함). 이전 약속의 기준값은 쓸 일이 없다
@@ -180,11 +182,12 @@ export function InviteFlow({ inviteToken }: { inviteToken: string }) {
         <RegisterHostCard
           inviteToken={inviteToken}
           notice={view.notice}
-          onRegistered={(record) =>
+          onRegistered={(record, nickname) =>
             setView({
               kind: "setup",
               promiseId: record.promiseId,
               localExpiresAt: record.localExpiresAt,
+              identity: { nickname, role: "host" },
             })
           }
           onConflict={() => reload("이미 다른 분이 이 링크로 약속을 만들고 있어요.")}
@@ -205,10 +208,11 @@ export function InviteFlow({ inviteToken }: { inviteToken: string }) {
       return (
         <SetupForm
           promiseId={view.promiseId}
+          identity={view.identity}
           localExpiresAt={view.localExpiresAt}
           onDone={(settings) => {
             removeStorage(storageKey);
-            setView({ kind: "done", settings });
+            setView({ kind: "done", settings, identity: view.identity });
           }}
           onReset={(notice) => {
             removeStorage(storageKey);
@@ -220,7 +224,12 @@ export function InviteFlow({ inviteToken }: { inviteToken: string }) {
     case "done":
       // 완료 → 내 가능 시간 입력: 링크 조회 + /me로 도착(입력) 화면을 연다
       return (
-        <DoneCard inviteToken={inviteToken} settings={view.settings} onStartInput={afterAuth} />
+        <DoneCard
+          inviteToken={inviteToken}
+          settings={view.settings}
+          identity={view.identity}
+          onStartInput={afterAuth}
+        />
       );
     case "join":
       return (
@@ -263,6 +272,7 @@ export function InviteFlow({ inviteToken }: { inviteToken: string }) {
         <NoticeCard
           title="취소된 약속이에요"
           body={view.notice ?? "방장이 이 약속을 취소했어요."}
+          action={<LinkButton href="/">새 약속 만들기</LinkButton>}
         />
       );
     case "blocked": {
@@ -282,9 +292,9 @@ export function InviteFlow({ inviteToken }: { inviteToken: string }) {
       return <NoticeCard title={notice.title} body={notice.body} />;
     }
     case "invalid":
-      return <LinkProblem title="잘못된 링크" />;
+      return <LinkProblem body="링크 주소를 다시 확인하거나 방장에게 새 링크를 요청해 주세요." />;
     case "expired":
-      return <LinkProblem title="만료된 링크" />;
+      return <LinkProblem body="사용 기간이 지난 링크예요. 방장에게 새 링크를 요청해 주세요." />;
     case "error":
       return (
         <NoticeCard
@@ -336,13 +346,9 @@ function WaitingView(props: {
       }
       action={
         props.promiseId && (
-          <button
-            type="button"
-            onClick={() => setLogin(true)}
-            className="w-full text-center text-sm text-sub underline underline-offset-2 hover:text-ink"
-          >
+          <Button variant="secondary" onClick={() => setLogin(true)}>
             방장이신가요? 로그인
-          </button>
+          </Button>
         )
       }
     />
@@ -384,20 +390,13 @@ function LoginBehindNotice(props: {
   );
 }
 
-// Figma 35:2666 "만료되거나 잘못된 링크" 문구
-function LinkProblem({ title }: { title: string }) {
+// Figma 22 "만료되거나 잘못된 링크". 제목은 같고 설명으로 404·410을 구분한다
+function LinkProblem({ body }: { body: string }) {
   return (
     <NoticeCard
-      title={title}
-      body="초대 링크를 다시 확인하거나 방장에게 새 링크를 요청해 주세요."
-      action={
-        <Link
-          href="/"
-          className="flex h-11 w-full items-center justify-center rounded-lg border border-line text-sm font-medium text-ink hover:bg-faint"
-        >
-          처음으로
-        </Link>
-      }
+      title="만료되거나 잘못된 링크"
+      body={body}
+      action={<LinkButton href="/">처음으로</LinkButton>}
     />
   );
 }

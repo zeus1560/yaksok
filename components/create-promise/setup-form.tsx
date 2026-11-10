@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type SubmitEvent, type ReactNode } from "react";
-import { Button, Card, FieldError } from "@/components/common/ui";
+import { useHeaderIdentity, type Identity } from "@/components/common/identity";
+import { Badge, Button, Card, FIELD, FieldError, Notice } from "@/components/common/ui";
 import { callApi, type StartedSettings } from "@/components/create-promise/api";
 import { Calendar } from "@/components/create-promise/calendar";
 import { LeaveControl } from "@/components/leave/leave-panel";
@@ -42,11 +43,11 @@ import { seoulDateOf } from "@/lib/time/seoul";
 
 type Field = SetupField;
 
-export const SELECT =
-  "h-12 w-full rounded-lg border border-line bg-paper px-3 text-base outline-none focus:border-blue";
+export const SELECT = FIELD;
 
 export function SetupForm(props: {
   promiseId: string;
+  identity: Identity; // 헤더 "닉네임 · 방장"(029 G-2)
   // 이 기기에서 방장 등록한 순간의 기기 시각 + 10분. null이면 기준값이 없어 카운트다운을 숨긴다
   localExpiresAt: number | null;
   onDone: (settings: StartedSettings) => void;
@@ -55,6 +56,7 @@ export function SetupForm(props: {
   onLeft: (notice: string) => void;
 }) {
   const { promiseId, localExpiresAt } = props;
+  useHeaderIdentity(props.identity);
   const [now, setNow] = useState(() => Date.now());
   const [today] = useState(() => seoulDateOf(new Date()));
 
@@ -197,35 +199,51 @@ export function SetupForm(props: {
           <h2 className="text-[28px] font-bold leading-snug">새 약속 만들기</h2>
           {left === null ? (
             // 다른 기기·저장소 삭제로 경과 시간 기준값이 없다. 남은 시간은 서버만 알며 만료는 410으로 판정한다
-            <p className="rounded-full bg-blue-soft px-3 py-1 text-sm font-medium text-ink">
-              등록 후 10분 안에 설정을 마쳐야 합니다
-            </p>
+            <Badge size="status">등록 후 10분 안에 설정을 마쳐야 합니다</Badge>
           ) : (
-            <p
-              role="timer"
-              aria-live="off"
-              className={`rounded-full px-3 py-1 text-sm font-medium ${
-                isUrgent(left) ? "bg-danger/10 text-danger" : "bg-blue-soft text-ink"
-              }`}
-            >
-              설정 시간 {formatCountdown(left)} 남음
-            </p>
+            <span role="timer" aria-live="off">
+              <Badge size="status" tone={isUrgent(left) ? "danger" : "blue"}>
+                설정 시간 {formatCountdown(left)} 남음
+              </Badge>
+            </span>
           )}
         </div>
 
-        <Section
-          title="① 날짜 범위"
-          hint="첫 클릭 시작일, 두 번째 클릭 종료일 · 최대 오늘부터 3개월"
-        >
+        <Section title="① 날짜 범위">
           <div className="mb-3 grid grid-cols-2 gap-3 text-sm">
             <ReadOnlyValue label="시작" value={range.start ?? "선택 전"} />
             <ReadOnlyValue label="종료" value={range.end ?? "선택 전"} />
           </div>
-          <Calendar today={today} range={range} onSelect={pickDate} invalid={!!errors.dateRange} />
+          {/* 01-6: 넓은 화면은 달력 반 폭 + 오른쪽 사용법(Figma 01). 좁은 화면은 달력 아래 한 줄 */}
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,26rem)_1fr] lg:gap-8">
+            <Calendar
+              today={today}
+              range={range}
+              onSelect={pickDate}
+              invalid={!!errors.dateRange}
+            />
+            <div className="text-sub lg:pt-6">
+              <p className="hidden text-xl font-bold leading-snug text-text lg:block">
+                원하는 날짜를
+                <br />
+                골라 주세요
+              </p>
+              <ul className="hidden space-y-1 lg:mt-4 lg:block">
+                <li>‹ / › 이전·다음 달</li>
+                <li>첫 클릭 시작일 선택</li>
+                <li>두 번째 클릭 종료일 선택</li>
+                <li>파란 영역 입력 가능한 날짜</li>
+              </ul>
+              <p className="text-xs lg:mt-4">
+                <span className="lg:hidden">첫 클릭 시작일, 두 번째 클릭 종료일 · </span>
+                최대 오늘부터 3개월까지 고를 수 있어요
+              </p>
+            </div>
+          </div>
           {dateNotice && (
-            <p role="status" className="mt-2 text-sm text-warn">
+            <Notice tone="attention" role="status" className="mt-2">
               {dateNotice}
-            </p>
+            </Notice>
           )}
           <FieldError id="dateRange-error" message={errors.dateRange} />
         </Section>
@@ -281,9 +299,9 @@ export function SetupForm(props: {
               plusDisabled={duration >= durationMax}
             />
             {durationNotice && (
-              <p role="status" className="mt-2 text-sm text-warn">
+              <Notice tone="attention" role="status" className="mt-2">
                 {DURATION_SHRUNK_NOTICE}
-              </p>
+              </Notice>
             )}
             <FieldError id="durationMinutes-error" message={errors.durationMinutes} />
           </Section>
@@ -370,7 +388,7 @@ function Preview(props: {
         ? `${formatDateRange(start, start)}–?`
         : "날짜 선택 전";
   return (
-    <Card className="!p-5">
+    <Card className="!p-5 sm:!p-5">
       <p className="text-sm font-medium text-ink">약속 미리보기</p>
       <dl className="mt-3 space-y-1 text-sm text-sub">
         <div>
@@ -397,7 +415,7 @@ export function Section(props: { title: string; hint?: string; children: ReactNo
 
 export function ReadOnlyValue({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-line bg-paper px-3 py-2">
+    <div className="rounded-field border border-line bg-paper px-4 py-2">
       <span className="block text-xs text-sub">{label}</span>
       <span>{value.replaceAll("-", ".")}</span>
     </div>
@@ -414,7 +432,7 @@ export function Stepper(props: {
   plusDisabled: boolean;
 }) {
   const button =
-    "flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-line bg-paper text-lg text-ink disabled:text-line";
+    "flex size-control shrink-0 items-center justify-center rounded-control border border-line bg-paper text-lg text-ink hover:bg-faint disabled:cursor-not-allowed disabled:text-sub/40 disabled:hover:bg-paper";
   return (
     <div className="flex items-center gap-2">
       <button
@@ -426,7 +444,7 @@ export function Stepper(props: {
       >
         −
       </button>
-      <div className="flex h-12 flex-1 items-center justify-center rounded-lg border border-line bg-paper px-2">
+      <div className="flex h-control flex-1 items-center justify-center rounded-control border border-line bg-paper px-2">
         {props.value}
         {props.suffix && <span className="ml-1 shrink-0">{props.suffix}</span>}
       </div>

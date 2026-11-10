@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button } from "@/components/common/ui";
+import { ConfirmDialog } from "@/components/common/modal";
+import { Badge, Button, Notice, PANEL } from "@/components/common/ui";
 import { callApi, type ApiResult } from "@/components/create-promise/api";
 import type { AvailabilityResponse } from "@/components/availability/snapshot";
 import { parseSlotList } from "@/lib/availability/sync";
@@ -117,7 +118,10 @@ export function CandidatesPanel({
     void (async () => {
       const result = await callApi<AvailabilityResponse>(promisePath(promiseId, "/availability"));
       if (cancelled || !result.ok) return;
-      setHostMe({ submitted: result.data.me.submitted, slots: parseSlotList(result.data.me.slots) });
+      setHostMe({
+        submitted: result.data.me.submitted,
+        slots: parseSlotList(result.data.me.slots),
+      });
     })();
     return () => {
       cancelled = true;
@@ -167,7 +171,11 @@ export function CandidatesPanel({
   }
 
   const hostAbsent =
-    asking !== null && hostMe !== null && !isAvailableThroughout(hostMe, asking.startAt, asking.endAt);
+    asking !== null &&
+    hostMe !== null &&
+    !isAvailableThroughout(hostMe, asking.startAt, asking.endAt);
+
+  const askingRange = asking ? formatSeoulRange(asking.startAt, asking.endAt) : null;
 
   return (
     <Panel>
@@ -175,24 +183,13 @@ export function CandidatesPanel({
       <p className="mt-2 text-sub">
         {canConfirm
           ? "함께 가능한 사람이 많은 순서예요. 확정할 시간을 골라 주세요."
-          : "함께 가능한 사람이 많은 순서예요. 방장이 확정하면 여기에 표시돼요."}
+          : "마감되어 시간을 바꿀 수 없어요. 함께 가능한 사람이 많은 순서이고, 방장이 이 중에서 최종 확정할 때까지 기다려 주세요."}
       </p>
 
       {notice && (
-        <div
-          aria-live="polite"
-          className="mt-4 flex items-start justify-between gap-3 rounded-lg bg-warn/10 px-4 py-3 text-sm text-warn"
-        >
-          <span>{notice}</span>
-          <button
-            type="button"
-            aria-label="안내 닫기"
-            className="shrink-0 opacity-70 hover:opacity-100"
-            onClick={() => setNotice(null)}
-          >
-            ✕
-          </button>
-        </div>
+        <Notice tone="attention" className="mt-4" onClose={() => setNotice(null)}>
+          {notice}
+        </Notice>
       )}
 
       {list === null ? (
@@ -204,30 +201,36 @@ export function CandidatesPanel({
           )}
         </div>
       ) : list.items.length === 0 ? (
-        <div className="mt-5 rounded-lg bg-faint px-4 py-5">
+        <Notice tone="attention" className="mt-5">
           <p className="font-medium">함께 가능한 시간이 없어요</p>
-          <p className="mt-1 text-sm text-sub">
+          <p className="mt-1 text-sub">
             2명 이상이 같은 시간에 가능해야 후보가 돼요. 모두의 시간에서 응답을 확인할 수 있어요.
           </p>
-        </div>
+        </Notice>
       ) : (
         <>
           <ol className="mt-5 space-y-2">
             {list.items.map((candidate, index) => {
               const { date, time } = formatSeoulRange(candidate.startAt, candidate.endAt);
-              const open = asking?.startAt === candidate.startAt;
+              // Figma CandidateCard: 1순위는 연한 파랑, 확인 창이 열린 후보는 파란 테두리
+              const tone =
+                asking?.startAt === candidate.startAt
+                  ? "border-blue bg-paper"
+                  : index === 0
+                    ? "border-line bg-blue-soft"
+                    : "border-line bg-paper";
               return (
-                <li key={candidate.startAt} className="rounded-lg border border-line px-4 py-3">
+                <li key={candidate.startAt} className={`rounded-field border px-4 py-3 ${tone}`}>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <span className="w-6 shrink-0 text-sm font-bold text-blue">{index + 1}</span>
-                    <div className="min-w-0 flex-1">
+                    <span className="w-6 shrink-0 text-sm font-bold text-ink">{index + 1}</span>
+                    <div className="min-w-0 flex-1 text-ink">
                       <p className="font-medium">{date}</p>
-                      <p className="text-sm text-sub">{time}</p>
+                      <p className="text-sm">{time}</p>
                     </div>
-                    <span className="shrink-0 rounded-full bg-blue-soft px-2.5 py-0.5 text-sm font-medium text-ink">
+                    <Badge tone={index === 0 ? "muted" : "blue"} className="!text-ink">
                       {candidate.availableParticipantCount}명 가능
-                    </span>
-                    {canConfirm && !open && (
+                    </Badge>
+                    {canConfirm && (
                       <div className="w-full sm:w-36">
                         <Button
                           variant="secondary"
@@ -242,53 +245,13 @@ export function CandidatesPanel({
                       </div>
                     )}
                   </div>
-                  {canConfirm && open && (
-                    <div
-                      role="alertdialog"
-                      aria-labelledby={`confirm-${index}`}
-                      className="mt-3 space-y-3 border-t border-line pt-3"
-                    >
-                      <p id={`confirm-${index}`} className="text-sm">
-                        <span className="font-medium">
-                          {date} {time}으로 확정할까요?
-                        </span>{" "}
-                        <span className="text-sub">확정하면 참여자 모두에게 결과가 보여요.</span>
-                      </p>
-                      {hostAbsent && (
-                        <p className="rounded-lg bg-warn/10 px-3 py-2 text-sm text-warn">
-                          방장님은 이 시간에 가능하다고 응답하지 않았어요. 방장 없이 만나는 일정이
-                          돼요.
-                        </p>
-                      )}
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          variant="secondary"
-                          disabled={confirming}
-                          onClick={() => setAsking(null)}
-                        >
-                          취소
-                        </Button>
-                        <Button disabled={confirming} onClick={() => void confirm(candidate)}>
-                          {confirming ? "확정하는 중…" : "확정하기"}
-                        </Button>
-                      </div>
-                      {confirmError && (
-                        <p role="alert" className="text-sm text-danger">
-                          {confirmError}
-                        </p>
-                      )}
-                    </div>
-                  )}
                 </li>
               );
             })}
           </ol>
           {loadError && (
             <div className="mt-3 text-center">
-              <LoadError
-                message={loadError}
-                onRetry={() => void load(list.nextOffset ?? 0)}
-              />
+              <LoadError message={loadError} onRetry={() => void load(list.nextOffset ?? 0)} />
             </div>
           )}
           {list.hasMore && list.nextOffset !== null && !loadError && (
@@ -304,16 +267,45 @@ export function CandidatesPanel({
           )}
         </>
       )}
+
+      {/* 확정 확인 (Figma ConfirmScheduleDialog). 재조율(STATE-API-06)로 다시 열 수 있어 "수정할 수 없어요"는 쓰지 않는다 */}
+      <ConfirmDialog
+        open={canConfirm && asking !== null}
+        title="이 시간으로 확정할까요?"
+        confirmLabel="약속 확정하기"
+        busyLabel="확정하는 중…"
+        busy={confirming}
+        error={confirmError}
+        onConfirm={() => asking && void confirm(asking)}
+        onClose={() => {
+          setAsking(null);
+          setConfirmError(null);
+        }}
+      >
+        {askingRange && asking && (
+          <div className="rounded-field border border-blue px-4 py-4 text-center text-ink">
+            <p className="font-medium">{askingRange.date}</p>
+            <p className="mt-0.5">
+              {askingRange.time} · {asking.availableParticipantCount}명 가능
+            </p>
+          </div>
+        )}
+        <p>
+          확정하면 참여자 모두에게 결과가 보여요. 나중에 방장 메뉴의 다시 열기로 다시 조율할 수
+          있어요.
+        </p>
+        {hostAbsent && (
+          <Notice tone="attention">
+            방장님은 이 시간에 가능하다고 응답하지 않았어요. 방장 없이 만나는 일정이 돼요.
+          </Notice>
+        )}
+      </ConfirmDialog>
     </Panel>
   );
 }
 
 function Panel({ children }: { children: React.ReactNode }) {
-  return (
-    <section className="mx-auto max-w-5xl rounded-xl border border-line bg-paper p-5 sm:p-7">
-      {children}
-    </section>
-  );
+  return <section className={`${PANEL} p-5 sm:p-7`}>{children}</section>;
 }
 
 function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
