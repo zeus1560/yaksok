@@ -89,6 +89,12 @@ code --install-extension bradlc.vscode-tailwindcss
 >
 > 네 개 중 **Prettier가 특히 중요**합니다. `.vscode/settings.json`에서 기본 포매터로 지정해둔 터라, 없으면 저장할 때 자동 정렬이 조용히 안 먹습니다.
 
+> 🧹 전체 재포맷처럼 서식만 바꾼 커밋은 `.git-blame-ignore-revs`에 적어 둡니다. GitHub의 blame 화면은 이 파일을 자동으로 읽고, 로컬 `git blame`은 한 번만 설정하면 됩니다.
+>
+> ```bash
+> git config blame.ignoreRevsFile .git-blame-ignore-revs
+> ```
+
 > 🐳 **Docker는 설치하지 않습니다.** DB를 클라우드(Neon)로 쓰기로 해서 필요가 없어졌습니다. 나중에 로컬 Docker DB로 바꾸고 싶으면 `.env` 한 줄만 고치면 되니, 지금 깔 이유가 없습니다.
 
 ### 1-2. 코드 받기
