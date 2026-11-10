@@ -2,7 +2,7 @@
 
 ## 상태
 
-검토 중
+완료
 
 ## 스펙
 
@@ -282,3 +282,11 @@
 - 변경: 약속 나가기·로그아웃 화면 `components/leave/leave-panel.tsx`(모든 참여자·draft 방장 나가기, 상황별 확인 문구 — 일반·승계 이름(명단 등록순)·혼자 취소·초안 삭제, 이 기기·모든 기기 로그아웃), 완료 뒤 이 약속 저장값 삭제·링크 재조회(`invite-flow.tsx`, 나가기 중 일반 재조회 무시·마지막 재조회만 반영), 나가기 재요청 401·409 `PROMISE_CANCELLED`·404 `PROMISE_NOT_FOUND`와 로그아웃 401 성공 처리, 폴링 설정 기준 제출 전 입력 범위 정리(`clipDraftToRange`, 선택 N칸 버그), 명단의 내 역할 변화로 `/me` 갱신(후임 방장 메뉴), `canClose` 제거. 순수 로직 `lib/leave/{confirm,failure,storage}.ts`. fix: SWR 같은 주소 요청 합류 화면이 응답을 못 받는 문제 — 세 화면을 SWR `data` + `createIntake`로(`context/fixes/001-availability-swr-join.md`). API·DB 변경 없음. 문서: DECISION_CONFLICTS R-34 신설
 - 검증: Vitest 1630건(이번 36건, 기존 기대값 수정은 `canClose` 제거 2건), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 브라우저 `scripts/verify/028-participant-finish.mjs` 75개 항목 2회 연속 통과(1280px·390px), 027 스크립트 84개 항목 3회 연속·012 회귀 21개 항목 2회 연속 통과. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
 - 남은 제한: 실제 휴대폰, R-34 판단(`/me` 폴링 대신 명단 역할 변화·모든 기기 로그아웃 뒤 다른 브라우저는 등록 모드 참여 화면) 팀 확인 필요, C-07·C-12
+
+### 2026-11-11 — Figma 대조와 화면 다듬기
+
+- 스펙: `context/features/029-figma-polish.md`
+- 브랜치: `ahn/feat-figma-대조` (PR #34 병합)
+- 변경: 1단계 차이 목록 `docs/design/FIGMA_DIFF.md`(차이 63개 — 고침 29, 보류 5, 그대로 29). 2단계 토큰 정리(`app/globals.css` `@theme`, 컴포넌트 직접 값 0곳), 시각 18개·구성 11개, 공통 확인 모달 `components/common/modal.tsx`(확인 창 6곳 + 모든 기기 로그아웃, 판단 순수 함수 `lib/ui/modal.ts`), 헤더 「닉네임 · 역할」(`components/common/identity.tsx`, `/me` 기준), 설정 달력 반 폭, 선택 요약 `lib/availability/summary.ts`·`maxAvailable`. API·DB 변경 없음. 문서: DECISION_CONFLICTS R-35 신설
+- 검증: Vitest 1647건(이번 17건, 기존 기대값 수정 없음), `TZ=UTC`·`America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 브라우저 모달 29개 항목, 027 회귀 84개·028 회귀 75개 항목 통과(선택자만 수정), fix 회귀 20/21(재조율 뒤 3초 기준 — `main`에서도 같은 비율로 흔들림, 030에서 테스트 개선). 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
+- 남은 제한: 그리드 개편(07-1·07-2·07-4·21-1·13~16)·23-1 보류, R-35 판단 팀 확인 필요, fix 회귀 3초 기준 흔들림(030)
