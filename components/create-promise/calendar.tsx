@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { IconButton } from "@/components/common/ui";
 import {
   isSelectableDate,
   maxSelectableDate,
@@ -45,26 +46,27 @@ export function Calendar(props: {
 
   return (
     <div
-      className={`rounded-xl border bg-paper p-3 sm:p-4 ${props.invalid ? "border-danger" : "border-line"}`}
+      className={`rounded-card border bg-paper p-2 sm:p-3 ${props.invalid ? "border-danger" : "border-line"}`}
     >
-      <div className="mb-3 flex items-center justify-between">
-        <NavButton
-          label="이전 달"
+      {/* Figma MonthCalendar: ‹ 옆에 월 제목, › 는 오른쪽 */}
+      <div className="mb-2 flex items-center gap-2">
+        <IconButton
+          aria-label="이전 달"
           disabled={key(view) <= key(first)}
           onClick={() => setView(shift(view, -1))}
         >
           ‹
-        </NavButton>
-        <p className="text-lg font-bold" aria-live="polite">
+        </IconButton>
+        <p className="flex-1 text-xl font-bold" aria-live="polite">
           {view.year}년 {view.month}월
         </p>
-        <NavButton
-          label="다음 달"
+        <IconButton
+          aria-label="다음 달"
           disabled={key(view) >= key(last)}
           onClick={() => setView(shift(view, 1))}
         >
           ›
-        </NavButton>
+        </IconButton>
       </div>
       <div className="grid grid-cols-7 gap-1 text-center">
         {WEEKDAYS.map((d) => (
@@ -73,16 +75,17 @@ export function Calendar(props: {
           </span>
         ))}
         {cells.map((date, i) => {
-          if (!date) return <span key={`blank-${i}`} />;
+          if (!date) return <span key={`blank-${i}`} className="h-icon rounded-field bg-faint" />;
           const selectable = isSelectableDate(date, today);
           const { isEdge, inRange } = state(date);
+          // Figma DayCell: 선택 #4063d8, 범위 #e6edff, 오늘 파란 테두리, 고를 수 없는 날짜 #f8f9fc 상자
           const tone = isEdge
             ? "bg-blue text-white"
             : inRange
               ? "bg-blue-soft text-ink"
               : selectable
                 ? "hover:bg-faint"
-                : "text-line";
+                : "bg-faint text-sub/50";
           return (
             <button
               key={date}
@@ -91,7 +94,7 @@ export function Calendar(props: {
               onClick={() => props.onSelect(date)}
               aria-pressed={isEdge || inRange}
               aria-label={`${Number(date.slice(5, 7))}월 ${Number(date.slice(8, 10))}일${date === today ? " 오늘" : ""}`}
-              className={`h-10 rounded-lg text-sm disabled:cursor-not-allowed ${tone} ${date === today && !isEdge ? "ring-1 ring-blue" : ""}`}
+              className={`h-icon rounded-field text-sm disabled:cursor-not-allowed ${tone} ${date === today && !isEdge ? "ring-1 ring-inset ring-blue" : ""}`}
             >
               {Number(date.slice(8, 10))}
             </button>
@@ -99,24 +102,5 @@ export function Calendar(props: {
         })}
       </div>
     </div>
-  );
-}
-
-function NavButton(props: {
-  label: string;
-  disabled: boolean;
-  onClick: () => void;
-  children: string;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={props.label}
-      disabled={props.disabled}
-      onClick={props.onClick}
-      className="flex h-10 w-10 items-center justify-center rounded-lg border border-line text-lg text-ink disabled:text-line"
-    >
-      {props.children}
-    </button>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Button } from "@/components/common/ui";
+import { Badge, Button, Notice, PANEL } from "@/components/common/ui";
 import { formatSeoulRange, inviteUrl } from "@/lib/result/format";
 import type { Confirmation } from "@/lib/result/view";
 
@@ -18,20 +18,26 @@ export function ResultPanel({
 }) {
   const { date, time } = formatSeoulRange(confirmation.startAt, confirmation.endAt);
   return (
-    <section className="mx-auto max-w-5xl rounded-xl border border-line bg-paper p-5 sm:p-7">
-      <p className="text-sm font-medium text-blue">약속 시간이 확정됐어요</p>
-      <h1 className="mt-2 text-2xl font-bold leading-snug sm:text-3xl">{date}</h1>
-      <p className="mt-1 text-xl font-medium sm:text-2xl">{time}</p>
-      <p className="mt-3 text-sub">
+    <section className={`${PANEL} p-5 sm:p-8`}>
+      <h1 className="text-[28px] font-bold leading-snug">우리 이때 만나요!</h1>
+      <p className="mt-2 text-sub">약속 시간이 확정됐어요.</p>
+      <Badge size="status" className="mt-5">
+        약속 확정
+      </Badge>
+      <p className="mt-5 text-[28px] font-bold leading-snug text-ink">{date}</p>
+      <p className="mt-2 text-[28px] font-bold leading-snug">{time}</p>
+      <p className="mt-4 text-sub">
         한국 시간 기준 · 함께 가능한 사람{" "}
         <span className="font-medium text-text">{confirmation.availableParticipantCount}명</span>
       </p>
 
       {showHostWarning && (
-        <div role="alert" className="mt-4 rounded-lg bg-warn/10 px-4 py-3 text-sm text-warn">
+        <Notice tone="attention" role="alert" className="mt-4">
           <p className="font-medium">지금 참석 가능한 사람이 2명 미만이에요</p>
-          <p className="mt-1">현재 응답 기준으로 다시 센 인원이에요. 확정한 일정은 그대로 유지돼요.</p>
-        </div>
+          <p className="mt-1">
+            현재 응답 기준으로 다시 센 인원이에요. 확정한 일정은 그대로 유지돼요.
+          </p>
+        </Notice>
       )}
 
       <ShareLink inviteToken={inviteToken} />
@@ -72,10 +78,13 @@ function ShareLink({ inviteToken }: { inviteToken: string }) {
           value={url}
           aria-label="초대 링크"
           onFocus={(e) => e.currentTarget.select()}
-          className="h-11 min-w-0 flex-1 rounded-lg border border-line bg-faint px-3 text-sm text-sub"
+          className="h-control min-w-0 flex-1 rounded-field border border-line bg-paper px-4 text-sm text-text"
         />
-        <div className="sm:w-36">
-          <Button onClick={() => void copy()}>{state === "copied" ? "복사했어요" : "링크 복사"}</Button>
+        <div className="sm:w-40">
+          {/* 복사 완료는 버튼이 어두워지며 알린다 (Figma 04 "링크 복사 완료 상태") */}
+          <Button variant={state === "copied" ? "dark" : "primary"} onClick={() => void copy()}>
+            {state === "copied" ? "복사했어요" : "링크 복사"}
+          </Button>
         </div>
       </div>
       <p aria-live="polite" className="mt-2 text-sm text-sub empty:hidden">

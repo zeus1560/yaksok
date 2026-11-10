@@ -12,6 +12,7 @@ import {
   type CellPos,
   type Grid,
 } from "@/lib/availability/grid";
+import { seoulDateOf } from "@/lib/time/seoul";
 import { DayHeaderText, GridFrame } from "./grid-frame";
 
 // 내 가능 시간 그리드 (TIME-10-04, TIME-09-01, TIME-08-01)
@@ -89,13 +90,14 @@ export function MyGrid({
     <GridFrame
       grid={grid}
       label="내 가능 시간"
+      today={nowMs > 0 ? seoulDateOf(new Date(nowMs)) : null}
       renderHeader={(day, index) => {
         const editable = !readOnly && editableDaySlots(grid, index, nowMs).length > 0;
         if (!editable) return <DayHeaderText day={day} />;
         return (
           <button
             type="button"
-            className="w-full hover:bg-blue-soft"
+            className="h-full w-full hover:bg-faint"
             aria-label={`${day.label}(${day.weekday}) 하루 전체 선택 또는 해제`}
             onClick={() => onCommit(toggleDay(selection, grid, index, nowMs))}
           >
@@ -111,12 +113,12 @@ export function MyGrid({
         const color = past
           ? on
             ? "bg-sub/35"
-            : "bg-line/70"
+            : "bg-muted"
           : on
             ? "bg-blue"
             : readOnly
               ? "bg-paper"
-              : "bg-paper hover:bg-blue-soft";
+              : "bg-paper hover:bg-faint";
         const day = grid.days[d];
         return (
           <button

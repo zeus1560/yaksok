@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/common/ui";
+import { ConfirmDialog } from "@/components/common/modal";
+import { Badge, PANEL } from "@/components/common/ui";
 import { callApi } from "@/components/create-promise/api";
 import {
   promisePath,
@@ -61,10 +62,7 @@ export function ParticipantListPanel({
   const count = list ? `${list.currentParticipantCount} / ${list.participantLimit}명` : "…";
 
   return (
-    <section
-      aria-label="참여자 명단"
-      className="mx-auto mb-4 max-w-5xl rounded-xl border border-line bg-paper px-4 py-3 sm:px-5"
-    >
+    <section aria-label="참여자 명단" className={`${PANEL} mb-4 px-4 py-3 sm:px-5`}>
       <div className="flex items-center gap-3">
         <p className="min-w-0 flex-1 text-sm">
           <span className="font-medium">참여자</span>{" "}
@@ -101,68 +99,50 @@ export function ParticipantListPanel({
                   <div className="flex min-h-9 items-center gap-2">
                     <span className="min-w-0 flex-1 truncate text-sm">
                       {person.nickname}
-                      {person.role === "host" && (
-                        <span className="ml-1.5 rounded bg-blue-soft px-1.5 py-0.5 text-xs font-medium text-ink">
-                          방장
-                        </span>
-                      )}
+                      {person.role === "host" && <Badge className="ml-1.5">방장</Badge>}
                       {person.isMe && (
-                        <span className="ml-1.5 rounded bg-faint px-1.5 py-0.5 text-xs font-medium text-sub">
+                        <Badge tone="muted" className="ml-1.5">
                           나
-                        </span>
+                        </Badge>
                       )}
                     </span>
-                    {canRemove &&
-                      !person.isMe &&
-                      asking?.participantId !== person.participantId && (
-                        <button
-                          type="button"
-                          className="shrink-0 rounded-md border border-line px-2.5 py-1 text-xs text-danger hover:bg-faint disabled:text-sub"
-                          disabled={busy}
-                          onClick={() => {
-                            setAsking(person);
-                            setError(null);
-                          }}
-                        >
-                          내보내기
-                        </button>
-                      )}
+                    {canRemove && !person.isMe && (
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-control border border-line px-3 py-1.5 text-xs font-medium text-danger hover:bg-faint disabled:text-sub"
+                        disabled={busy}
+                        onClick={() => {
+                          setAsking(person);
+                          setError(null);
+                        }}
+                      >
+                        내보내기
+                      </button>
+                    )}
                   </div>
-                  {canRemove && asking?.participantId === person.participantId && (
-                    <div
-                      role="alertdialog"
-                      aria-label={`${person.nickname} 내보내기 확인`}
-                      className="mt-2 space-y-2"
-                    >
-                      <p className="text-sm text-sub">
-                        <span className="font-medium text-text">{person.nickname}</span>님을
-                        내보낼까요? 이 약속에 다시 로그인할 수 없고, 입력은 집계에서 빠져요.
-                      </p>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button variant="secondary" disabled={busy} onClick={() => setAsking(null)}>
-                          취소
-                        </Button>
-                        <Button
-                          disabled={busy}
-                          className="!bg-danger hover:!bg-danger/90 disabled:!bg-line"
-                          onClick={() => void remove(person)}
-                        >
-                          {busy ? "내보내는 중…" : "내보내기"}
-                        </Button>
-                      </div>
-                      {error && (
-                        <p role="alert" className="text-sm text-danger">
-                          {error}
-                        </p>
-                      )}
-                    </div>
-                  )}
                 </li>
               ))}
             </ol>
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={canRemove && asking !== null}
+        tone="danger"
+        title={asking ? `${asking.nickname}님을 내보낼까요?` : ""}
+        confirmLabel="내보내기"
+        busyLabel="내보내는 중…"
+        busy={busy}
+        error={error}
+        onConfirm={() => asking && void remove(asking)}
+        onClose={() => {
+          setAsking(null);
+          setError(null);
+        }}
+      >
+        <p>이 약속에 다시 로그인할 수 없고, 입력은 집계에서 빠져요.</p>
+      </ConfirmDialog>
     </section>
   );
 }

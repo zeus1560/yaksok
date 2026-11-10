@@ -1,4 +1,4 @@
-# 현재 기능: 참여자 화면 마무리 (화면 PR 5b)
+# 현재 기능: Figma 대조와 화면 다듬기 (029)
 
 ## 상태
 
@@ -6,21 +6,21 @@
 
 ## 스펙
 
-`context/features/028-participant-finish-ui.md`
+`context/features/029-figma-polish.md`
 
 ## 목표
 
-참여자가 할 수 있는 마지막 두 기능(약속 나가기 STATE-API-08, 로그아웃 MEMBER-API-07)의 화면을 만들고, 쌓인 화면 문제(시간 입력 "선택 N칸"이 범위 변경 뒤 화면보다 많이 셈, 후임 방장 화면에 방장 메뉴가 새로고침 전까지 안 나타남, 쓰지 않는 `canClose`)를 고친다. API·DB 변경 없음.
+1단계: Figma 와이어프레임(`docs/design/figma/`)과 지금 화면을 같은 상태로 찍어 차이 63개를 분류한다(`docs/design/FIGMA_DIFF.md`). 2단계: 사용자가 고른 범위를 고친다 — 시각 18개, 구성 중 사용성·일관성에 도움이 되는 것, 공통 확인 모달, 헤더 「닉네임 · 역할」, 설정 달력 반 폭. API·DB 변경 없음.
 
 ## 수용 기준
 
-스펙 `context/features/028-participant-finish-ui.md` AC-1~6 참고.
+스펙 `context/features/029-figma-polish.md` AC-1~7 참고.
 
 ## 작업 기준점
 
-- 브랜치: `ahn/feat-참여자화면-마무리` (`main` ee3ba06에서 생성, 027 PR #32 병합 포함)
-- 시작 시 작업 트리: 깨끗함(`ahn/feat-방장관리-화면`에서 `main`으로 전환 후 `git fetch --prune`·`git pull`). 원격이 사라진 로컬 `ahn/` 브랜치 없음(원격이 남은 로컬 `ahn/` 브랜치는 그대로 둠)
-- 첫 커밋은 027 완료 기록(스펙 027 상태, 완료 이력, feature-list) — 스테이징해 둠
+- 브랜치: `ahn/feat-figma-대조` (`main` 1a29e05에서 생성, 028 PR #33 병합 포함)
+- 시작 시 작업 트리: 추적 파일 변경 없음, 추적하지 않는 `docs/design/`(사용자가 넣은 Figma PNG)만 있음. 원격이 사라진 로컬 `ahn/` 브랜치 없음
+- 커밋: f9333d9 `docs: 028 완료 기록`, 0c3b121 `docs: Figma 대조 차이 목록`(이미지 4.3MB 포함). 2단계 코드는 커밋 전(사용자 확인 뒤 커밋)
 
 ## 검증 결과
 
@@ -28,30 +28,32 @@
 
 | 단계 | 명령 | 결과 |
 | --- | --- | --- |
-| RED | `npx vitest run lib/leave/confirm.test.ts lib/availability/sync.test.ts -t "방장이 나가기 전\|범위가 바뀌면"` (빈 구현: `leaveConfirm`이 빈 문구, `clipDraftToRange`가 입력 그대로) | 2건 실패. 「방장이 나가기 전 확인 창은 명단의 다음 사람 이름으로 승계를 안내한다」 `AssertionError: expected '' to be '철수님이 방장이 돼요' // Object.is equality`, 「범위가 바뀌면 제출 전 입력에서 범위 밖 칸을 지운다」 `AssertionError: expected { …(2) } to deeply equal { …(2) }`(slots에 범위 밖 2칸이 남고 `removed: 0`) |
-| GREEN | 같은 명령 | 2건 통과(본인을 뺀 첫 행 이름, `isSlotInRange`로 거르기) |
-| REFACTOR | 상황별 문구·실패 분기·저장 키·범위 정리 경계·역할 비교 테스트 추가, prettier / `npm run test` | 76 파일, 1622 테스트 통과(1594 + 28). 기존 기대값 수정은 `lib/result/view.test.ts` 2건(`canClose` 제거 — `{ kind: "input", canClose }` → `{ kind: "input" }`, 방장 판단은 `canManage` 기대값으로 옮김). `$env:TZ` `UTC`(오프셋 0)·`America/Los_Angeles`(오프셋 480)에서도 1622건 통과 |
+| RED | `npx vitest run lib/ui/modal.test.ts -t "요청 중 Esc\|요청 중이 아니면 Esc\|바깥을 눌렀다"` (빈 구현: 늘 none·false) | 2건 실패 — 「요청 중이 아니면 Esc로 닫힌다」 `AssertionError: expected { kind: 'none' } to deeply equal { kind: 'close' }`, 「바깥을 눌렀다 바깥에서 떼면 닫힌다」 `AssertionError: expected false to be true // Object.is equality`. 빈 구현에서는 「모달은 요청 중 Esc로 닫히지 않는다」가 우연히 통과해, busy를 무시하는 단순 구현으로 바꿔 다시 확인 |
+| RED (단순 구현) | `npx vitest run lib/ui/modal.test.ts -t "요청 중 Esc\|요청 중에는 바깥"` (Esc면 항상 close, 바깥에서 떼면 항상 닫기) | 2건 실패 — 「모달은 요청 중 Esc로 닫히지 않는다」 `AssertionError: expected { kind: 'close' } to deeply equal { kind: 'none' }`, 「요청 중에는 바깥 클릭으로 닫히지 않는다」 `AssertionError: expected true to be false // Object.is equality` |
+| GREEN | `npx vitest run lib/ui/modal.test.ts` | 11건 통과(Esc·바깥 클릭 busy 막기, Tab 처음↔끝, 창 밖 포커스, 누를 요소 0개면 창에 머묾, 창 안에서 누르고 바깥에서 뗀 경우 닫지 않음) |
+| REFACTOR | 선택 요약 `summary.test.ts` 5건, `maxAvailable` 1건 추가, prettier / `npm run test` | 79 파일, 1647 테스트 통과(1630 + 17). 기존 기대값 수정 없음. PowerShell `$env:TZ` `UTC`(오프셋 0)·`America/Los_Angeles`(오프셋 480)에서도 1647건 통과 — Git Bash `TZ=America/Los_Angeles`는 적용되지 않아(오프셋 -540) PowerShell로 다시 돌림 |
 | | `npm run lint` / `npm run typecheck` | 통과 |
 | | `npm run build` | 통과(dev 서버 종료·3000 포트 비어 있음 확인 후) |
+| 관찰 2건 | 버그 2건(취소 직후 첫 드래그, 드래그 뒤 글자 선택)은 렌더링 테스트 환경이 없어 브라우저 재현으로 확인 | 재현 안 됨 → 테스트·코드 변경 없음(아래) |
 
-| 브라우저 (dev 서버, Playwright 1.56.1 + 로컬 Chromium, 1280px·390px) | 결과 |
+| 브라우저 (dev 서버, Playwright 1.56.1 + 로컬 Chromium) | 결과 |
 | --- | --- |
-| `scripts/verify/028-participant-finish.mjs` 75개 항목 — 첫 회 74 통과·1 실패(아래 수정) → 수정 뒤 2회 연속 75개 전부 통과. 시작할 때 쓰는 API 13종과 화면 6종(시간 입력·후보·취소 안내·설정·방장 등록·참여)을 미리 열어 컴파일(27~47초) | **일반 참여자 나가기(390px):** 확인 창 "약속에서 나가면 다시 참여할 수 없어요", 열기·돌아가기만으로 요청 0회, 나가기 1회 → 참여 화면 + "약속에서 나갔어요…", 이 약속 저장값 0개, DB cancelled, 같은 닉네임 재등록 → "참여가 끝난 닉네임이에요". **방장 + 다른 참여자(1280px):** 확인 창 "{등록순 다음 사람}님이 방장이 돼요", 응답 `hostTransferred`·후임 id, 나간 방장은 참여 화면, 후임자 390px 화면에 새로고침 없이 방장 메뉴 + "이제 내가 방장이에요"(나가기 응답부터 3.1·3.4·3.6초), DB 후임 host·옛 방장 member+cancelled. **혼자인 방장:** "약속이 취소돼요" → 취소 안내 + "다른 참여자가 없어 약속을 취소하고 나왔어요", DB cancelled. **draft 방장:** 카운트다운 기준값을 넣은 설정 화면에서 "약속 만들기 그만두기" → "만들던 약속이 삭제돼요" → 방장 등록 화면 + 삭제 안내, DB 약속 없음, 기준값 삭제, 같은 링크 방장 등록 201. **나가기 응답 유실:** 서버 200 뒤 응답 끊음 → "나가지 못했어요…" 화면 유지(DB 이미 cancelled) → 다시 누름 401 `UNAUTHENTICATED` → 나감 안내 참여 화면·저장값 삭제. **로그아웃 이 기기:** 확인 없이 로그인 화면 + "로그아웃했어요…", `allDevices` 없음, 저장값 삭제, DB 세션 2 → 1·참여자 active, 다른 브라우저는 6초 뒤에도 시간 입력 화면·`/me` 200, 같은 닉네임·PIN 재로그인 → 시간 입력. **모든 기기:** 확인 창(다시 로그인 가능, 재참여 불가 문구 없음, 열기만으로 요청 0회) → `allDevices=true` 1회, 이 기기 로그인 화면, DB 세션 0, 다른 브라우저도 다음 폴링에서 참여·로그인 화면 → 같은 닉네임·PIN 재로그인, 유효 세션 1. **선택 N칸:** 하루 전체 18칸 선택(제출 전) → 방장이 하루 09–18 → 09–12 축소(PATCH 200, 저장 슬롯 없어 버전 그대로) → 다음 폴링에서 "선택 6칸" = 화면 6칸, "범위 밖 입력 12칸을 지웠어요", 저장소 입력 6칸, "입력 중 · 제출 전" 유지. **공통:** 390px·1280px 가로 스크롤 없음, 콘솔 오류 없음(의도한 401·409·403과 끊은 요청의 리소스 로드 메시지만) |
-| 첫 회 실패와 수정 | 「다시 누름 401 → 나감 안내 참여 화면」: 붙잡아 둔 폴링이 풀리며 401로 일반 링크 재조회(안내 없음)를 따로 시작해 나가기 처리의 재조회 결과를 덮었다. 실제로도 나가는 순간 폴링이 401을 받으면 생길 수 있어 `invite-flow.tsx`에서 나가기·로그아웃 처리 중에는 일반 재조회를 무시하고, 겹친 재조회는 마지막에 시작한 결과만 반영하게 고침 |
-| 027 회귀 `scripts/verify/027-host-manage.mjs` 84개 항목 | 처음 2회는 「재조율 뒤 방장 화면 시간 입력·안내」 1건 실패(83 통과) → 이후 원본 2회 연속 84개 전부 통과. 실패 회차에 1.5초 더 기다린 화면은 안내·시간 입력 둘 다 정상, 같은 흐름에서 소요 시간을 잰 사본 2회는 2.4·2.9초(기준 7초). 원인은 확정하지 못함(아래 메모) |
-| 027 원인 확인(미리 컴파일 추가, `.next` 삭제 후 새 dev 서버, 3회 연속) | 1회 통과·2회 실패(방장 화면 7.1초, 참여자 화면 5초 초과). 실패 시점 요청 순서에 링크 재조회·`/me`가 없고 재조율 뒤 약 7초 동안 `/availability`가 없음 → `invite-flow.tsx`가 아니라 SWR `onSuccess`가 요청을 시작한 화면에만 불리는 문제. 아래 fix로 수정(`context/fixes/001-availability-swr-join.md`) |
-| fix RED | `npx vitest run lib/availability/intake.test.ts` (빈 구현: `createIntake`가 항상 null) — 2건 실패. 「같은 주소 요청이 진행 중일 때 새로 그려진 시간 입력 화면도 그 응답으로 채워진다」 `AssertionError: expected null to deeply equal { …(2) }`, 「같은 응답으로 다시 그려져도 decidePoll은 한 번만 실행된다」 `AssertionError: expected "vi.fn()" to be called 1 times, but got 0 times` |
-| fix GREEN·REFACTOR | 같은 명령 2건 통과 → 경계 테스트 6건 추가(8건). 세 화면을 SWR `data` + `createIntake`로 변경. `npm run test` 77 파일 1630건, `TZ=UTC`·`America/Los_Angeles`에서도 1630건. lint·typecheck 통과, build 통과(3000 포트 비어 있음 확인 후) |
-| fix 브라우저 (`.next` 삭제 후 새 dev 서버) | **027** 3회 연속 84/84(재조율 뒤 전환 1.3·2.2·1.4초). **028** 75/75 — 2회차가 4절 뒤 네트워크 끊김(`Connection terminated unexpectedly`, 이어서 Neon 주소 DNS `ENOTFOUND`)으로 중단 → 연결 복구 뒤 남은 확인 데이터(링크 9·약속 7·참여자 13·세션 13, 그 회차 실행 구간에 만든 것만) 삭제, 다시 2회 연속 75/75. **012 회귀** `scripts/verify/fix-availability-intake.mjs` 21개 항목 — 첫 조회 1회(합류 아니면 추가 요청 없음), 로컬 입력 유지(폴링 한 주기·새로고침), 다른 기기 변경 안내·서버 값으로 다시 그림, 409 충돌 안내·details로 다시 그림·뒤 폴링에도 유지, 제출, 같은 주소 요청에 합류시킨 재조율 5회. 첫 실행은 합류 측정 1건 실패(5회 3.0~3.4초, 기준 3초) — 요청 순서상 재조율 API 자체 약 1초 + 상태 조회 약 0.9초 + 가능 시간 조회 약 1초로, 5초 폴링 대기는 없었고 측정 시작점을 재조율 API 호출 전으로 잡은 스크립트 잘못. 기준(3초)은 두고 시작점만 재조율 응답으로 바꿔 2회 연속 21/21(1.9~2.3초) |
-| 정리 | 회차마다 확인 링크 11·약속 9·참여자 18·세션 18 삭제(027은 링크 5·약속 5·참여자 11·세션 11·슬롯 4), 6개 테이블(`_prisma_migrations` 포함) 행 수·md5가 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
+| `scripts/verify/029-bug-repro.mjs` | [1] 처음 촬영 조건: 18:00 칸 중심(y=903)의 맨 위 요소가 아래 고정 제출 바의 글자(P 「아직 제출하지 않았어요」) → 선택 0칸, 글자 선택 「모두의 가능 시간…」. [2] 칸이 보이게 스크롤: 확인 창 취소 직후 첫 드래그 3칸(기대 3). [3] 칸에서 시작해 패널 글자 위까지 끌기: 글자 선택 없음. [4] 칸 안 드래그: 글자 선택 없음 → 원인은 촬영 스크립트(가려진 칸 좌표를 누름). 코드 변경 없음 |
+| `scripts/verify/029-modal-check.mjs` 29개 항목 | 헤더 「모달방장 · 방장」·390px 「모달참여 · 참여자」, 열면 「돌아가기」로 포커스, aria-modal·제목 연결, Tab·Shift+Tab 5번에도 창 안, Esc·바깥 클릭으로 닫힘 + 연 버튼으로 복귀, 창 안 클릭은 닫지 않음, 요청 중(마감 요청을 붙잡아 둠) Esc·바깥 클릭 무시·✕·돌아가기·확인 버튼 막힘·Tab에도 창 안, 마감 요청 1회 뒤 창 닫힘·후보 화면, 모든 기기 로그아웃 창, 390px 창이 화면 안·가로 스크롤 없음, 빈 제출 창 닫히면 제출 버튼으로 복귀·「가능 시간 없음으로 제출」 뒤 제출됨, 콘솔 오류 없음. 첫 실행 1건은 스크립트 대기 조건 잘못(마감 뒤 화면에 없는 글자를 기다림) → 헤더로 바꿔 29/29 |
+| `scripts/verify/029-figma-capture.mjs` | `CAPTURE_DIR=docs/design/compare/after`로 35장(대조 23 + 18 칸 상세 + Figma에 없는 화면·확인 창 11). 드래그 3번 모두 반영 「3일 · 총 5시간 30분 선택」 |
+| 027 회귀 84개 항목 | 선택자 수정 뒤 84/84 |
+| 028 회귀 75개 항목 | 선택자 수정 뒤 75/75 |
+| fix-availability-intake 회귀 21개 항목 | 20/21 — 「재조율 뒤 시간 입력 화면 채워짐 5회(기준 3초)」가 회차마다 5회 중 0~2회 5.1~6.1초. 같은 측정만 뗀 스크립트로 A/B: 지금 코드 20회 중 5회, `main` 코드(변경을 stash) 20회 중 4회 3초 초과 → 이번 변경과 무관한 기존 타이밍 문제로 판단(포커스 이벤트 뒤 상태 조회가 바로 나가지 않고 다음 5초 폴링을 기다리는 회차). 아래 메모 |
+| 정리 | 실행마다 확인 링크·약속·참여자·세션·슬롯 삭제, 6개 테이블 행 수·md5 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
 
 ## 메모
 
-- 사용자 지시로 정한 것: 범위(나가기·로그아웃·선택 N칸·후임 방장 메뉴·`canClose`), 확인 문구 4종, 나가기 뒤 401 성공 처리, 저장값 삭제 대상, 실패 분기 순수 함수
-- 다르게 판단한 것(R-34): ① `/me`를 따로 폴링하지 않고 이미 5초마다 오는 명단의 내 `role`이 바뀌었을 때만 `/me`를 다시 부름 — 요청 수가 늘지 않는다(시간 입력 화면 기준 5초마다 상태·명단·가능 시간 3건 그대로, `/me` 폴링이면 4건). ② 나가기 재요청의 409 `PROMISE_CANCELLED`(혼자인 방장)·404 `PROMISE_NOT_FOUND`(draft 방장)도 401과 같이 완료로 처리. ③ 로그아웃 401(쿠키 없음)도 완료. ④ 모든 기기 로그아웃 뒤 다른 브라우저는 일반 링크 재조회라 참여 화면(등록 모드, 로그인 전환 가능)으로 간다 — 로그인 모드로 바로 열지 않음
-- 027 회귀 실패 원인(확인됨): SWR은 같은 주소 요청에 합류한 화면에 `onSuccess`를 부르지 않는다. 시간 입력 화면·상태 조회·명단 세 곳을 SWR `data`로 받도록 고침(fix 커밋, `context/fixes/001-availability-swr-join.md`). 027 스크립트에 미리 컴파일 단계와 실패 진단(요청 순서·화면 텍스트) 추가
-- 정리: 모든 회차 뒤 6개 테이블 스냅샷이 시작 상태와 동일. 네트워크로 중단된 028 회차의 남은 데이터는 그 실행 구간에 만든 링크 기준으로 지웠고, 이후 DB는 그날 작업 전 스냅샷과 동일(오늘 만든 링크·약속·참여자 0). dev 서버 종료, 3000 포트·`next` 프로세스 없음
-- 검증 스크립트: `scripts/verify/028-participant-finish.mjs`, `scripts/verify/fix-availability-intake.mjs`(Git 제외). dev 서버를 띄운 뒤 `PLAYWRIGHT_DIR=… CHROMIUM_PATH=… node scripts/verify/028-participant-finish.mjs`, `SCREENSHOT_DIR`를 주면 주요 화면 6장 저장
+- 회귀 스크립트 선택자 수정(동작 기대값은 그대로): ① 시간 입력 화면 확인 `{닉네임}님의 가능 시간` → 헤더 「{닉네임} · 」 + 제목 「가능한 시간을 골라 주세요」(`inputScreen`, 027 13곳·028 2곳·fix 1곳), 027 보드 위치 기준 제목 1곳 ② 확인 창이 모달(body에 붙음)로 옮겨져 `menuOf/mineOf(page)·명단.getByRole("alertdialog")` → `page.getByRole("alertdialog")`(027 5곳·028 6곳) ③ 선택 칸 수 `선택 N칸` 글자 → `data-selected-slots` 속성(028·fix 각 1곳) ④ 버튼 문구 「참여하기」 → 「참여하고 시간 선택하기」(028 1곳), 「이미 참여하셨나요? 로그인」 → 「이미 참여했어요 · 다시 로그인」(028 1곳), 「제출하기」 → 「가능 시간 제출」(fix 1곳)
+- 다르게 판단한 것(R-35): 입력란 글자는 휴대폰 16px(iOS 확대 방지)·넓은 화면 14px, 주황 대신 회색 주의 안내, 결과 날짜는 후보 목록과 같은 「11월 12일 (목)」, 시간 입력 제목 「골라 주세요」(휴대폰은 끌지 않음), 확인 창 취소 문구 「돌아가기」로 통일, 결과 화면 링크 복사도 04처럼 버튼이 어두워짐
+- fix 회귀 1건: SWR 포커스 재조회가 가끔 새 요청을 보내지 않는 회차가 있다(요청 시각 기록상 포커스 직후 요청이 없고 다음 정기 폴링에서 반영). `main`에서도 같은 비율이라 이번 범위에서 고치지 않았다. 기준(3초)을 바꾸지 않았다
+- 실수와 되돌림: prettier를 `app` 폴더 전체에 돌려 API 라우트 12개 파일의 줄바꿈이 바뀌었다 → 서식 변경만인 것을 확인하고 `git checkout -- app/api`로 되돌림
+- 마지막 수정(보드 안내 종류 이름 `warn` → `attention`, 동작 같음)은 브라우저 확인 뒤에 했다. 그 뒤 test·lint·typecheck·build는 다시 돌려 통과
+- 검증 스크립트(Git 제외): `scripts/verify/029-figma-capture.mjs`(`CAPTURE_DIR` 주면 after 모드), `029-modal-check.mjs`, `029-bug-repro.mjs`
 
 ## 완료 이력
 
@@ -272,3 +274,11 @@
 - 변경: 화면 위쪽 방장 메뉴 `components/manage/host-menu.tsx`(현재 방장만, 상태 조회 `promiseStatus` 기준 — collecting: 응답 마감(018 버튼 이동)·설정 변경·취소, closed·confirmed: 다시 열기·취소), 설정 변경·재조율 공용 폼 `settings-panel.tsx`(바꾼 필드만·범위는 바꿨을 때만 `dateRange`(R-26), 정원 감소·마감 단축 막음, 마감 때문에 막히는 축소 안내, 범위 미리 보기는 `range-change.ts` 재사용, 저장 뒤 `changeImpact` 안내), 취소 `cancel-panel.tsx`(확인 1회·409 `PROMISE_CANCELLED` 성공 처리, R-25), 명단·내보내기 `participant-list.tsx`(모두에게 정원 현황·등록순·방장·나, 5초 폴링, 방장·모집 중·본인 제외 내보내기). 순수 로직 `lib/manage/{settings-form,impact,failure}.ts`. 문서: DECISION_CONFLICTS R-33 신설
 - 검증: Vitest 1594건(이번 69건, 기존 기대값 수정 없음), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 브라우저 `scripts/verify/027-host-manage.mjs` 84개 항목 2회 통과(방장 1280px·참여자 390px, 응답 유실 재요청 포함). 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
 - 남은 제한: 탈퇴·로그아웃 버튼, 시간 입력 화면 "선택 N칸" 버그, 후임 방장 화면의 방장 메뉴(새로고침 필요)는 5b(028), 명단 기본 접힘·5초 폴링·미리 보기 칸 기준 안내는 팀 확인 필요(R-33)
+
+### 2026-11-10 — 참여자 화면 마무리 (화면 PR 5b)
+
+- 스펙: `context/features/028-participant-finish-ui.md`
+- 브랜치: `ahn/feat-참여자화면-마무리` (PR #33 병합)
+- 변경: 약속 나가기·로그아웃 화면 `components/leave/leave-panel.tsx`(모든 참여자·draft 방장 나가기, 상황별 확인 문구 — 일반·승계 이름(명단 등록순)·혼자 취소·초안 삭제, 이 기기·모든 기기 로그아웃), 완료 뒤 이 약속 저장값 삭제·링크 재조회(`invite-flow.tsx`, 나가기 중 일반 재조회 무시·마지막 재조회만 반영), 나가기 재요청 401·409 `PROMISE_CANCELLED`·404 `PROMISE_NOT_FOUND`와 로그아웃 401 성공 처리, 폴링 설정 기준 제출 전 입력 범위 정리(`clipDraftToRange`, 선택 N칸 버그), 명단의 내 역할 변화로 `/me` 갱신(후임 방장 메뉴), `canClose` 제거. 순수 로직 `lib/leave/{confirm,failure,storage}.ts`. fix: SWR 같은 주소 요청 합류 화면이 응답을 못 받는 문제 — 세 화면을 SWR `data` + `createIntake`로(`context/fixes/001-availability-swr-join.md`). API·DB 변경 없음. 문서: DECISION_CONFLICTS R-34 신설
+- 검증: Vitest 1630건(이번 36건, 기존 기대값 수정은 `canClose` 제거 2건), `TZ=UTC`·`TZ=America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 브라우저 `scripts/verify/028-participant-finish.mjs` 75개 항목 2회 연속 통과(1280px·390px), 027 스크립트 84개 항목 3회 연속·012 회귀 21개 항목 2회 연속 통과. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
+- 남은 제한: 실제 휴대폰, R-34 판단(`/me` 폴링 대신 명단 역할 변화·모든 기기 로그아웃 뒤 다른 브라우저는 등록 모드 참여 화면) 팀 확인 필요, C-07·C-12

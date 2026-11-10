@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type SubmitEvent } from "react";
-import { Button, Card, FieldError } from "@/components/common/ui";
+import { Button, Card, FIELD, FieldError, Notice } from "@/components/common/ui";
 import { callApi, writeStorage } from "@/components/create-promise/api";
 import {
   createSetupRecord,
@@ -17,13 +17,12 @@ type Field = "nickname" | "pin";
 
 const PIN = /^[0-9]{4}$/;
 
-const INPUT =
-  "h-12 w-full rounded-lg border border-line bg-paper px-4 text-base outline-none focus:border-blue aria-invalid:border-danger";
+const INPUT = FIELD;
 
 export function RegisterHostCard(props: {
   inviteToken: string;
   notice: string | null;
-  onRegistered: (record: SetupRecord) => void;
+  onRegistered: (record: SetupRecord, nickname: string) => void;
   onConflict: () => void;
   onLinkGone: (kind: "invalid" | "expired") => void;
 }) {
@@ -62,7 +61,7 @@ export function RegisterHostCard(props: {
       // 응답을 받은 순간의 기기 시각 + 10분 (서버 시각과 비교하지 않는다)
       const record = createSetupRecord(result.data.promiseId, Date.now());
       writeStorage(setupStorageKey(props.inviteToken), JSON.stringify(record));
-      props.onRegistered(record);
+      props.onRegistered(record, nickname.trim().normalize("NFC"));
       return;
     }
     setPending(false);
@@ -80,13 +79,13 @@ export function RegisterHostCard(props: {
   }
 
   return (
-    <Card className="mx-auto max-w-lg">
+    <Card center>
       <h1 className="text-[28px] font-bold leading-snug">새 약속을 만들어 볼까요</h1>
       <p className="mt-2 text-sub">닉네임과 PIN을 정하면 바로 약속 설정을 시작해요.</p>
       {props.notice && (
-        <p role="alert" className="mt-4 rounded-lg bg-blue-soft px-4 py-3 text-sm text-ink">
+        <Notice tone="info" role="alert" className="mt-4">
           {props.notice}
-        </p>
+        </Notice>
       )}
 
       <form onSubmit={submit} noValidate className="mt-6 space-y-5">
@@ -112,7 +111,7 @@ export function RegisterHostCard(props: {
           </label>
           <input
             id="pin"
-            className={`${INPUT} tracking-[0.4em]`}
+            className={`${INPUT} !text-lg tracking-[0.4em]`}
             type="password"
             inputMode="numeric"
             pattern="[0-9]*"
@@ -126,7 +125,7 @@ export function RegisterHostCard(props: {
           />
           <FieldError id="pin-error" message={errors.pin} />
           <p id="pin-hint" className="mt-2 text-xs text-sub">
-            다시 방문할 때 같은 닉네임과 PIN으로 수정해요
+            다시 방문할 때 같은 닉네임과 PIN으로 응답을 수정해요.
           </p>
         </div>
         <Button type="submit" disabled={pending}>

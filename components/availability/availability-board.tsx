@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { Button } from "@/components/common/ui";
+import { ConfirmDialog } from "@/components/common/modal";
+import { Badge, Button, Notice, PANEL_BOX } from "@/components/common/ui";
 import {
   callApi,
   readStorage,
@@ -14,6 +15,8 @@ import {
 import { formatDateRange, formatDuration } from "@/lib/create-promise/format";
 import { classifySubmitFailure, NOTICES } from "@/lib/availability/failure";
 import { createIntake } from "@/lib/availability/intake";
+import { formatSelectionSummary } from "@/lib/availability/summary";
+import { seoulDateOf } from "@/lib/time/seoul";
 import { decidePoll } from "@/lib/availability/poll";
 import {
   clipDraftToRange,
@@ -63,7 +66,7 @@ async function fetchAvailability(path: string): Promise<Polled> {
   return { result, startedAt, receivedAt: performance.now() };
 }
 
-type Notice = { tone: "info" | "warn"; text: string };
+type BoardNotice = { tone: "info" | "attention"; text: string };
 
 export function AvailabilityBoard({
   promiseId,
@@ -88,7 +91,7 @@ export function AvailabilityBoard({
   });
   const [nowMs, setNowMs] = useState(0);
   const [tab, setTab] = useState<"mine" | "all">(initialTab);
-  const [notice, setNotice] = useState<Notice | null>(null);
+  const [notice, setNotice] = useState<BoardNotice | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [confirmEmpty, setConfirmEmpty] = useState(false);
@@ -139,8 +142,9 @@ export function AvailabilityBoard({
       if (decision.kind === "drop") {
         setDraft(null);
         if (decision.reason === "changed")
-          setNotice({ tone: "warn", text: NOTICES.changedElsewhere });
-        if (decision.reason === "closed") setNotice({ tone: "warn", text: NOTICES.closedUnsaved });
+          setNotice({ tone: "attention", text: NOTICES.changedElsewhere });
+        if (decision.reason === "closed")
+          setNotice({ tone: "attention", text: NOTICES.closedUnsaved });
       }
       setSnapshot(next);
       setNowMs(now);
@@ -254,10 +258,11 @@ export function AvailabilityBoard({
   async function submit(confirmed: boolean) {
     if (!snapshot || readOnly || submittingRef.current) return;
     if (futureCount === 0 && !confirmed) {
+      setSubmitError(null);
       setConfirmEmpty(true);
       return;
     }
-    setConfirmEmpty(false);
+    // 빈 제출 확인 창은 요청이 끝날 때까지 열어 두고(요청 중 닫기 막음) 결과를 받은 뒤 닫는다
     submittingRef.current = true;
     setSubmitting(true);
     setSubmitError(null);
@@ -271,6 +276,10 @@ export function AvailabilityBoard({
     submittingRef.current = false;
     setSubmitting(false);
 
+    const action = result.ok ? null : classifySubmitFailure(result);
+    // 다시 시도할 수 있는 실패만 확인 창 안에 안내를 남긴다. 나머지는 창을 닫고 화면 안내로 보인다
+    if (action?.kind !== "retry") setConfirmEmpty(false);
+
     if (result.ok) {
       applyMe({
         version: result.data.version,
@@ -280,29 +289,29 @@ export function AvailabilityBoard({
       setDraft(null);
       setNotice(
         result.data.droppedSlotCount > 0
-          ? { tone: "warn", text: NOTICES.dropped }
+          ? { tone: "attention", text: NOTICES.dropped }
           : { tone: "info", text: NOTICES.submitted },
       );
       return;
     }
 
-    const action = classifySubmitFailure(result);
+    if (!action) return;
     switch (action.kind) {
       case "conflict":
         // 다시 조회하지 않고 details로 다시 그린다
         applyMe({ version: action.version, submitted: action.submitted, slots: action.slots });
         setDraft(null);
-        setNotice({ tone: "warn", text: NOTICES.conflict });
+        setNotice({ tone: "attention", text: NOTICES.conflict });
         return;
       case "refetch":
         setDraft(null);
-        setNotice({ tone: "warn", text: NOTICES.conflict });
+        setNotice({ tone: "attention", text: NOTICES.conflict });
         void mutate();
         return;
       case "closed":
         lastWriteRef.current = performance.now();
         setSnapshot((current) => (current ? { ...current, status: "closed" } : current));
-        if (draftRef.current) setNotice({ tone: "warn", text: NOTICES.closedUnsaved });
+        if (draftRef.current) setNotice({ tone: "attention", text: NOTICES.closedUnsaved });
         setDraft(null);
         void mutate(); // 마감·확정 중 실제 상태를 받아 온다
         return;
@@ -316,18 +325,19 @@ export function AvailabilityBoard({
   }
 
   const { settings } = snapshot;
-  const isHost = myInfo.role === "host";
+  const futureSlots = [...selection].filter((ms) => ms > nowMs);
+  const status = STATUS_BADGE[snapshot.status] ?? STATUS_BADGE.collecting;
 
   return (
-    <div className={`mx-auto max-w-5xl ${readOnly ? "" : "pb-4"}`}>
-      <section className="rounded-xl border border-line bg-paper p-5 sm:p-7">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-bold leading-snug">{myInfo.nickname}님의 가능 시간</h1>
-          {isHost && (
-            <span className="rounded-full bg-blue-soft px-2.5 py-0.5 text-sm font-medium text-ink">
-              방장
-            </span>
-          )}
+    <div className={`mx-auto max-w-page ${readOnly ? "" : "pb-4"}`}>
+      <section className={`${PANEL_BOX} p-5 sm:p-7`}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold leading-snug">
+            {readOnly ? "모두의 가능한 시간을 확인하세요" : "가능한 시간을 골라 주세요"}
+          </h1>
+          <Badge size="status" tone={status.tone}>
+            {status.label}
+          </Badge>
         </div>
         <p className="mt-2 text-sub">
           {formatDateRange(settings.dateRangeStart, settings.dateRangeEnd)} · 하루{" "}
@@ -342,25 +352,20 @@ export function AvailabilityBoard({
             </>
           ) : (
             // 조기 마감(R-22)이면 설정 마감 시각이 아직 미래라 그 시각 대신 마감됐다는 사실만 보인다
-            <span className="font-medium text-warn">
+            <span className="font-medium text-text">
               {snapshot.status === "confirmed" ? "응답 마감됨 · 확정된 약속이에요" : "응답 마감됨"}
             </span>
           )}
-          <span
-            className={`rounded-lg px-3 py-1 text-xs font-medium ${
-              state === "submitted"
-                ? "bg-blue-soft text-ink"
-                : dirty
-                  ? "bg-warn/10 text-warn"
-                  : "bg-faint text-sub"
-            }`}
+          <Badge
+            tone={state === "submitted" ? "blue" : "muted"}
+            className={dirty ? "!text-text" : ""}
           >
             {readOnly
               ? snapshot.me.submitted
                 ? "제출한 내용으로 마감"
                 : "제출하지 않고 마감"
               : SUBMISSION_LABELS[state]}
-          </span>
+          </Badge>
         </div>
         {readOnly && (
           <p className="mt-3 text-sm text-sub">
@@ -371,30 +376,16 @@ export function AvailabilityBoard({
 
       <div aria-live="polite" className="mt-4 space-y-2 empty:hidden">
         {notice && (
-          <div
-            className={`flex items-start justify-between gap-3 rounded-lg px-4 py-3 text-sm ${
-              notice.tone === "warn" ? "bg-warn/10 text-warn" : "bg-blue-soft text-ink"
-            }`}
-          >
-            <span>{notice.text}</span>
-            <button
-              type="button"
-              aria-label="안내 닫기"
-              className="shrink-0 opacity-70 hover:opacity-100"
-              onClick={() => setNotice(null)}
-            >
-              ✕
-            </button>
-          </div>
+          <Notice tone={notice.tone} onClose={() => setNotice(null)}>
+            {notice.text}
+          </Notice>
         )}
         {offline && (
-          <p className="rounded-lg bg-faint px-4 py-2 text-sm text-sub">
-            연결이 불안정해요. 다시 연결되면 자동으로 갱신돼요.
-          </p>
+          <Notice tone="attention">연결이 불안정해요. 다시 연결되면 자동으로 갱신돼요.</Notice>
         )}
       </div>
 
-      <div role="tablist" className="mt-4 grid grid-cols-2 rounded-lg bg-line/60 p-1 lg:hidden">
+      <div role="tablist" className="mt-4 grid grid-cols-2 gap-2 lg:hidden">
         {(
           [
             ["mine", "내 시간"],
@@ -407,7 +398,11 @@ export function AvailabilityBoard({
             role="tab"
             aria-selected={tab === key}
             onClick={() => setTab(key)}
-            className={`h-9 rounded-md text-sm font-medium ${tab === key ? "bg-paper text-text shadow-sm" : "text-sub"}`}
+            className={`h-icon rounded-field text-sm ${
+              tab === key
+                ? "bg-blue-soft font-bold text-ink"
+                : "border border-line bg-paper text-sub"
+            }`}
           >
             {label}
           </button>
@@ -416,18 +411,18 @@ export function AvailabilityBoard({
 
       <div className="mt-4 lg:grid lg:grid-cols-2 lg:gap-4">
         <section
-          className={`min-w-0 rounded-xl border border-line bg-paper p-4 sm:p-6 ${tab === "mine" ? "" : "hidden lg:block"}`}
+          className={`min-w-0 ${PANEL_BOX} p-4 sm:p-6 ${tab === "mine" ? "" : "hidden lg:block"}`}
         >
           <h2 className="text-lg font-bold">내 가능 시간</h2>
           <p className="mt-1 text-sm text-sub">
             {readOnly
               ? "제출한 시간이에요."
-              : "가능한 칸을 고르세요. 컴퓨터는 끌어서 여러 칸을, 휴대폰은 칸을 눌러 하나씩 고르고 날짜를 누르면 하루 전체를 고를 수 있어요."}
+              : "30분 단위예요. 빈 칸부터 끌면 추가, 고른 칸부터 끌면 해제돼요. 휴대폰은 칸을 눌러 하나씩, 날짜를 누르면 하루 전체를 골라요."}
           </p>
           <div className="mt-3 flex flex-wrap gap-3 text-xs text-sub">
             <Legend className="bg-blue" label="가능" />
             <Legend className="border border-line bg-paper" label="불가능" />
-            <Legend className="bg-line/70" label="지난 시간" />
+            <Legend className="bg-muted" label="지난 시간" />
           </div>
           <div className="mt-3">
             <MyGrid
@@ -442,7 +437,7 @@ export function AvailabilityBoard({
         </section>
 
         <section
-          className={`mt-4 min-w-0 rounded-xl border border-line bg-paper p-4 sm:p-6 lg:mt-0 ${tab === "all" ? "" : "hidden lg:block"}`}
+          className={`mt-4 min-w-0 ${PANEL_BOX} p-4 sm:p-6 lg:mt-0 ${tab === "all" ? "" : "hidden lg:block"}`}
         >
           <h2 className="text-lg font-bold">모두의 가능 시간</h2>
           <p className="mt-1 text-sm text-sub">
@@ -453,56 +448,70 @@ export function AvailabilityBoard({
               grid={snapshot.grid}
               participants={snapshot.participants}
               total={snapshot.total}
+              today={nowMs > 0 ? seoulDateOf(new Date(nowMs)) : null}
             />
           </div>
         </section>
       </div>
 
       {!readOnly && (
-        <div className="sticky bottom-0 z-30 mt-4 -mx-4 border-t border-line bg-paper/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-xl sm:border">
-          {confirmEmpty ? (
-            <div role="alertdialog" aria-labelledby="empty-confirm" className="space-y-3">
-              <p id="empty-confirm" className="text-sm">
-                <span className="font-medium">가능한 시간이 없다고 제출할까요?</span>{" "}
-                <span className="text-sub">모든 시간이 불가능으로 제출돼요.</span>
+        <div className="sticky bottom-0 z-30 mt-4 -mx-4 border-t border-line bg-paper/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-card sm:border">
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1 text-sm">
+              <p className="font-medium">{SUBMISSION_LABELS[state]}</p>
+              <p className="text-xs text-sub" data-selected-slots={futureSlots.length}>
+                {formatSelectionSummary(futureSlots)}
               </p>
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="secondary" onClick={() => setConfirmEmpty(false)}>
-                  취소
-                </Button>
-                <Button disabled={submitting} onClick={() => void submit(true)}>
-                  {submitting ? "제출 중…" : "없다고 제출"}
-                </Button>
-              </div>
             </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <div className="min-w-0 flex-1 text-sm">
-                <p className="font-medium">{SUBMISSION_LABELS[state]}</p>
-                <p className="text-xs text-sub">선택 {futureCount}칸</p>
-              </div>
-              <div className="w-32 shrink-0 sm:w-40">
-                <Button disabled={submitting} onClick={() => void submit(false)}>
-                  {submitting ? "제출 중…" : snapshot.me.submitted ? "다시 제출" : "제출하기"}
-                </Button>
-              </div>
+            <div className="w-36 shrink-0 sm:w-60">
+              <Button disabled={submitting} onClick={() => void submit(false)}>
+                {submitting && !confirmEmpty
+                  ? "제출 중…"
+                  : snapshot.me.submitted
+                    ? "다시 제출"
+                    : "가능 시간 제출"}
+              </Button>
             </div>
-          )}
-          {submitError && (
-            <p role="alert" className="mt-2 text-sm text-danger">
-              {submitError}
-            </p>
+          </div>
+          {submitError && !confirmEmpty && (
+            <Notice tone="error" role="alert" className="mt-2">
+              {submitError} 고른 시간은 그대로 남아 있어요.
+            </Notice>
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmEmpty}
+        title="가능한 시간이 없다고 제출할까요?"
+        confirmLabel="가능 시간 없음으로 제출"
+        busyLabel="제출 중…"
+        cancelLabel="시간 선택으로"
+        busy={submitting}
+        error={submitError}
+        onConfirm={() => void submit(true)}
+        onClose={() => {
+          setConfirmEmpty(false);
+          setSubmitError(null);
+        }}
+      >
+        <p>고른 시간이 없어요. 이대로 제출하면 모든 시간이 불가능으로 제출돼요.</p>
+      </ConfirmDialog>
     </div>
   );
 }
 
+// 약속 상태 배지 (Figma Badge: 조율 중·투표 마감·약속 확정)
+const STATUS_BADGE: Record<string, { label: string; tone: "blue" | "muted" }> = {
+  collecting: { label: "조율 중", tone: "blue" },
+  closed: { label: "투표 마감", tone: "muted" },
+  confirmed: { label: "약속 확정", tone: "blue" },
+};
+
 function Legend({ className, label }: { className: string; label: string }) {
   return (
     <span className="flex items-center gap-1.5">
-      <span className={`h-3 w-3 rounded-sm ${className}`} />
+      <span className={`h-3 w-3 rounded-xs ${className}`} />
       {label}
     </span>
   );
@@ -532,7 +541,7 @@ function Countdown({ snapshot, onReached }: { snapshot: Snapshot; onReached: () 
   if (remaining === null) return null;
   const text = formatRemaining(remaining);
   return (
-    <span className={`font-medium ${remaining < 60 * 60 * 1000 ? "text-warn" : "text-blue"}`}>
+    <span className={`font-medium ${remaining < 60 * 60 * 1000 ? "text-danger" : "text-blue"}`}>
       {text ?? "마감 시간이 됐어요. 확인 중…"}
     </span>
   );

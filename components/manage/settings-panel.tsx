@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type SubmitEvent } from "react";
-import { Button, FieldError } from "@/components/common/ui";
+import { Button, FieldError, Notice } from "@/components/common/ui";
 import { callApi } from "@/components/create-promise/api";
 import { Calendar } from "@/components/create-promise/calendar";
 import { ReadOnlyValue, SELECT, Section, Stepper } from "@/components/create-promise/setup-form";
@@ -214,9 +214,9 @@ export function SettingsPanel({
             : "새 응답 마감을 정하면 다시 모집을 시작해요. 참여자들이 시간을 다시 고를 수 있어요."}
         </p>
         {!isSettings && promiseStatus === "confirmed" && (
-          <p role="note" className="mt-2 rounded-lg bg-warn/10 px-3 py-2 text-sm text-warn">
+          <Notice tone="attention" role="note" className="mt-2">
             확정된 일정이 해제돼요.
-          </p>
+          </Notice>
         )}
       </div>
 
@@ -267,9 +267,9 @@ export function SettingsPanel({
               invalid={!!errors.dateRange || shrinkBlocked}
             />
             {dateNotice && (
-              <p role="status" className="mt-2 text-sm text-warn">
+              <Notice tone="attention" role="status" className="mt-2">
                 {dateNotice}
-              </p>
+              </Notice>
             )}
             {shrinkBlocked ? (
               <p role="alert" className="mt-2 text-sm text-danger">
@@ -315,14 +315,13 @@ export function SettingsPanel({
           </Section>
 
           {preview && (preview.removesSlots || preview.requiresResubmit) && (
-            <div
-              role="status"
-              className="space-y-1 rounded-lg bg-warn/10 px-4 py-3 text-sm text-warn"
-            >
-              <p className="font-medium">저장하면 이렇게 바뀌어요</p>
-              {preview.removesSlots && <p>· {RANGE_REMOVES_NOTICE}</p>}
-              {preview.requiresResubmit && <p>· {RANGE_RESUBMIT_NOTICE}</p>}
-            </div>
+            <Notice tone="attention" role="status">
+              <div className="space-y-1">
+                <p className="font-medium">저장하면 이렇게 바뀌어요</p>
+                {preview.removesSlots && <p>· {RANGE_REMOVES_NOTICE}</p>}
+                {preview.requiresResubmit && <p>· {RANGE_RESUBMIT_NOTICE}</p>}
+              </div>
+            </Notice>
           )}
 
           <div className="grid gap-5 sm:grid-cols-2">
@@ -360,9 +359,9 @@ export function SettingsPanel({
                 plusDisabled={form.durationMinutes >= durationMax}
               />
               {durationNotice && (
-                <p role="status" className="mt-2 text-sm text-warn">
+                <Notice tone="attention" role="status" className="mt-2">
                   {DURATION_SHRUNK_NOTICE}
-                </p>
+                </Notice>
               )}
               <FieldError id="manage-durationMinutes-error" message={errors.durationMinutes} />
             </Section>

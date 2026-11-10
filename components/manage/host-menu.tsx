@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/common/ui";
+import { Button, PANEL } from "@/components/common/ui";
 import { CloseVotingConfirm } from "@/components/result/close-voting-bar";
 import type { ManageAction } from "@/lib/manage/failure";
 import type { PromiseSettings } from "@/lib/manage/settings-form";
@@ -53,6 +53,8 @@ export function HostMenu({
   // 폴링으로 상태가 바뀌면(마감 경과·다른 기기의 처리) 지금 상태에서 할 수 없는 화면은 메뉴로 돌린다
   const current: Mode = allowed(mode, promiseStatus) ? mode : "menu";
   const collecting = promiseStatus === "collecting";
+  // 마감·취소는 메뉴 위에 확인 창(029 공통 모달)으로 연다. 설정 변경·재조율 폼은 메뉴 자리를 쓴다
+  const showMenu = current === "menu" || current === "close" || current === "cancel";
   const back = () => setMode("menu");
   const reset = () => {
     setMode("menu");
@@ -60,11 +62,8 @@ export function HostMenu({
   };
 
   return (
-    <section
-      aria-label="방장 메뉴"
-      className="mx-auto mb-4 max-w-5xl rounded-xl border border-line bg-paper p-4 sm:p-5"
-    >
-      {current === "menu" && (
+    <section aria-label="방장 메뉴" className={`${PANEL} mb-4 p-4 sm:p-5`}>
+      {showMenu && (
         <>
           <div className="flex flex-wrap items-center gap-3">
             <p className="min-w-0 flex-1 text-sm text-sub">
@@ -119,8 +118,9 @@ export function HostMenu({
         </>
       )}
 
-      {current === "close" && (
+      {collecting && (
         <CloseVotingConfirm
+          open={current === "close"}
           promiseId={promiseId}
           onBack={back}
           onClosed={() => {
@@ -156,16 +156,15 @@ export function HostMenu({
         />
       )}
 
-      {current === "cancel" && (
-        <CancelPanel
-          promiseId={promiseId}
-          onBack={back}
-          onAction={(action) => {
-            if (action.kind !== "done") reset();
-            onManageAction(action);
-          }}
-        />
-      )}
+      <CancelPanel
+        open={current === "cancel"}
+        promiseId={promiseId}
+        onBack={back}
+        onAction={(action) => {
+          if (action.kind !== "done") reset();
+          onManageAction(action);
+        }}
+      />
     </section>
   );
 }

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { AvailabilityBoard } from "@/components/availability/availability-board";
-import { Button } from "@/components/common/ui";
+import { useHeaderIdentity } from "@/components/common/identity";
+import { Button, Notice } from "@/components/common/ui";
 import { callApi, type MyParticipation } from "@/components/create-promise/api";
 import { SessionPanel } from "@/components/leave/leave-panel";
 import { HostMenu } from "@/components/manage/host-menu";
@@ -60,6 +61,8 @@ export function PromiseRoom({
   onExit: (notice: string, mode: "register" | "login") => void;
 }) {
   const [me, setMe] = useState(initialMe);
+  // 헤더의 "닉네임 · 역할"(029 G-2). 자동 승계로 /me가 바뀌면 같이 바뀐다
+  useHeaderIdentity({ nickname: me.nickname, role: me.role });
   const [detail, setDetail] = useState<RoomDetail | null>(null);
   const [settings, setSettings] = useState<PromiseSettings | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
@@ -304,37 +307,19 @@ export function PromiseRoom({
   }, [view.kind, onRelink]);
 
   const banner = (
-    <div aria-live="polite" className="mx-auto mb-4 max-w-5xl space-y-2 empty:hidden">
+    <div aria-live="polite" className="mx-auto mb-4 max-w-page space-y-2 empty:hidden">
       {saved && (
-        <div className="flex items-start justify-between gap-3 rounded-lg bg-blue-soft px-4 py-3 text-sm text-ink">
-          <span>{saved}</span>
-          <button
-            type="button"
-            aria-label="저장 안내 닫기"
-            className="shrink-0 opacity-70 hover:opacity-100"
-            onClick={() => setSaved(null)}
-          >
-            ✕
-          </button>
-        </div>
+        <Notice tone="info" closeLabel="저장 안내 닫기" onClose={() => setSaved(null)}>
+          {saved}
+        </Notice>
       )}
       {notice && (
-        <div className="flex items-start justify-between gap-3 rounded-lg bg-warn/10 px-4 py-3 text-sm text-warn">
-          <span>{notice}</span>
-          <button
-            type="button"
-            aria-label="안내 닫기"
-            className="shrink-0 opacity-70 hover:opacity-100"
-            onClick={() => setNotice(null)}
-          >
-            ✕
-          </button>
-        </div>
+        <Notice tone="attention" onClose={() => setNotice(null)}>
+          {notice}
+        </Notice>
       )}
       {offline && (
-        <p className="rounded-lg bg-faint px-4 py-2 text-sm text-sub">
-          연결이 불안정해요. 다시 연결되면 자동으로 갱신돼요.
-        </p>
+        <Notice tone="attention">연결이 불안정해요. 다시 연결되면 자동으로 갱신돼요.</Notice>
       )}
     </div>
   );
@@ -451,7 +436,7 @@ function Everyone({
   onRelink: () => void;
 }) {
   return (
-    <div className="mx-auto mt-4 max-w-5xl">
+    <div className="mx-auto mt-4 max-w-page">
       <div className="mx-auto max-w-xs">
         <Button variant="secondary" aria-expanded={open} onClick={onToggle}>
           {open ? "모두의 시간 접기" : "모두의 시간 보기"}
