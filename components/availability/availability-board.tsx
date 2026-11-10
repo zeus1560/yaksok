@@ -15,6 +15,7 @@ import { formatDateRange, formatDuration } from "@/lib/create-promise/format";
 import { classifySubmitFailure, NOTICES } from "@/lib/availability/failure";
 import { decidePoll } from "@/lib/availability/poll";
 import {
+  clipDraftToRange,
   decideDraft,
   draftStorageKey,
   estimateServerNow,
@@ -23,7 +24,9 @@ import {
   nextDraft,
   parseDraft,
   parseSlotList,
+  rangeClippedNotice,
   serializeDraft,
+  settingsRange,
   submissionState,
   SUBMISSION_LABELS,
   toSlotStrings,
@@ -105,11 +108,25 @@ export function AvailabilityBoard({
     [storageKey],
   );
 
-  // 서버 응답 반영: 로컬 입력과 버전을 비교한다 (TIME-10-04)
+  // 서버 응답 반영: 새 설정 범위 밖 칸을 로컬 입력에서 먼저 지우고(028), 버전을 비교한다 (TIME-10-04)
+  // 범위가 줄어도 저장된 슬롯이 없던 참여자는 버전이 그대로라, 자르지 않으면 "선택 N칸"이 화면보다 많다
   const applyServer = useCallback(
     (next: Snapshot) => {
       const now = estimateServerNow(next.serverTimeMs, next.receivedAt, performance.now());
-      const decision = decideDraft(draftRef.current, next.me, next.status, now);
+      let local = draftRef.current;
+      let clipped = 0;
+      if (local) {
+        const result = clipDraftToRange(local, settingsRange(next.settings));
+        if (result.removed > 0) {
+          local = result.draft;
+          clipped = result.removed;
+          setDraft(local); // 저장소에도 반영한다
+        }
+      }
+      const decision = decideDraft(local, next.me, next.status, now);
+      if (decision.kind === "keep" && clipped > 0) {
+        setNotice({ tone: "info", text: rangeClippedNotice(clipped) });
+      }
       if (decision.kind === "drop") {
         setDraft(null);
         if (decision.reason === "changed")

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type SubmitEvent, type ReactNode } from "r
 import { Button, Card, FieldError } from "@/components/common/ui";
 import { callApi, type StartedSettings } from "@/components/create-promise/api";
 import { Calendar } from "@/components/create-promise/calendar";
+import { LeaveControl } from "@/components/leave/leave-panel";
 import { formatCountdown, isUrgent, remainingMs } from "@/lib/create-promise/countdown";
 import { addDays, selectDate, type DateRange } from "@/lib/create-promise/date-range";
 import { resolveDeadline, toDeadlinePayload } from "@/lib/create-promise/deadline";
@@ -33,6 +34,7 @@ import {
   SLOT_MINUTES,
   minuteToTime,
 } from "@/lib/state/start-settings";
+import { DRAFT_DISCARDED_NOTICE, RELINK_NOTICE } from "@/lib/leave/confirm";
 import { seoulDateOf } from "@/lib/time/seoul";
 
 // 설정 화면 (STATE-API-02, Figma 35:76·35:278, 약속 이름 제외 — DECISION_CONFLICTS R-15)
@@ -49,6 +51,8 @@ export function SetupForm(props: {
   localExpiresAt: number | null;
   onDone: (settings: StartedSettings) => void;
   onReset: (notice: string) => void;
+  // 방장이 약속 나가기(STATE-API-08 draft 폐기)를 마쳤다(028). 상위가 저장값을 지우고 링크를 다시 조회한다
+  onLeft: (notice: string) => void;
 }) {
   const { promiseId, localExpiresAt } = props;
   const [now, setNow] = useState(() => Date.now());
@@ -336,6 +340,16 @@ export function SetupForm(props: {
             {formError}
           </p>
         )}
+
+        <div className="border-t border-line pt-4">
+          <LeaveControl
+            promiseId={promiseId}
+            buttonLabel="약속 만들기 그만두기"
+            resolveSituation={async () => ({ kind: "draft_host" })}
+            onLeft={() => props.onLeft(DRAFT_DISCARDED_NOTICE)}
+            onRelink={() => props.onReset(RELINK_NOTICE)}
+          />
+        </div>
       </div>
     </form>
   );

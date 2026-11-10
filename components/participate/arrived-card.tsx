@@ -10,11 +10,21 @@ export function ArrivedCard({
   inviteToken,
   me,
   onRelink,
+  onExit,
 }: {
   promiseId: string;
   inviteToken: string;
   me: MyParticipation;
   onRelink: () => void;
+  onExit: (notice: string, mode: "register" | "login") => void; // 나가기·로그아웃 완료(028)
 }) {
-  return <PromiseRoom promiseId={promiseId} inviteToken={inviteToken} me={me} onRelink={onRelink} />;
+  return (
+    <PromiseRoom
+      promiseId={promiseId}
+      inviteToken={inviteToken}
+      me={me}
+      onRelink={onRelink}
+      onExit={onExit}
+    />
+  );
 }

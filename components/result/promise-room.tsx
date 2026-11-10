@@ -5,6 +5,7 @@ import useSWR from "swr";
 import { AvailabilityBoard } from "@/components/availability/availability-board";
 import { Button } from "@/components/common/ui";
 import { callApi, type MyParticipation } from "@/components/create-promise/api";
+import { SessionPanel } from "@/components/leave/leave-panel";
 import { HostMenu } from "@/components/manage/host-menu";
 import { ParticipantListPanel } from "@/components/manage/participant-list";
 import { decidePoll } from "@/lib/availability/poll";
@@ -12,7 +13,14 @@ import { classifyListFailure, type ManageAction } from "@/lib/manage/failure";
 import type { PromiseSettings } from "@/lib/manage/settings-form";
 import { pollDelay } from "@/lib/result/poll-delay";
 import type { RoomAction } from "@/lib/result/failure";
-import { canManage, decideRoomView, type RoomDetail } from "@/lib/result/view";
+import type { LeaveSituation } from "@/lib/leave/confirm";
+import {
+  canManage,
+  decideRoomView,
+  PROMOTED_NOTICE,
+  roleChanged,
+  type RoomDetail,
+} from "@/lib/result/view";
 import { CandidatesPanel } from "./candidates-panel";
 import {
   fetchTimed,
@@ -28,6 +36,8 @@ import { ResultPanel } from "./result-panel";
 // - 탭이 숨겨지면 멈추고 돌아오면 바로 조회한다. 일시 실패는 마지막 성공 값을 유지한다(012와 같은 방식, R-19)
 // - 버튼 표시는 /me의 role·permissions. /me의 deadlinePassed는 쓰지 않는다(조기 마감에서 false)
 // - 027: 화면 위쪽에 방장 메뉴(마감·설정 변경·재조율·취소)와 참여자 명단(MEMBER-API-06, 같은 간격 폴링)을 둔다
+// - 028: 화면 아래쪽에 로그아웃·약속 나가기. 명단 폴링에서 내 역할이 /me와 달라지면(자동 승계) /me를 다시 불러
+//   후임 방장 화면에 방장 메뉴를 띄운다(/me를 따로 폴링하지 않는다 — R-34)
 
 const POLL_MS = 5000;
 const FORBIDDEN_NOTICE = "방장 권한이 없어 요청하지 못했어요. 최신 정보로 다시 불러왔어요.";
@@ -37,11 +47,14 @@ export function PromiseRoom({
   inviteToken,
   me: initialMe,
   onRelink: onRelinkProp,
+  onExit,
 }: {
   promiseId: string;
   inviteToken: string;
   me: MyParticipation;
   onRelink: () => void;
+  // 나가기·로그아웃 완료: 상위가 이 약속의 저장값을 지우고 링크를 다시 조회한다
+  onExit: (notice: string, mode: "register" | "login") => void;
 }) {
   const [me, setMe] = useState(initialMe);
   const [detail, setDetail] = useState<RoomDetail | null>(null);
@@ -128,6 +141,38 @@ export function PromiseRoom({
       },
     },
   );
+
+  // 자동 승계(MEMBER-12-03) 반영: 명단의 내 역할이 /me와 다르면 /me를 한 번 다시 부른다
+  // 명단이 이미 5초마다 오므로 요청을 늘리지 않는다. 같은 요청이 겹치지 않게 막는다
+  const roleCheckRef = useRef(false);
+  useEffect(() => {
+    if (!list || roleCheckRef.current || !roleChanged(me, list.participants)) return;
+    roleCheckRef.current = true;
+    const wasHost = me.role === "host";
+    void (async () => {
+      const result = await callApi<MyParticipation>(promisePath(promiseId, "/me"));
+      roleCheckRef.current = false;
+      if (result.ok) {
+        if (!wasHost && result.data.role === "host") setSaved(PROMOTED_NOTICE);
+        setMe(result.data);
+        return;
+      }
+      // /me 실패 분기는 명단 조회와 같다(401·취소·약속 없음·다른 약속 세션 → 링크 재조회, 그 외 다음 명단에서 다시)
+      if (classifyListFailure(result).kind === "relink") onRelink();
+    })();
+  }, [list, me, promiseId, onRelink]);
+
+  // 나가기 확인 문구: 방장은 명단을 새로 조회해 승계 대상을 고른다. 실패하면 마지막 명단(없으면 일반 문구)
+  const listRef = useRef(list);
+  useEffect(() => {
+    listRef.current = list;
+  }, [list]);
+  const resolveLeaveSituation = useCallback(async (): Promise<LeaveSituation> => {
+    if (me.role !== "host") return { kind: "joined", role: "member", participants: null };
+    const fresh = await callApi<ParticipantList>(promisePath(promiseId, "/participants"));
+    const rows = fresh.ok ? fresh.data.participants : (listRef.current?.participants ?? null);
+    return { kind: "joined", role: "host", participants: rows };
+  }, [me.role, promiseId]);
 
   const refetchStatus = useCallback(() => {
     lastWriteRef.current = performance.now();
@@ -297,6 +342,15 @@ export function PromiseRoom({
     </>
   );
 
+  const bottom = (
+    <SessionPanel
+      promiseId={promiseId}
+      resolveLeaveSituation={resolveLeaveSituation}
+      onExit={onExit}
+      onRelink={onRelink}
+    />
+  );
+
   switch (view.kind) {
     case "loading":
     case "relink":
@@ -312,6 +366,7 @@ export function PromiseRoom({
         <>
           {top}
           <AvailabilityBoard promiseId={promiseId} me={me} onRelink={onRelink} />
+          {bottom}
         </>
       );
     case "candidates":
@@ -331,6 +386,7 @@ export function PromiseRoom({
             me={me}
             onRelink={onRelink}
           />
+          {bottom}
         </>
       );
     case "result":
@@ -349,6 +405,7 @@ export function PromiseRoom({
             me={me}
             onRelink={onRelink}
           />
+          {bottom}
         </>
       );
   }

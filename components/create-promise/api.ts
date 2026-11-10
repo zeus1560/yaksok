@@ -109,3 +109,17 @@ export function removeStorage(key: string): void {
     // 무시
   }
 }
+
+// 저장소의 모든 키. 접근할 수 없으면 빈 목록
+export function storageKeys(): string[] {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i);
+      if (key !== null) keys.push(key);
+    }
+    return keys;
+  } catch {
+    return [];
+  }
+}
