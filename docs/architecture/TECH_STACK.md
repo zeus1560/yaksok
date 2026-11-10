@@ -36,7 +36,7 @@
 | TypeScript | 5.x | TS 7이 나왔지만 생태계가 아직 5 기준입니다 |
 | prisma (CLI) | **7.10.0 고정** | ⚠️ SETUP.md「자주 터지는 오류」의 첫 번째 항목 반드시 읽기 |
 | @prisma/client | **7.10.0 고정** | CLI와 같은 버전 |
-| @prisma/adapter-pg | **7.10.0 고정** | Prisma 7부터 필수 |
+| @prisma/adapter-pg | **7.10.0 고정** | Prisma 7부터 필수. Prisma 3종은 `package.json`에 `^` 없이 정확한 버전으로 적는다 |
 | PostgreSQL | Neon 기본값 | 개발·운영 모두 Neon. 개발은 각자 프로젝트 |
 | Tailwind CSS | 4.x | |
 
