@@ -40,7 +40,7 @@ import { seoulDateOf } from "@/lib/time/seoul";
 
 type Field = SetupField;
 
-const SELECT =
+export const SELECT =
   "h-12 w-full rounded-lg border border-line bg-paper px-3 text-base outline-none focus:border-blue";
 
 export function SetupForm(props: {
@@ -371,7 +371,7 @@ function Preview(props: {
   );
 }
 
-function Section(props: { title: string; hint?: string; children: ReactNode }) {
+export function Section(props: { title: string; hint?: string; children: ReactNode }) {
   return (
     <fieldset>
       <legend className="mb-2 text-sm font-medium">{props.title}</legend>
@@ -381,7 +381,7 @@ function Section(props: { title: string; hint?: string; children: ReactNode }) {
   );
 }
 
-function ReadOnlyValue({ label, value }: { label: string; value: string }) {
+export function ReadOnlyValue({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-line bg-paper px-3 py-2">
       <span className="block text-xs text-sub">{label}</span>
@@ -390,7 +390,7 @@ function ReadOnlyValue({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Stepper(props: {
+export function Stepper(props: {
   label: string;
   value: ReactNode;
   suffix?: string;

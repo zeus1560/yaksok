@@ -1,4 +1,4 @@
-# 현재 기능: 공통 상태 가드 점검과 정리 (STATE-API-09)
+# 현재 기능: 방장 관리 화면 (화면 PR 5a)
 
 ## 상태
 
@@ -6,21 +6,21 @@
 
 ## 스펙
 
-`context/features/026-common-guard-cleanup.md`
+`context/features/027-host-manage-ui.md`
 
 ## 목표
 
-구현된 API 20개(MEMBER 01~09, STATE 01~08·10, TIME 01·02)를 STATE-API-09 공통 처리 계약으로 대조한 점검표 `docs/development/GUARD_MATRIX.md`를 만들고, 이미 정한 두 가지를 고친다 — 설정 완료(STATE-API-02) 잠금 후 세션·참여자 재확인(로그아웃과 겹치면 401·쿠키 삭제, 비활성 참여자 401), 취소된 링크 방장 등록(MEMBER-API-02) 409 `PROMISE_CANCELLED`. 검토 뒤 추가 지시로 제출(TIME-API-01)의 잠금 후 재확인을 상태·마감 판정보다 먼저 하게 고친다(N-2). 새 API·DB·화면 변경 없음.
+방장 전용 메뉴(화면 위쪽, `/me` 기준)에서 모집 중 설정 변경(STATE-API-03)·재조율(STATE-API-06)·약속 취소(STATE-API-07)를 하고, 모든 참여자가 명단(MEMBER-API-06)과 정원 현황을 보며, 방장은 모집 중에 참여자를 내보낸다(MEMBER-API-08). API·DB 변경 없음. 탈퇴·로그아웃·시간 입력 화면 버그는 다음 PR(5b).
 
 ## 수용 기준
 
-스펙 `context/features/026-common-guard-cleanup.md` AC-1~7 참고.
+스펙 `context/features/027-host-manage-ui.md` AC-1~8 참고.
 
 ## 작업 기준점
 
-- 브랜치: `ahn/fix-공통가드-정리` (`main` 32663ea에서 생성, 025 PR #30 병합 포함)
-- 시작 시 작업 트리: 깨끗함(`ahn/feat-로그아웃-api`에서 `main`으로 전환 후 `git fetch --prune`·`git pull`). 원격이 사라진 로컬 `ahn/` 브랜치 없음(원격이 남은 로컬 `ahn/` 브랜치는 그대로 둠)
-- 첫 커밋은 025 완료 기록(스펙 025 상태, 완료 이력, feature-list) — 스테이징해 둠
+- 브랜치: `ahn/feat-방장관리-화면` (`main` 9ed4e75에서 생성, 026 PR #31 병합 포함)
+- 시작 시 작업 트리: 깨끗함(`ahn/fix-공통가드-정리`에서 `main`으로 전환 후 `git fetch --prune`·`git pull`). 원격이 사라진 로컬 `ahn/` 브랜치 없음(원격이 남은 로컬 `ahn/` 브랜치는 그대로 둠)
+- 첫 커밋은 026 완료 기록(스펙 026 상태, 완료 이력, feature-list) — 스테이징해 둠
 
 ## 검증 결과
 
@@ -28,32 +28,24 @@
 
 | 단계 | 명령 | 결과 |
 | --- | --- | --- |
-| RED ① 설정 완료 | `npx vitest run lib/state/start-collecting.test.ts` | 새 5건 실패. 「잠금 후 세션이 삭제됐으면(로그아웃과 겹침) 설정 완료는 unauthenticated이고 쿠키를 다시 심지 않는다」 `AssertionError: expected { Object (kind, settings, ...) } to deeply equal { kind: 'unauthenticated', …(1) }`(200 경로로 감), 「잠금 후 참여자가 cancelled면 403이 아니라 … unauthenticated(401)」 `expected 'forbidden' to be 'unauthenticated'`, 「다른 참여자·다른 약속 소속」 `expected 'ok' to be 'unauthenticated'` 외 2건 |
-| | `npx vitest run start/route` | 「unauthenticated(세션 행 삭제됨) → 401 UNAUTHENTICATED, 쿠키를 Max-Age=0으로 지운다」 `TypeError: Cannot read properties of undefined (reading 'headers')`(분기 없음) |
-| RED ② 방장 등록 | `npx vitest run lib/member/host-registration.test.ts` | 「취소된 링크에 방장 등록하면 cancelled(409 PROMISE_CANCELLED)…」·「취소된 draft(10분 지남)도…」 `AssertionError: expected { kind: 'already_registered' } to deeply equal { kind: 'cancelled' }` |
-| | `npx vitest run host/route` | 「cancelled → 409 PROMISE_CANCELLED, 쿠키 없음」 `AssertionError: expected 500 to be 409` |
-| GREEN | 같은 네 파일 | 새 9건 통과. 기존 4건 실패 → 분류: 의도된 기대값 변경 1건(잠금 후 host·cancelled forbidden → unauthenticated), 모의 데이터만 바꾼 것 3건(역할을 `participant.findUnique` 대신 세션 재조회로 주기, 마감 경계 테스트의 세션 만료값을 판정 시각 뒤로) |
-| REFACTOR | 쓰지 않는 `participant.findUnique` 모의 제거 / `npm run test` | 70 파일, 1517 테스트 통과(기존 1509 + 이번 8 순증: 새 9건 − 방장 등록 `it.each`의 cancelled 케이스 1건 이동). `$env:TZ` `UTC`(오프셋 0)·`America/Los_Angeles`(오프셋 480)에서도 1517건 통과 |
-| RED ③ 제출(N-2) | `npx vitest run lib/time/submit-availability.test.ts` | 새 7건 실패(취소 우선 1건은 기존 순서에서도 통과). 「잠금 후 세션이 삭제됐으면 마감이 지났어도 제출은 401이고 closed를 저장하지 않는다」·「잠금 후 참여자가 cancelled면 마감이 지났어도 401…」 `AssertionError: expected { kind: 'voting_closed', …(1) } to deeply equal { kind: 'unauthenticated', …(1) }`, 「로그아웃과 겹친 제출은 쿠키를 다시 심지 않는다: 마감 경과 collecting·closed·confirmed」 `expected 'voting_closed' to be 'unauthenticated'`, 「… 진행 중 draft」 `expected 'not_open' to be 'unauthenticated'`, 「… 10분 지난 draft」 `expected 'draft_expired' to be 'unauthenticated'` |
-| GREEN ③ | 같은 명령(`lib/time/submit-availability.ts` 재확인을 잠금 후 취소 판정 바로 뒤로 이동) | 새 8건 통과. 기존 5건 실패 — 모두 「세션 재조회를 하지 않는다」(`participantSession.findUnique` not called) 단언으로, 결과 값(종류·쿠키·저장)은 그대로. 이번 순서 변경 때문이라 「재확인을 먼저 한다」(cancelled만 0회, 나머지 1회)로 바꿈: 「마감 경과(판정 시각 = 마감): closed로 전환…」 1건, 상태별 거절 `it.each`의 진행 중 draft·10분 지난 draft·closed·confirmed 4건 |
-| REFACTOR ③ | prettier, 쓰지 않게 된 `keep` 변수 제거(취소 분기만 인증 시점 만료값) / `npm run test` | 70 파일, 1525 테스트 통과(1517 + 8). `UTC`(오프셋 0)·`America/Los_Angeles`(오프셋 480)에서도 1525건 통과 |
-| | `npm run lint` / `npm run typecheck` | 통과(N-2 뒤 다시 실행) |
-| | `npm run build` | 통과(dev 서버 종료·3000 포트 비어 있음 확인 후, N-2 뒤 다시 실행) |
+| RED | `npx vitest run lib/manage` (빈 구현: `buildSettingsBody`가 `{}`, `classifyCancelFailure`가 retry) | 2건 실패. 「설정 변경은 바꾼 필드만 보내고 날짜 범위를 안 바꿨으면 dateRange를 보내지 않는다」 `AssertionError: expected {} to deeply equal { participantLimit: 6, …(1) }`, 「취소 요청 뒤 409 PROMISE_CANCELLED는 성공으로 처리한다」 `AssertionError: expected { kind: 'retry', message: '' } to deeply equal { kind: 'done' }` |
+| GREEN | 같은 명령 | 2건 통과(바꾼 필드만 모으는 `changedFields` + 마감 분 단위 비교, 취소 409 `PROMISE_CANCELLED` → done) |
+| REFACTOR | 실패 분기·폼 검증·미리 보기·안내 문구 테스트 추가(`lib/manage` 69건), prettier / `npm run test` | 73 파일, 1594 테스트 통과(1525 + 69, 기존 기대값 수정 없음). `$env:TZ` `UTC`(오프셋 0)·`America/Los_Angeles`(오프셋 480)에서도 1594건 통과 |
+| | `npm run lint` / `npm run typecheck` | 통과 |
+| | `npm run build` | 통과(dev 서버 종료·3000 포트 비어 있음 확인 후) |
 
-| 개발 DB 실제 호출 (dev 서버) | 결과 |
+| 브라우저 (dev 서버, Playwright + 로컬 Chromium, 방장 1280px·참여자 390px) | 결과 |
 | --- | --- |
-| `node scripts/verify/026-common-guard.mjs` 71개 항목(N-2 추가 뒤), 2회 전부 통과 | **방장 등록:** draft 취소 링크·collecting 취소 링크 모두 409 `PROMISE_CANCELLED`·no-store·Set-Cookie 없음, 약속·참여자·세션 md5 그대로, 새 약속 행 없음, 링크 조회는 그대로 `cancelled`. 취소 전 collecting 링크는 409 `HOST_ALREADY_REGISTERED`(대조군). 취소된 링크라도 닉네임 형식 422·Origin 없음 403이 먼저. **설정 완료:** 다른 연결로 링크 행을 잠가 설정 완료가 인증을 통과해 잠금을 기다리는 것을 `pg_stat_activity`로 확인한 뒤 로그아웃 204 → 잠금 해제 → 401 `UNAUTHENTICATED`·쿠키 `ys_session_{id}=; …; Max-Age=0`, 약속 행 md5 그대로(draft·설정 없음), 지운 세션 행 되살아나지 않음 → 다시 로그인 200 → 설정 완료 200·collecting. 같은 방식으로 DB에서 세션을 만료시키면 401·Max-Age=0·약속 그대로. 회귀: 정상 설정 완료 200·세션 = 마감 + 7일·쿠키 Max-Age 일치(±5초), 재요청 409 `INVALID_PROMISE_STATE`, 10분 지난 draft 410·삭제, 취소된 draft 쿠키 없이 409 `PROMISE_CANCELLED`. **제출(N-2):** 약속 행을 다른 연결로 잠가 제출을 잠금 대기시킨 뒤 — 마감 지남(DB로 마감을 1초 전으로) + 로그아웃 204 → 401·쿠키 Max-Age=0·약속 행 md5 그대로(collecting, closed 저장 없음)·슬롯 0. 대조군: 같은 약속에 유효 세션(방장)으로 제출하면 409 `VOTING_CLOSED`·closed 저장. 마감 지남 + DB로 세션 만료 → 401·Max-Age=0·collecting 그대로. 조기 마감(closed) + 로그아웃 → 401·Max-Age=0(이전에는 409 `VOTING_CLOSED`). 마감 전 + 로그아웃 → 401·Max-Age=0·슬롯 0(기존과 같음), 마감 전 정상 제출 200·version 1, 취소된 약속 제출 409 `PROMISE_CANCELLED` |
-| `node scripts/verify/025-logout.mjs` 회귀 | 139개 항목 전부 통과(N-2 뒤 다시 실행) |
-| 정리 | 회차마다 확인 링크·약속·참여자·세션 삭제(026 N-2 추가 뒤: 링크 12·약속 11·참여자 16·세션 13·슬롯 1, 025: 링크 4·약속 4·참여자 9·세션 4·슬롯 2). 6개 테이블(`_prisma_migrations` 포함) 행 수·md5가 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
+| `scripts/verify/027-host-manage.mjs` 74개 항목 3회 통과 → 메뉴로 옮긴 응답 마감하기 10개 항목 추가 후 84개 항목 2회 전부 통과(추가 직후 첫 회는 dev 서버를 막 띄워 첫 화면 컴파일이 늦어 2건 시간 초과, 코드 변경 없이 다시 돌려 통과) | **방장 메뉴:** 방장만 "약속 관리"가 보이고 시간 입력 화면보다 위, 참여자에게는 없음. **명단:** 참여자 390px에서 3 / 6명·등록순·방장·나, 제출 여부·내보내기 버튼 없음, 방장은 본인 행 제외 2개 행에만 내보내기. **설정 변경:** 정원 − 비활성·마감 `min` = 현재 마감·바꾼 내용 없으면 저장 비활성, 마감 때문에 막히는 축소 안내·저장 비활성, 마감 단축은 안내만·PATCH 없음·DB 그대로, 정원 증가·마감 연장은 `participantLimit`·`votingDeadlineAt`만 전송·DB 반영·참여자 화면 정원·마감 머리글 반영 1.9~3.0초, 범위 축소 미리 보기(삭제만) → `dateRange`만 전송 → "범위 밖 입력 1칸을 지웠어요"·DB 슬롯 0·참여자 화면 날짜 칸 4 → 3, 범위 확대 미리 보기(재제출만) → "모든 참여자의 제출이 해제되어…"·참여자 날짜 칸 5. **내보내기:** 확인 창 → 명단 2명·2 / 7명, 내보내진 사람 화면은 다음 폴링 401로 링크 재조회 → 참여 화면, 대상 DB cancelled, DB로 마감 경과시키면 후보 화면·내보내기 버튼 없음·메뉴는 다시 열기·취소. **재조율:** closed(마감 경과 collecting)에서 새 마감 없으면 안내, 새 마감만 전송 → 방장·참여자 시간 입력 화면(5초 안)·DB collecting. confirmed에서 확정 해제 안내, 설정도 바꾸기 → 정원 하한 = 현재 인원 2, 범위 이동 미리 보기(삭제·재제출 둘 다), 정원·`dateRange`·새 마감만 전송 → "확정된 일정을 해제했어요"·DB 확정 NULL·참여자 화면 시간 입력. **취소:** 확인 창(되돌릴 수 없음), 요청 중 "취소하는 중…" 비활성, 요청 1회 → 취소 안내·DB cancelled·참여자 화면 취소 안내(5초 안). 응답 유실(closed 약속, Playwright route로 서버 200 뒤 응답 끊음) → "취소하지 못했어요" 화면 유지 → 다시 누름 409 `PROMISE_CANCELLED` → 취소 안내. **응답 마감하기(메뉴로 옮김):** 모집 중 방장 메뉴에만 보이고 일반 참여자에게 없음, 확인 창(요청 전 0회) → 마감 요청 1회·DB closed → 방장 화면 바로·참여자 화면 5초 안 후보 화면(018과 같은 흐름), 마감 후 메뉴에서 응답 마감하기가 사라지고 다시 열기·약속 취소만(설정 변경 없음), 참여자 390px 가로 스크롤 없음. **공통:** 390px 가로 스크롤 없음(명단·설정 변경 뒤·결과·취소 안내), 1280px도 없음, 콘솔 오류 없음(의도한 401·409·끊은 요청의 리소스 로드 메시지만) |
+| 정리 | 회차마다 확인 링크 4·약속 4·참여자 9·세션 9·슬롯 4 삭제(84개 항목 판은 링크 5·약속 5·참여자 11·세션 11·슬롯 4), 6개 테이블(`_prisma_migrations` 포함) 행 수·md5가 시작 상태와 동일. dev 서버 종료, 3000 포트·`next` 프로세스 없음 |
 
 ## 메모
 
-- 사용자 지시로 정한 것: 위 두 수정과 검토 뒤 N-2(제출 재확인 순서), R-30(마감 경과 closed 저장)·C-07·C-12·R-17은 기록만, 로그아웃 취소 예외(R-31)는 의도된 예외
-- 이번 구현 판단: 취소된 링크라도 링크 만료면 410이 먼저(링크 조회와 같은 판정 함수). 설정 완료의 잠금 후 순서는 다른 쓰기 API와 같이 cancelled 409 → 세션 401 → role 403 → 상태
-- 새로 발견한 차이(GUARD_MATRIX.md N-1~N-5): N-2(제출의 상태 판정이 재확인보다 먼저)는 고침. 고치지 않음 — 링크 조회 effectiveStatus 미계산(N-1), 현황 조회 draft 판정 순서(N-3), 잠금 후 cancelled 분기 쿠키(N-4), 방장 등록 화면 409 상태 코드 분기(N-5)
-- 기준 문서: 노션 STATE-API-09는 연결 인증이 없어 직접 열지 못했고 저장소 사본(`docs/specs/api/state.md`)을 기준으로 했다
-- 문서: GUARD_MATRIX.md 신설, state.md STATE-API-02 처리 순서·쿠키 갱신, member.md MEMBER-API-02 에러 표·처리 순서, time.md TIME-API-01 처리 순서 5, DECISION_CONFLICTS R-32 신설·R-22·R-31 후속 표시
-- 검증 스크립트: `scripts/verify/026-common-guard.mjs`(Git 제외). dev 서버를 띄운 뒤 `node scripts/verify/026-common-guard.mjs`
+- 사용자 지시로 정한 것: 범위(방장 메뉴·설정 변경·재조율·취소·명단·내보내기), 바꾼 필드만·범위는 바꿨을 때만, 취소 409 성공 처리, `/me` 기준 방장 판단(`deadlinePassed` 미사용), 탈퇴·로그아웃·시간 입력 버그는 5b
+- `lib/state/range-change.ts`는 서버 전용 의존성이 없어 화면에서 그대로 import(보고 대상 아님). 화면 검증도 서버 `settings-patch.ts`·`start-settings.ts` 함수 재사용
+- 이번 구현 판단(R-33): 018 "응답 마감하기"를 방장 메뉴로 옮김, 명단 기본 접힘·5초 폴링, 미리 보기 "삭제" 안내는 칸 기준, 설정 변경·재조율 400 `INVALID_REQUEST`는 입력 확인 안내(018은 링크 재조회), 내보내기 404는 `PARTICIPANT_NOT_FOUND`만 재조회
+- 문서: DECISION_CONFLICTS R-33 신설, 스펙 027 신설
+- 검증 스크립트: `scripts/verify/027-host-manage.mjs`(Git 제외). dev 서버를 띄운 뒤 `PLAYWRIGHT_DIR=… CHROMIUM_PATH=… node scripts/verify/027-host-manage.mjs`, `SCREENSHOT_DIR`를 주면 주요 화면 4장 저장
 
 ## 완료 이력
 
