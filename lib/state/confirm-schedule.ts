@@ -100,7 +100,11 @@ export async function confirmSchedule(
     // 후보 조회(STATE-API-10)와 같은 판정 함수로 다시 검사한다. 잠금 중이라 그사이 제출·탈퇴가 끼어들지 않는다
     // 집계 대상만 읽는다. 판정 함수도 같은 조건으로 한 번 더 거른다
     const people = await tx.participant.findMany({
-      where: { promiseId: auth.promise.id, status: "active", availabilitySubmittedAt: { not: null } },
+      where: {
+        promiseId: auth.promise.id,
+        status: "active",
+        availabilitySubmittedAt: { not: null },
+      },
       select: {
         status: true,
         availabilitySubmittedAt: true,

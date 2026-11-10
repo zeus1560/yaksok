@@ -57,7 +57,13 @@ export async function closeVoting(auth: PromiseSession): Promise<CloseVotingResu
 
     // 같은 closed 상태에서의 재시도는 데이터를 바꾸지 않고 성공으로 돌려준다 (STATE-API-04 처리 순서 2)
     if (promise.status === "closed") {
-      return { kind: "ok", promiseStatus: "closed", changed: false, deadlineReached: false, ...current };
+      return {
+        kind: "ok",
+        promiseStatus: "closed",
+        changed: false,
+        deadlineReached: false,
+        ...current,
+      };
     }
     // draft(10분 지난 draft 포함 — 삭제는 링크를 잠그는 API 몫)·confirmed
     if (promise.status !== "collecting") {

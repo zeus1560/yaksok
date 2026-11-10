@@ -208,7 +208,10 @@ export function deadlineShortenNotAllowed(): Response {
 export function settingsViolation(violation: {
   field: string;
   message: string;
-  code?: "CAPACITY_BELOW_ACTIVE_COUNT" | "CAPACITY_DECREASE_NOT_ALLOWED" | "DEADLINE_SHORTEN_NOT_ALLOWED";
+  code?:
+    | "CAPACITY_BELOW_ACTIVE_COUNT"
+    | "CAPACITY_DECREASE_NOT_ALLOWED"
+    | "DEADLINE_SHORTEN_NOT_ALLOWED";
 }): Response {
   switch (violation.code) {
     case "CAPACITY_BELOW_ACTIVE_COUNT":
@@ -228,7 +231,11 @@ export function participantNotFound(): Response {
 }
 
 export function cannotRemoveSelf(): Response {
-  return apiError(409, "CANNOT_REMOVE_SELF", "방장은 스스로를 내보낼 수 없습니다. 탈퇴를 이용해 주세요.");
+  return apiError(
+    409,
+    "CANNOT_REMOVE_SELF",
+    "방장은 스스로를 내보낼 수 없습니다. 탈퇴를 이용해 주세요.",
+  );
 }
 
 export function internalError(): Response {

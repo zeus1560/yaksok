@@ -43,7 +43,8 @@ function checkConstraints() {
   }
   for (const p of db.people) {
     if (p.role === "host" && p.status !== "active") throw new Error("host이면 active CHECK 위반");
-    if ((p.status === "cancelled") !== (p.cancelledAt !== null)) throw new Error("cancelled_at CHECK 위반");
+    if ((p.status === "cancelled") !== (p.cancelledAt !== null))
+      throw new Error("cancelled_at CHECK 위반");
   }
 }
 
@@ -105,7 +106,13 @@ const tx = {
       return p ? { id: p.id, promiseId: p.promiseId, status: p.status } : null;
     }),
     update: vi.fn(
-      async ({ where, data }: { where: { id: string }; data: { status?: string; cancelledAt?: Date } }) => {
+      async ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: { status?: string; cancelledAt?: Date };
+      }) => {
         db.writes += 1;
         const p = db.people.find((row) => row.id === where.id)!;
         if (data.status !== undefined) p.status = data.status;
@@ -115,7 +122,8 @@ const tx = {
       },
     ),
     count: vi.fn(async ({ where }: { where: { promiseId: string; status: string } }) => {
-      return db.people.filter((p) => p.promiseId === where.promiseId && p.status === where.status).length;
+      return db.people.filter((p) => p.promiseId === where.promiseId && p.status === where.status)
+        .length;
     }),
   },
 };
@@ -276,7 +284,11 @@ describe("removeParticipant (MEMBER-API-08)", () => {
   it("제출하지 않은 참여자도 같은 방식으로 내보낸다", async () => {
     const result = await removeParticipant(authOf("h", "s-h", "host"), "b");
     expect(result).toMatchObject({ kind: "ok", participantId: "b", currentParticipantCount: 2 });
-    expect(personOf("b")).toMatchObject({ status: "cancelled", cancelledAt: NOW, availabilitySubmittedAt: null });
+    expect(personOf("b")).toMatchObject({
+      status: "cancelled",
+      cancelledAt: NOW,
+      availabilitySubmittedAt: null,
+    });
     expect(sessionOf("s-b").expiresAt).toEqual(NOW);
     expect(sessionOf("s-a1").expiresAt).toEqual(LATER);
   });
@@ -290,10 +302,12 @@ describe("removeParticipant (MEMBER-API-08)", () => {
     const id = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
     db.people.push(person(id));
     // 경로 값이 대문자여도 Postgres uuid는 같은 행을 찾는다. 가짜 DB는 정확히 같은 값만 찾으므로 소문자로 찾게 한다
-    tx.participant.findUnique.mockImplementationOnce(async ({ where }: { where: { id: string } }) => {
-      const p = db.people.find((row) => row.id === where.id.toLowerCase());
-      return p ? { id: p.id, promiseId: p.promiseId, status: p.status } : null;
-    });
+    tx.participant.findUnique.mockImplementationOnce(
+      async ({ where }: { where: { id: string } }) => {
+        const p = db.people.find((row) => row.id === where.id.toLowerCase());
+        return p ? { id: p.id, promiseId: p.promiseId, status: p.status } : null;
+      },
+    );
     const result = await removeParticipant(authOf("h", "s-h", "host"), id.toUpperCase());
     expect(result).toMatchObject({ kind: "ok", participantId: id });
   });
@@ -309,7 +323,10 @@ describe("removeParticipant (MEMBER-API-08)", () => {
 
     it("본인 지정 → cannot_remove_self", async () => {
       const result = await rejectsWithoutChange(authOf("h", "s-h", "host"), "h");
-      expect(result).toEqual({ kind: "cannot_remove_self", session: { expiresAt: LATER, now: NOW } });
+      expect(result).toEqual({
+        kind: "cannot_remove_self",
+        session: { expiresAt: LATER, now: NOW },
+      });
     });
 
     it.each([
@@ -317,7 +334,10 @@ describe("removeParticipant (MEMBER-API-08)", () => {
       ["없는 참여자", "99999999-9999-4999-8999-999999999999"],
     ])("%s → participant_not_found", async (_n, target) => {
       const result = await rejectsWithoutChange(authOf("h", "s-h", "host"), target);
-      expect(result).toEqual({ kind: "participant_not_found", session: { expiresAt: LATER, now: NOW } });
+      expect(result).toEqual({
+        kind: "participant_not_found",
+        session: { expiresAt: LATER, now: NOW },
+      });
     });
 
     it("일반 참여자의 요청 → forbidden (대상이 존재해도)", async () => {
@@ -334,7 +354,15 @@ describe("removeParticipant (MEMBER-API-08)", () => {
     });
 
     it.each([
-      ["요청자가 이미 탈퇴(승계)", () => Object.assign(personOf("h"), { role: "member", status: "cancelled", cancelledAt: EARLIER_LEFT })],
+      [
+        "요청자가 이미 탈퇴(승계)",
+        () =>
+          Object.assign(personOf("h"), {
+            role: "member",
+            status: "cancelled",
+            cancelledAt: EARLIER_LEFT,
+          }),
+      ],
       ["요청자 세션 만료", () => Object.assign(sessionOf("s-h"), { expiresAt: NOW })],
     ])("%s → unauthenticated", async (_n, mutate) => {
       mutate();
@@ -385,7 +413,10 @@ describe("removeParticipant (MEMBER-API-08)", () => {
     ])("%s → deadline_passed, 약속은 collecting 그대로(closed 저장 없음)", async (_n, after) => {
       db.now = new Date(DEADLINE.getTime() + after);
       const result = await rejectsWithoutChange(authOf("h", "s-h", "host"), "a");
-      expect(result).toEqual({ kind: "deadline_passed", session: { expiresAt: LATER, now: db.now } });
+      expect(result).toEqual({
+        kind: "deadline_passed",
+        session: { expiresAt: LATER, now: db.now },
+      });
       expect(db.promise!.status).toBe("collecting");
     });
 
@@ -403,7 +434,10 @@ describe("removeParticipant (MEMBER-API-08)", () => {
 
     it("마감 검사가 대상 검사보다 먼저다 (마감 뒤 없는 참여자 → deadline_passed)", async () => {
       db.now = DEADLINE;
-      const result = await removeParticipant(authOf("h", "s-h", "host"), "99999999-9999-4999-8999-999999999999");
+      const result = await removeParticipant(
+        authOf("h", "s-h", "host"),
+        "99999999-9999-4999-8999-999999999999",
+      );
       expect(result.kind).toBe("deadline_passed");
     });
   });

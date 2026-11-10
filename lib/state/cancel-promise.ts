@@ -70,7 +70,10 @@ export async function cancelPromise(auth: PromiseSession): Promise<CancelPromise
 
     // 10분 지난 draft는 취소하지 않는다. 취소를 저장하면 다시 방장 등록이 가능해야 할 링크가 영구히 cancelled가 된다.
     // STATE-API-02와 같은 410으로 거절하되, 링크를 잠그지 않으므로 삭제는 하지 않는다 (DECISION_CONFLICTS R-25)
-    if (promise.status === "draft" && promise.created_at.getTime() + DRAFT_EXPIRY_MS <= now.getTime()) {
+    if (
+      promise.status === "draft" &&
+      promise.created_at.getTime() + DRAFT_EXPIRY_MS <= now.getTime()
+    ) {
       return { kind: "draft_expired", ...current };
     }
 
@@ -79,6 +82,11 @@ export async function cancelPromise(auth: PromiseSession): Promise<CancelPromise
     await markPromiseCancelled(tx, { promiseId: auth.promise.id, now });
 
     // 요청자 세션도 위에서 만료됐다(잠금 후 유효함을 확인했다). 쿠키 Max-Age=0
-    return { kind: "ok", promiseStatus: "cancelled", cancelledAt: now, session: { expiresAt: now, now } };
+    return {
+      kind: "ok",
+      promiseStatus: "cancelled",
+      cancelledAt: now,
+      session: { expiresAt: now, now },
+    };
   });
 }

@@ -64,7 +64,12 @@ function prepare(
       ? null
       : {
           expiresAt: session.expiresAt ?? SESSION_EXPIRES,
-          participant: { id: "pt-me", promiseId: PROMISE_ID, status: "active", ...session.participant },
+          participant: {
+            id: "pt-me",
+            promiseId: PROMISE_ID,
+            status: "active",
+            ...session.participant,
+          },
         },
   );
   tx.participant.findMany.mockResolvedValue(people);
@@ -109,7 +114,9 @@ describe("getPromiseCandidates (STATE-API-10)", () => {
     });
 
     it("collecting 마감 전(마감 = 판정 시각 + 1ms) → invalid_state collecting", async () => {
-      prepare(promiseRow({ status: "collecting", voting_deadline_at: new Date(NOW.getTime() + 1) }));
+      prepare(
+        promiseRow({ status: "collecting", voting_deadline_at: new Date(NOW.getTime() + 1) }),
+      );
       expect(await getPromiseCandidates(AUTH)).toEqual({
         kind: "invalid_state",
         promiseStatus: "collecting",
@@ -135,9 +142,12 @@ describe("getPromiseCandidates (STATE-API-10)", () => {
     });
 
     it("탈퇴 참여자(cancelled) → unauthenticated, 상태 판정 전", async () => {
-      prepare(promiseRow({ status: "collecting", voting_deadline_at: new Date(NOW.getTime() + 1) }), {
-        session: { participant: { status: "cancelled" } },
-      });
+      prepare(
+        promiseRow({ status: "collecting", voting_deadline_at: new Date(NOW.getTime() + 1) }),
+        {
+          session: { participant: { status: "cancelled" } },
+        },
+      );
       expect(await getPromiseCandidates(AUTH)).toEqual({ kind: "unauthenticated", ...keep });
     });
 

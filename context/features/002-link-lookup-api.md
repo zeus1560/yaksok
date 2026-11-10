@@ -72,14 +72,14 @@
 
 2026-11-04 구현·검증, 판단 1~4 승인 후 완료. 마감 없는 cancelled 테스트 추가 후 `npm run test` 50건 통과
 
-| 수용 기준 | 결과 | 근거 |
-| --- | --- | --- |
-| AC-1 | 충족 | `link-lookup.test.ts` 형식 오류 4종은 DB 미조회 / curl `AAAA…`(없음)·`bad-token`·`…%21` → 404 |
-| AC-2 | 충족 | `link-status.test.ts` 등록 전·collecting·confirmed 각각 7일 직전 유효/정확히 7일 만료, 확정은 시작 시각 기준, 재조율 새 마감 기준 / curl 발급 8일 지난 링크 → 410 |
-| AC-3 | 충족 | 정확히 10분 경계 테스트 / curl 20분 지난 draft → 200 `draftExpired:true` |
-| AC-4 | 충족 | 상태별 테스트, 필드 6개 `toEqual` / curl unclaimed·draft(`pollAfterMs:3000`) |
-| AC-5 | 충족 | 조회는 `findUnique`·`SELECT clock_timestamp()`뿐 / curl 7건 전후 `promise_links`·`promises`·`participants`·`participant_sessions` 행 수·md5 동일 |
-| AC-6 | 충족 | `link-lookup.test.ts` now 미지정 시 `$queryRaw` 1회, 지정 시 0회 |
-| AC-7 | 충족 | `route.test.ts` 500 본문에 원문 없음 |
+| 수용 기준 | 결과 | 근거                                                                                                                                                              |
+| --------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC-1      | 충족 | `link-lookup.test.ts` 형식 오류 4종은 DB 미조회 / curl `AAAA…`(없음)·`bad-token`·`…%21` → 404                                                                     |
+| AC-2      | 충족 | `link-status.test.ts` 등록 전·collecting·confirmed 각각 7일 직전 유효/정확히 7일 만료, 확정은 시작 시각 기준, 재조율 새 마감 기준 / curl 발급 8일 지난 링크 → 410 |
+| AC-3      | 충족 | 정확히 10분 경계 테스트 / curl 20분 지난 draft → 200 `draftExpired:true`                                                                                          |
+| AC-4      | 충족 | 상태별 테스트, 필드 6개 `toEqual` / curl unclaimed·draft(`pollAfterMs:3000`)                                                                                      |
+| AC-5      | 충족 | 조회는 `findUnique`·`SELECT clock_timestamp()`뿐 / curl 7건 전후 `promise_links`·`promises`·`participants`·`participant_sessions` 행 수·md5 동일                  |
+| AC-6      | 충족 | `link-lookup.test.ts` now 미지정 시 `$queryRaw` 1회, 지정 시 0회                                                                                                  |
+| AC-7      | 충족 | `route.test.ts` 500 본문에 원문 없음                                                                                                                              |
 
 변경 파일: `app/api/v1/links/[inviteToken]/route.ts`(+test), `lib/member/link-status.ts`(+test), `lib/member/link-lookup.ts`(+test), `lib/member/invite-link.ts`(`isInviteTokenFormat`), `lib/api-error.ts`, `docs/specs/api/member.md`(404 형식 오류, `no-store`).

@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { expireAllSessions, expireParticipantSessions, refreshActiveSessions } from "./session-expiry";
+import {
+  expireAllSessions,
+  expireParticipantSessions,
+  refreshActiveSessions,
+} from "./session-expiry";
 
 const PROMISE_ID = "7c1b2f40-8f6a-4c21-9d55-0d3b1a7e9c42";
 const LINK_CREATED = new Date("2026-11-01T10:00:00+09:00");

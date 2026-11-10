@@ -81,7 +81,11 @@ async function handle(
   } catch (error) {
     // 연결 문자열이 섞일 수 있는 원문 메시지 대신 오류 종류만 남긴다
     const code = (error as { code?: unknown } | null)?.code;
-    console.error("참여자 내보내기 실패", error instanceof Error ? error.name : "unknown", code ?? "");
+    console.error(
+      "참여자 내보내기 실패",
+      error instanceof Error ? error.name : "unknown",
+      code ?? "",
+    );
     return internalError();
   }
 }

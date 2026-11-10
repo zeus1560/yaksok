@@ -20,7 +20,10 @@ describe("parseCandidatePage (STATE-API-10 limit·offset)", () => {
   it.each(["0", "6", "-1", "1.5", "1.0", "abc", "", " 1", "+1", "01", "1e1", "0x2"])(
     "limit=%j → invalid limit",
     (value) => {
-      expect(parse(`limit=${encodeURIComponent(value)}`)).toEqual({ kind: "invalid", field: "limit" });
+      expect(parse(`limit=${encodeURIComponent(value)}`)).toEqual({
+        kind: "invalid",
+        field: "limit",
+      });
     },
   );
 

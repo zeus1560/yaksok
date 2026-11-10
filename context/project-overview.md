@@ -10,29 +10,29 @@ MVP 흐름: 약속 생성 → 참여자 등록(닉네임 + PIN) → 30분 슬롯
 
 제품·규칙의 상세는 `docs/`에 있다. 이 폴더(`context/`)는 AI 작업 흐름과 기능 스펙만 다룬다.
 
-| 문서 | 용도 |
-| --- | --- |
-| `docs/README.md` | 문서 우선순위와 에이전트 필수 규칙 |
-| `docs/product/MVP_SCOPE.md` | MVP 범위 안·밖, 핵심 제약값 |
-| `docs/specs/rules/*.md` | 비즈니스 규칙 (최상위 기준) |
-| `docs/architecture/DATABASE.md` | ERD, DB 제약, 트랜잭션·잠금 |
-| `docs/specs/API_CONVENTIONS.md`, `docs/specs/api/*.md` | API 명세 |
-| `docs/development/DECISION_CONFLICTS.md` | 미결·모순 목록. 착수 전 필독 |
-| `docs/architecture/SETUP.md` | 환경 구축, 브랜치·커밋 규칙 |
+| 문서                                                   | 용도                               |
+| ------------------------------------------------------ | ---------------------------------- |
+| `docs/README.md`                                       | 문서 우선순위와 에이전트 필수 규칙 |
+| `docs/product/MVP_SCOPE.md`                            | MVP 범위 안·밖, 핵심 제약값        |
+| `docs/specs/rules/*.md`                                | 비즈니스 규칙 (최상위 기준)        |
+| `docs/architecture/DATABASE.md`                        | ERD, DB 제약, 트랜잭션·잠금        |
+| `docs/specs/API_CONVENTIONS.md`, `docs/specs/api/*.md` | API 명세                           |
+| `docs/development/DECISION_CONFLICTS.md`               | 미결·모순 목록. 착수 전 필독       |
+| `docs/architecture/SETUP.md`                           | 환경 구축, 브랜치·커밋 규칙        |
 
 충돌 시 우선순위: 비즈니스 규칙 > ERD > API 명세 > PRD.
 
 ## 기술 결정
 
-| 항목 | 기준 |
-| --- | --- |
-| 구조 | 저장소 루트의 단일 Next.js 16 App Router 풀스택 앱 |
-| 언어·런타임 | TypeScript 5 (strict), Node.js 24 |
-| 데이터 | Prisma 7 + `@prisma/adapter-pg` + PostgreSQL |
-| DB | 개발은 각자 Neon 프로젝트, 운영도 Neon. Docker 미사용 |
-| 배포 | Vercel |
-| 스타일 | Tailwind CSS 4 |
-| 테스트 | Vitest |
+| 항목        | 기준                                                  |
+| ----------- | ----------------------------------------------------- |
+| 구조        | 저장소 루트의 단일 Next.js 16 App Router 풀스택 앱    |
+| 언어·런타임 | TypeScript 5 (strict), Node.js 24                     |
+| 데이터      | Prisma 7 + `@prisma/adapter-pg` + PostgreSQL          |
+| DB          | 개발은 각자 Neon 프로젝트, 운영도 Neon. Docker 미사용 |
+| 배포        | Vercel                                                |
+| 스타일      | Tailwind CSS 4                                        |
+| 테스트      | Vitest                                                |
 
 버전은 `docs/architecture/TECH_STACK.md` 기준으로 고정이며 임의로 올리지 않는다.
 

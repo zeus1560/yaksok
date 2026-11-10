@@ -12,10 +12,7 @@ export type AuthField = "nickname" | "pin";
 
 // 안내 화면으로 바꾸는 종료 사유. 문구는 notices에 있다
 export type BlockedReason =
-  | "full"
-  | "deadline_passed"
-  | "access_period_expired"
-  | "participant_cancelled";
+  "full" | "deadline_passed" | "access_period_expired" | "participant_cancelled";
 
 export type FailureAction =
   // 입력란 오류
@@ -61,10 +58,12 @@ function fieldOf(failure: Failure): AuthField | null {
 function common(failure: Failure): FailureAction {
   if (failure.code === "VALIDATION_FAILED") {
     const field = fieldOf(failure);
-    if (field) return { kind: "field", field, message: failure.message ?? "입력값을 확인해 주세요." };
+    if (field)
+      return { kind: "field", field, message: failure.message ?? "입력값을 확인해 주세요." };
     return { kind: "form", message: "입력값을 확인해 주세요." };
   }
-  if (failure.code === "INVALID_REQUEST") return { kind: "form", message: "입력값을 확인해 주세요." };
+  if (failure.code === "INVALID_REQUEST")
+    return { kind: "form", message: "입력값을 확인해 주세요." };
   // INVALID_ORIGIN·INTERNAL_ERROR·네트워크 오류·알 수 없는 코드
   return { kind: "form", message: RETRY_MESSAGE };
 }

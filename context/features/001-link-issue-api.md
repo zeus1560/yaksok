@@ -81,14 +81,14 @@
 
 2026-11-03 구현·검증, 2026-11-04 검토 승인 후 완료 (재실행 `npm run test` 15건 통과)
 
-| 수용 기준 | 결과 | 근거 |
-| --- | --- | --- |
-| AC-1 | 충족 | `route.test.ts` 201 응답 키 3개·`source='web'` / curl 201 / 개발 DB에서 `source=web` 행 확인 |
-| AC-2 | 충족 | `issueInviteLink`는 `promiseLink.create`만 호출 / 개발 DB `promises`·`participants` 0행, 링크의 `promise=null` |
-| AC-3 | 충족 | 라우트가 본문을 읽지 않음 / `route.test.ts` 본문 무시 / curl `{"source":"kakao"}` → DB `source=web` |
-| AC-4 | 충족 | `invite-link.test.ts` buildInviteUrl 끝 슬래시 유무 |
-| AC-5 | 충족 | `invite-link.test.ts` 재시도 1회·연속 충돌·기타 오류 무재시도 / `route.test.ts` 500 본문 고정·원문 미노출 / 개발 DB 실제 중복 삽입 → `PrismaClientKnownRequestError P2002` |
-| AC-6 | 충족 | `route.test.ts` Origin 없음·다른 도메인·다른 포트·`null` → 403, 삽입 없음 / curl 403 2건 |
-| AC-7 | 충족 | `randomBytes(16)` base64url, `invite-link.test.ts` 22자 형식 |
+| 수용 기준 | 결과 | 근거                                                                                                                                                                       |
+| --------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC-1      | 충족 | `route.test.ts` 201 응답 키 3개·`source='web'` / curl 201 / 개발 DB에서 `source=web` 행 확인                                                                               |
+| AC-2      | 충족 | `issueInviteLink`는 `promiseLink.create`만 호출 / 개발 DB `promises`·`participants` 0행, 링크의 `promise=null`                                                             |
+| AC-3      | 충족 | 라우트가 본문을 읽지 않음 / `route.test.ts` 본문 무시 / curl `{"source":"kakao"}` → DB `source=web`                                                                        |
+| AC-4      | 충족 | `invite-link.test.ts` buildInviteUrl 끝 슬래시 유무                                                                                                                        |
+| AC-5      | 충족 | `invite-link.test.ts` 재시도 1회·연속 충돌·기타 오류 무재시도 / `route.test.ts` 500 본문 고정·원문 미노출 / 개발 DB 실제 중복 삽입 → `PrismaClientKnownRequestError P2002` |
+| AC-6      | 충족 | `route.test.ts` Origin 없음·다른 도메인·다른 포트·`null` → 403, 삽입 없음 / curl 403 2건                                                                                   |
+| AC-7      | 충족 | `randomBytes(16)` base64url, `invite-link.test.ts` 22자 형식                                                                                                               |
 
 변경 파일: `app/api/v1/links/route.ts`, `lib/member/invite-link.ts`, `lib/api-error.ts`, `lib/origin.ts`, 테스트 2개, 문서 3개(API_CONVENTIONS, member.md, DECISION_CONFLICTS A-09).

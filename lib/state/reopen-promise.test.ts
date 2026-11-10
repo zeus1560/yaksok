@@ -52,7 +52,10 @@ const tx = {
   }),
   $executeRaw: vi.fn(async (strings: TemplateStringsArray) => {
     const sql = sqlOf(strings);
-    if (sql.startsWith("UPDATE promises SET status = 'closed'") && db.promise?.status === "collecting") {
+    if (
+      sql.startsWith("UPDATE promises SET status = 'closed'") &&
+      db.promise?.status === "collecting"
+    ) {
       db.promise.status = "closed";
       return 1;
     }
@@ -176,19 +179,38 @@ function seed(status = "closed") {
   };
   db.people = [
     {
-      id: "pt-1", role: "host", status: "active", availabilitySubmittedAt: SUBMITTED, availabilityVersion: 2,
+      id: "pt-1",
+      role: "host",
+      status: "active",
+      availabilitySubmittedAt: SUBMITTED,
+      availabilityVersion: 2,
       slots: [
         { id: "a1", slotStartAt: at("2026-11-10T09:00") },
         { id: "a2", slotStartAt: at("2026-11-12T11:00") },
       ],
     },
     {
-      id: "pt-2", role: "member", status: "active", availabilitySubmittedAt: SUBMITTED, availabilityVersion: 1,
+      id: "pt-2",
+      role: "member",
+      status: "active",
+      availabilitySubmittedAt: SUBMITTED,
+      availabilityVersion: 1,
       slots: [{ id: "b1", slotStartAt: at("2026-11-11T10:00") }],
     },
-    { id: "pt-3", role: "member", status: "active", availabilitySubmittedAt: null, availabilityVersion: 0, slots: [] },
     {
-      id: "pt-4", role: "member", status: "cancelled", availabilitySubmittedAt: SUBMITTED, availabilityVersion: 1,
+      id: "pt-3",
+      role: "member",
+      status: "active",
+      availabilitySubmittedAt: null,
+      availabilityVersion: 0,
+      slots: [],
+    },
+    {
+      id: "pt-4",
+      role: "member",
+      status: "cancelled",
+      availabilitySubmittedAt: SUBMITTED,
+      availabilityVersion: 1,
       slots: [{ id: "d1", slotStartAt: at("2026-11-12T11:00") }],
     },
   ];
@@ -292,13 +314,20 @@ describe("reopenPromise (STATE-API-06)", () => {
       votingDeadlineAt: NEW_DEADLINE,
       dailyTimeRange: { startMinute: 600, endMinute: 720 },
     });
-    expect(db.promise).toMatchObject({ daily_start_minute: 600, daily_end_minute: 720, date_range_end: "2026-11-12" });
+    expect(db.promise).toMatchObject({
+      daily_start_minute: 600,
+      daily_end_minute: 720,
+      date_range_end: "2026-11-12",
+    });
     expect(person("pt-1")).toEqual({ submitted: true, version: 3, slots: ["a2"] });
     expect(person("pt-2")).toEqual({ submitted: true, version: 1, slots: ["b1"] });
   });
 
   it("소요 시간만 바꾸면 슬롯·제출·버전은 그대로, 소요 시간과 상태만 바뀐다", async () => {
-    const result = await reopenPromise(AUTH, { votingDeadlineAt: NEW_DEADLINE, durationMinutes: 120 });
+    const result = await reopenPromise(AUTH, {
+      votingDeadlineAt: NEW_DEADLINE,
+      durationMinutes: 120,
+    });
     expect(result.kind === "ok" && result.changeImpact).toEqual({
       hasAddedSelectableSlots: false,
       submissionsReset: false,
@@ -307,7 +336,11 @@ describe("reopenPromise (STATE-API-06)", () => {
       confirmationCleared: false,
     });
     expect(peopleNow()).toEqual(unchangedPeople());
-    expect(db.promise).toMatchObject({ status: "collecting", duration_minutes: 120, date_range_start: "2026-11-10" });
+    expect(db.promise).toMatchObject({
+      status: "collecting",
+      duration_minutes: 120,
+      date_range_start: "2026-11-10",
+    });
   });
 
   it("마감만 보내면 설정은 그대로 두고 상태·마감만 바뀐다", async () => {
@@ -357,7 +390,9 @@ describe("reopenPromise (STATE-API-06)", () => {
     expect(first.kind).toBe("ok");
     const snapshot = { promise: { ...db.promise }, people: peopleNow() };
 
-    const second = await reopenPromise(AUTH, { votingDeadlineAt: new Date(NEW_DEADLINE.getTime() + DAY) });
+    const second = await reopenPromise(AUTH, {
+      votingDeadlineAt: new Date(NEW_DEADLINE.getTime() + DAY),
+    });
     expect(second).toMatchObject({ kind: "invalid_state", promiseStatus: "collecting" });
     expect({ promise: db.promise, people: peopleNow() }).toEqual(snapshot);
   });
@@ -405,7 +440,9 @@ describe("reopenPromise (STATE-API-06)", () => {
     ["탈퇴한 방장", () => (db.people[0].status = "cancelled")],
   ])("잠금 후 %s → unauthenticated, 변경 없음", async (_n, mutate) => {
     mutate();
-    expect((await reopenPromise(AUTH, { votingDeadlineAt: NEW_DEADLINE })).kind).toBe("unauthenticated");
+    expect((await reopenPromise(AUTH, { votingDeadlineAt: NEW_DEADLINE })).kind).toBe(
+      "unauthenticated",
+    );
     expect(db.promise?.status).toBe("closed");
   });
 
@@ -437,11 +474,18 @@ describe("reopenPromise (STATE-API-06)", () => {
       violation: { field: "participantLimit", code: "CAPACITY_BELOW_ACTIVE_COUNT" },
     });
     expect(peopleNow()).toEqual(unchangedPeople());
-    expect(db.promise).toMatchObject({ status: "closed", participant_limit: 5, date_range_end: "2026-11-12" });
+    expect(db.promise).toMatchObject({
+      status: "closed",
+      participant_limit: 5,
+      date_range_end: "2026-11-12",
+    });
   });
 
   it("정원은 active 인원과 같으면 허용(탈퇴자는 세지 않음), 줄이기도 가능", async () => {
-    const result = await reopenPromise(AUTH, { votingDeadlineAt: NEW_DEADLINE, participantLimit: 3 });
+    const result = await reopenPromise(AUTH, {
+      votingDeadlineAt: NEW_DEADLINE,
+      participantLimit: 3,
+    });
     expect(result.kind).toBe("ok");
     expect(db.promise?.participant_limit).toBe(3);
   });
@@ -449,12 +493,38 @@ describe("reopenPromise (STATE-API-06)", () => {
   it.each([
     ["과거 마감", { votingDeadlineAt: new Date(NOW.getTime() - 60_000) }, "votingDeadlineAt"],
     ["판정 시각과 같은 마감", { votingDeadlineAt: NOW }, "votingDeadlineAt"],
-    ["마지막 날짜 00:00과 같은 마감", { votingDeadlineAt: at("2026-11-12T00:00") }, "votingDeadlineAt"],
+    [
+      "마지막 날짜 00:00과 같은 마감",
+      { votingDeadlineAt: at("2026-11-12T00:00") },
+      "votingDeadlineAt",
+    ],
     ["정원 31", { votingDeadlineAt: NEW_DEADLINE, participantLimit: 31 }, "participantLimit"],
-    ["3개월 넘는 종료일", { votingDeadlineAt: NEW_DEADLINE, dateRange: { startDate: "2026-11-10", endDate: "2027-02-09" } }, "dateRange"],
-    ["30분 경계가 아닌 하루 범위", { votingDeadlineAt: NEW_DEADLINE, dailyTimeRange: { startMinute: 555, endMinute: 720 } }, "dailyTimeRange"],
-    ["유지한 소요 시간(60분)보다 짧은 하루 범위", { votingDeadlineAt: NEW_DEADLINE, dailyTimeRange: { startMinute: 540, endMinute: 570 } }, "durationMinutes"],
-    ["보낸 시작 날짜가 어제", { votingDeadlineAt: NEW_DEADLINE, dateRange: { startDate: "2026-11-07", endDate: "2026-11-12" } }, "dateRange"],
+    [
+      "3개월 넘는 종료일",
+      {
+        votingDeadlineAt: NEW_DEADLINE,
+        dateRange: { startDate: "2026-11-10", endDate: "2027-02-09" },
+      },
+      "dateRange",
+    ],
+    [
+      "30분 경계가 아닌 하루 범위",
+      { votingDeadlineAt: NEW_DEADLINE, dailyTimeRange: { startMinute: 555, endMinute: 720 } },
+      "dailyTimeRange",
+    ],
+    [
+      "유지한 소요 시간(60분)보다 짧은 하루 범위",
+      { votingDeadlineAt: NEW_DEADLINE, dailyTimeRange: { startMinute: 540, endMinute: 570 } },
+      "durationMinutes",
+    ],
+    [
+      "보낸 시작 날짜가 어제",
+      {
+        votingDeadlineAt: NEW_DEADLINE,
+        dateRange: { startDate: "2026-11-07", endDate: "2026-11-12" },
+      },
+      "dateRange",
+    ],
   ])("%s → validation_failed(%s), 아무것도 바꾸지 않는다", async (_n, input, field) => {
     const result = await reopenPromise(AUTH, input as Parameters<typeof reopenPromise>[1]);
     expect(result).toMatchObject({ kind: "validation_failed", violation: { field } });
@@ -472,7 +542,11 @@ describe("reopenPromise (STATE-API-06)", () => {
   });
 
   it("active 참여자의 유효 세션만 새 마감 + 7일로 갱신, 요청자 쿠키도 그 값", async () => {
-    db.sessions.push({ id: "s-old", participantId: "pt-2", expiresAt: new Date(NOW.getTime() - 1) });
+    db.sessions.push({
+      id: "s-old",
+      participantId: "pt-2",
+      expiresAt: new Date(NOW.getTime() - 1),
+    });
     const result = await reopenPromise(AUTH, { votingDeadlineAt: NEW_DEADLINE });
     const renewed = new Date(NEW_DEADLINE.getTime() + 7 * DAY);
     expect(result.session).toEqual({ expiresAt: renewed, now: NOW });
@@ -488,9 +562,12 @@ describe("reopenPromise (STATE-API-06)", () => {
     seed("confirmed");
     const confirmedExpiry = new Date(at("2026-11-10T09:00").getTime() + 7 * DAY);
     db.sessions[0].expiresAt = confirmedExpiry;
-    await reopenPromise({ ...AUTH, session: { ...AUTH.session, expiresAt: confirmedExpiry } }, {
-      votingDeadlineAt: NEW_DEADLINE,
-    });
+    await reopenPromise(
+      { ...AUTH, session: { ...AUTH.session, expiresAt: confirmedExpiry } },
+      {
+        votingDeadlineAt: NEW_DEADLINE,
+      },
+    );
     expect(db.sessions[0].expiresAt).toEqual(new Date(NEW_DEADLINE.getTime() + 7 * DAY));
     expect(db.sessions[0].expiresAt.getTime()).toBeLessThan(confirmedExpiry.getTime());
   });

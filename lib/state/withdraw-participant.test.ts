@@ -39,7 +39,8 @@ function checkConstraints() {
   if (hosts.length > 1) throw new Error("방장 부분 UNIQUE 위반");
   if (hosts.some((p) => p.status !== "active")) throw new Error("host이면 active CHECK 위반");
   for (const p of db.people) {
-    if ((p.status === "cancelled") !== (p.cancelledAt !== null)) throw new Error("cancelled_at CHECK 위반");
+    if ((p.status === "cancelled") !== (p.cancelledAt !== null))
+      throw new Error("cancelled_at CHECK 위반");
   }
 }
 
@@ -113,7 +114,9 @@ const tx = {
         expect(orderBy).toEqual([{ createdAt: "asc" }, { id: "asc" }]);
         const found = db.people
           .filter((p) => p.status === where.status && p.id !== where.id.not)
-          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))[0];
+          .sort(
+            (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id),
+          )[0];
         return found ? { id: found.id } : null;
       },
     ),
@@ -204,7 +207,10 @@ function seed(status = "collecting") {
       cancelledAt: new Date("2026-11-08T20:00:00+09:00"),
     }),
     person("h", { role: "host", createdAt: new Date("2026-11-08T09:30:00+09:00") }),
-    person("b", { createdAt: new Date("2026-11-08T10:30:00+09:00"), availabilitySubmittedAt: null }),
+    person("b", {
+      createdAt: new Date("2026-11-08T10:30:00+09:00"),
+      availabilitySubmittedAt: null,
+    }),
     person("a", { createdAt: new Date("2026-11-08T10:00:00+09:00") }),
   ];
   db.sessions = [
@@ -253,7 +259,12 @@ describe("withdrawParticipant (STATE-API-08)", () => {
       session: { expiresAt: NOW, now: NOW },
     });
     // 옛 방장: member + cancelled + 탈퇴 시각, 입력 기록 보존
-    expect(personOf("h")).toMatchObject({ role: "member", status: "cancelled", cancelledAt: NOW, ...before });
+    expect(personOf("h")).toMatchObject({
+      role: "member",
+      status: "cancelled",
+      cancelledAt: NOW,
+      ...before,
+    });
     // 후임: 제출하지 않은 b보다 먼저 들어온 a. 이미 탈퇴한 x는 더 먼저 들어왔어도 후보가 아니다
     expect(personOf("a")).toMatchObject({ role: "host", status: "active", cancelledAt: null });
     expect(personOf("b")).toMatchObject({ role: "member", status: "active" });
@@ -320,7 +331,12 @@ describe("withdrawParticipant (STATE-API-08)", () => {
           promiseCancelledAt: null,
           session: { expiresAt: NOW, now: NOW },
         });
-        expect(personOf("a")).toMatchObject({ role: "member", status: "cancelled", cancelledAt: NOW, ...before });
+        expect(personOf("a")).toMatchObject({
+          role: "member",
+          status: "cancelled",
+          cancelledAt: NOW,
+          ...before,
+        });
         expect(personOf("h")).toMatchObject({ role: "host", status: "active", cancelledAt: null });
         expect(personOf("b")).toMatchObject({ status: "active", cancelledAt: null });
         expect(sessionOf("s-a").expiresAt).toEqual(NOW);
@@ -335,7 +351,11 @@ describe("withdrawParticipant (STATE-API-08)", () => {
 
       const result = await withdrawParticipant(authOf("a", "s-a", "member"));
 
-      expect(result).toMatchObject({ kind: "ok", promiseStatus: "closed", participantStatus: "cancelled" });
+      expect(result).toMatchObject({
+        kind: "ok",
+        promiseStatus: "closed",
+        participantStatus: "cancelled",
+      });
       expect(db.promise?.status).toBe("closed");
       expect(personOf("a")).toMatchObject({ status: "cancelled", cancelledAt: DEADLINE });
     });
@@ -348,32 +368,43 @@ describe("withdrawParticipant (STATE-API-08)", () => {
     });
 
     it("인증 때 member였어도 잠금 후 최신 role이 host(그사이 승계됨)면 방장 분기로 처리한다", async () => {
-      Object.assign(personOf("h"), { role: "member", status: "cancelled", cancelledAt: OLD_EXPIRED });
+      Object.assign(personOf("h"), {
+        role: "member",
+        status: "cancelled",
+        cancelledAt: OLD_EXPIRED,
+      });
       personOf("a").role = "host";
 
       const result = await withdrawParticipant(authOf("a", "s-a", "member"));
 
-      expect(result).toMatchObject({ kind: "ok", hostTransferred: true, newHostParticipantId: "b" });
+      expect(result).toMatchObject({
+        kind: "ok",
+        hostTransferred: true,
+        newHostParticipantId: "b",
+      });
       expect(personOf("b")).toMatchObject({ role: "host", status: "active" });
       expect(personOf("a")).toMatchObject({ role: "member", status: "cancelled" });
     });
   });
 
   describe("방장", () => {
-    it.each(["closed", "confirmed"])("%s에서 승계해도 약속 상태·확정 일정은 그대로", async (status) => {
-      seed(status);
-      const promiseBefore = { ...db.promise };
+    it.each(["closed", "confirmed"])(
+      "%s에서 승계해도 약속 상태·확정 일정은 그대로",
+      async (status) => {
+        seed(status);
+        const promiseBefore = { ...db.promise };
 
-      const result = await withdrawParticipant(authOf("h", "s-h1", "host"));
+        const result = await withdrawParticipant(authOf("h", "s-h1", "host"));
 
-      expect(result).toMatchObject({
-        kind: "ok",
-        promiseStatus: status,
-        hostTransferred: true,
-        newHostParticipantId: "a",
-      });
-      expect(db.promise).toEqual(promiseBefore);
-    });
+        expect(result).toMatchObject({
+          kind: "ok",
+          promiseStatus: status,
+          hostTransferred: true,
+          newHostParticipantId: "a",
+        });
+        expect(db.promise).toEqual(promiseBefore);
+      },
+    );
 
     it("가입 시각이 같으면 id가 작은 사람이 후임", async () => {
       personOf("b").createdAt = personOf("a").createdAt;
@@ -388,21 +419,36 @@ describe("withdrawParticipant (STATE-API-08)", () => {
 
       const result = await withdrawParticipant(authOf("h", "s-h1", "host"));
 
-      expect(result).toMatchObject({ kind: "ok", promiseStatus: "cancelled", promiseCancelledAt: db.now });
+      expect(result).toMatchObject({
+        kind: "ok",
+        promiseStatus: "cancelled",
+        promiseCancelledAt: db.now,
+      });
       expect(db.promise).toMatchObject({ status: "cancelled", cancelled_at: db.now });
       expect(personOf("h")).toMatchObject({ role: "host", status: "active", cancelledAt: null });
     });
 
-    it.each(["closed", "confirmed"])("%s에서 후임자가 없으면 취소, 확정 일정은 보존", async (status) => {
-      seed(status);
-      db.people = db.people.filter((p) => p.id !== "a" && p.id !== "b");
-      const confirmed = db.promise!.confirmed_start_at;
+    it.each(["closed", "confirmed"])(
+      "%s에서 후임자가 없으면 취소, 확정 일정은 보존",
+      async (status) => {
+        seed(status);
+        db.people = db.people.filter((p) => p.id !== "a" && p.id !== "b");
+        const confirmed = db.promise!.confirmed_start_at;
 
-      const result = await withdrawParticipant(authOf("h", "s-h1", "host"));
+        const result = await withdrawParticipant(authOf("h", "s-h1", "host"));
 
-      expect(result).toMatchObject({ kind: "ok", promiseStatus: "cancelled", participantStatus: "active" });
-      expect(db.promise).toMatchObject({ status: "cancelled", cancelled_at: NOW, confirmed_start_at: confirmed });
-    });
+        expect(result).toMatchObject({
+          kind: "ok",
+          promiseStatus: "cancelled",
+          participantStatus: "active",
+        });
+        expect(db.promise).toMatchObject({
+          status: "cancelled",
+          cancelled_at: NOW,
+          confirmed_start_at: confirmed,
+        });
+      },
+    );
   });
 
   describe("draft", () => {
@@ -447,7 +493,8 @@ describe("withdrawParticipant (STATE-API-08)", () => {
   });
 
   describe("잠금 후 재확인", () => {
-    const snapshot = () => JSON.stringify({ promise: db.promise, people: db.people, sessions: db.sessions });
+    const snapshot = () =>
+      JSON.stringify({ promise: db.promise, people: db.people, sessions: db.sessions });
 
     it("약속이 사라졌으면(draft 폐기·정리) 404, 세션 null", async () => {
       db.promise = null;

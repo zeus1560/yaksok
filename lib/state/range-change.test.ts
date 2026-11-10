@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { SlotRange } from "@/lib/time/slots";
-import { hasAddedSelectableSlots, planRangeChange, type RangeChangeParticipant } from "./range-change";
+import {
+  hasAddedSelectableSlots,
+  planRangeChange,
+  type RangeChangeParticipant,
+} from "./range-change";
 
 const at = (iso: string) => new Date(`${iso}:00+09:00`);
 const NOW = at("2026-11-08T12:00");
@@ -99,7 +103,10 @@ describe("planRangeChange (STATE-09-03·09-04)", () => {
 
   it("범위 밖에 남아 있던 지난 슬롯도 새 범위 밖이면 지운다(시각과 관계없이 범위로 판정)", () => {
     const past = [{ id: "P", slots: [{ id: "p1", startAt: at("2026-11-07T09:00") }] }];
-    expect(plan({}, NOW, past)).toMatchObject({ removedSlotIds: ["p1"], versionChangedParticipantIds: ["P"] });
+    expect(plan({}, NOW, past)).toMatchObject({
+      removedSlotIds: ["p1"],
+      versionChangedParticipantIds: ["P"],
+    });
   });
 
   it("24:00 종료면 23:30 칸이 그날 마지막 칸이다", () => {
@@ -109,8 +116,12 @@ describe("planRangeChange (STATE-09-03·09-04)", () => {
       planRangeChange({ before, after: before, now: NOW, participants: late }).removedSlotIds,
     ).toEqual([]);
     expect(
-      planRangeChange({ before, after: { ...before, dailyEndMinute: 1410 }, now: NOW, participants: late })
-        .removedSlotIds,
+      planRangeChange({
+        before,
+        after: { ...before, dailyEndMinute: 1410 },
+        now: NOW,
+        participants: late,
+      }).removedSlotIds,
     ).toEqual(["l1"]);
   });
 
@@ -139,7 +150,9 @@ describe("hasAddedSelectableSlots", () => {
   it("경계: 시작이 판정 시각과 같은 칸은 지난 칸이다", () => {
     const now = at("2026-11-08T11:30"); // 오늘 마지막 칸(11:30) 시작과 같음
     expect(hasAddedSelectableSlots(FROM_TOMORROW, FROM_TODAY, now)).toBe(false);
-    expect(hasAddedSelectableSlots(FROM_TOMORROW, FROM_TODAY, new Date(now.getTime() - 1))).toBe(true);
+    expect(hasAddedSelectableSlots(FROM_TOMORROW, FROM_TODAY, new Date(now.getTime() - 1))).toBe(
+      true,
+    );
   });
 
   it("3개월 범위 × 하루 전체도 바로 계산한다", () => {
@@ -156,6 +169,8 @@ describe("hasAddedSelectableSlots", () => {
   it("월말을 넘는 날짜도 하루씩 센다", () => {
     const before: SlotRange = { ...BASE, startDate: "2026-11-29", endDate: "2026-11-30" };
     expect(hasAddedSelectableSlots(before, { ...before, endDate: "2026-12-01" }, NOW)).toBe(true);
-    expect(hasAddedSelectableSlots(before, { ...before, startDate: "2026-11-30" }, NOW)).toBe(false);
+    expect(hasAddedSelectableSlots(before, { ...before, startDate: "2026-11-30" }, NOW)).toBe(
+      false,
+    );
   });
 });

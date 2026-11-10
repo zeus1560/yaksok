@@ -73,7 +73,9 @@ describe("POST /api/v1/promises/[promiseId]/confirmation (STATE-API-05)", () => 
       },
     });
     const maxAge = Math.floor((refreshed.getTime() - LATER.getTime()) / 1000);
-    expect(res.headers.get("set-cookie")).toBe(`${COOKIE_PREFIX}tok${COOKIE_ATTRS}; Max-Age=${maxAge}`);
+    expect(res.headers.get("set-cookie")).toBe(
+      `${COOKIE_PREFIX}tok${COOKIE_ATTRS}; Max-Age=${maxAge}`,
+    );
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(confirmSchedule).toHaveBeenCalledWith(AUTH, START);
   });
@@ -190,20 +192,23 @@ describe("POST /api/v1/promises/[promiseId]/confirmation (STATE-API-05)", () => 
     });
   });
 
-  it.each(["collecting", "confirmed", "draft"])("%s 409는 현재 상태와 허용 상태 [closed]를 details로 알린다", async (status) => {
-    confirmSchedule.mockResolvedValueOnce({
-      kind: "invalid_state",
-      promiseStatus: status,
-      session: { expiresAt: AUTH.session.expiresAt, now: NOW },
-    });
-    const res = await call();
-    expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({
-      code: "INVALID_PROMISE_STATE",
-      message: "현재 약속 상태에서는 요청할 수 없습니다.",
-      details: { promiseStatus: status, allowedStates: ["closed"] },
-    });
-  });
+  it.each(["collecting", "confirmed", "draft"])(
+    "%s 409는 현재 상태와 허용 상태 [closed]를 details로 알린다",
+    async (status) => {
+      confirmSchedule.mockResolvedValueOnce({
+        kind: "invalid_state",
+        promiseStatus: status,
+        session: { expiresAt: AUTH.session.expiresAt, now: NOW },
+      });
+      const res = await call();
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        code: "INVALID_PROMISE_STATE",
+        message: "현재 약속 상태에서는 요청할 수 없습니다.",
+        details: { promiseStatus: status, allowedStates: ["closed"] },
+      });
+    },
+  );
 
   it.each([
     ["not_found", 404, "PROMISE_NOT_FOUND"],

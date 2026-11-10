@@ -96,7 +96,11 @@ describe("isAvailableThroughout", () => {
   });
   it("Z 표기 구간도 같은 시각으로 비교한다", () => {
     expect(
-      isAvailableThroughout({ submitted: true, slots }, "2026-11-10T05:00:00Z", "2026-11-10T06:00:00Z"),
+      isAvailableThroughout(
+        { submitted: true, slots },
+        "2026-11-10T05:00:00Z",
+        "2026-11-10T06:00:00Z",
+      ),
     ).toBe(true);
   });
   it("잘못된 구간은 불참", () => {
@@ -113,6 +117,8 @@ describe("isAvailableThroughout", () => {
 
 describe("inviteUrl", () => {
   it("초대 링크 주소", () => {
-    expect(inviteUrl("https://example.com", "abc_DEF-123")).toBe("https://example.com/p/abc_DEF-123");
+    expect(inviteUrl("https://example.com", "abc_DEF-123")).toBe(
+      "https://example.com/p/abc_DEF-123",
+    );
   });
 });

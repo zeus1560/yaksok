@@ -6,8 +6,7 @@ export const CANDIDATE_PAGE_MAX_LIMIT = 5;
 export type CandidatePageRequest = { limit: number; offset: number };
 
 export type ParsedCandidatePage =
-  | ({ kind: "ok" } & CandidatePageRequest)
-  | { kind: "invalid"; field: "limit" | "offset" };
+  ({ kind: "ok" } & CandidatePageRequest) | { kind: "invalid"; field: "limit" | "offset" };
 
 // 10진 정수 표기만 받는다. "1.0"·"1e1"·" 1"·"+1"·빈 값·같은 이름 반복은 거절한다 (422 VALIDATION_FAILED)
 const INTEGER = /^(0|-?[1-9]\d*)$/;

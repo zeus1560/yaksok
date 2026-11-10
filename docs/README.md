@@ -23,37 +23,41 @@ PRD는 제품 비전 문서다. 구현 세부가 PRD와 비즈니스 규칙에�
 ## 목차
 
 ### product — 무엇을 만드는가
-| 파일 | 내용 |
-| --- | --- |
-| `product/PRD.md` | 제품 요구사항 전문 (2026-10-30 정합화 개정본) |
-| `product/MVP_SCOPE.md` | MVP 범위 안/밖 + 핵심 제약값 |
-| `product/user-stories/USER_STORIES.md` | User Story 32개 (MVP 16 / 후속 16) |
+
+| 파일                                   | 내용                                          |
+| -------------------------------------- | --------------------------------------------- |
+| `product/PRD.md`                       | 제품 요구사항 전문 (2026-10-30 정합화 개정본) |
+| `product/MVP_SCOPE.md`                 | MVP 범위 안/밖 + 핵심 제약값                  |
+| `product/user-stories/USER_STORIES.md` | User Story 32개 (MVP 16 / 후속 16)            |
 
 ### architecture — 어떻게 만드는가
-| 파일 | 내용 |
-| --- | --- |
-| `architecture/DATABASE.md` | ERD 신버전. 테이블 5개, DB 제약, 트랜잭션·잠금 규칙, 검증 체크리스트 36개 |
-| `architecture/TECH_STACK.md` | 확정 버전, 아키텍처, 외부 API, 카카오 챗봇 |
-| `architecture/SETUP.md` | 팀원 온보딩, 개발 규칙, 자주 터지는 오류 |
+
+| 파일                         | 내용                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------- |
+| `architecture/DATABASE.md`   | ERD 신버전. 테이블 5개, DB 제약, 트랜잭션·잠금 규칙, 검증 체크리스트 36개 |
+| `architecture/TECH_STACK.md` | 확정 버전, 아키텍처, 외부 API, 카카오 챗봇                                |
+| `architecture/SETUP.md`      | 팀원 온보딩, 개발 규칙, 자주 터지는 오류                                  |
 
 ### specs — 정확히 무엇이 규칙인가
-| 파일 | 내용 |
-| --- | --- |
-| `specs/rules/MEMBER.md` | 참여·역할·권한 38개 |
-| `specs/rules/STATE.md` | 약속 상태 전환 27개 |
-| `specs/rules/TIME.md` | 시간·입력·마감 40개 |
-| `specs/rules/RESULT.md` | 후보 계산·확정 25개 |
-| `specs/rules/EXCEPTION.md` | 예외·동시 처리 23개 |
+
+| 파일                       | 내용                                       |
+| -------------------------- | ------------------------------------------ |
+| `specs/rules/MEMBER.md`    | 참여·역할·권한 38개                        |
+| `specs/rules/STATE.md`     | 약속 상태 전환 27개                        |
+| `specs/rules/TIME.md`      | 시간·입력·마감 40개                        |
+| `specs/rules/RESULT.md`    | 후보 계산·확정 25개                        |
+| `specs/rules/EXCEPTION.md` | 예외·동시 처리 23개                        |
 | `specs/API_CONVENTIONS.md` | API 공통 규약 (인증, 에러 포맷, 시간 표기) |
-| `specs/api/member.md` | MEMBER API 8개 |
-| `specs/api/state.md` | STATE API 11개 |
-| `specs/api/time.md` | TIME API 2개 + 동기화 흐름 |
+| `specs/api/member.md`      | MEMBER API 8개                             |
+| `specs/api/state.md`       | STATE API 11개                             |
+| `specs/api/time.md`        | TIME API 2개 + 동기화 흐름                 |
 
 ### development — 작업 전 확인
-| 파일 | 내용 |
-| --- | --- |
+
+| 파일                                | 내용                                  |
+| ----------------------------------- | ------------------------------------- |
 | `development/DECISION_CONFLICTS.md` | **착수 전 필독.** 미결·모순 전수 목록 |
-| `development/SOURCE_REGISTRY.md` | Notion 원본 링크 색인 |
+| `development/SOURCE_REGISTRY.md`    | Notion 원본 링크 색인                 |
 
 ## MVP 한 줄 정의
 

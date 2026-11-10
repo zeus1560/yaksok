@@ -54,9 +54,9 @@ describe("decideInviteView", () => {
 
   it("cancelled → 세션과 무관하게 취소 안내", () => {
     expect(decideInviteView("cancelled", { ok: false })).toBe("cancelled");
-    expect(decideInviteView("cancelled", { ok: true, role: "host", promiseStatus: "cancelled" })).toBe(
-      "cancelled",
-    );
+    expect(
+      decideInviteView("cancelled", { ok: true, role: "host", promiseStatus: "cancelled" }),
+    ).toBe("cancelled");
   });
 
   it("링크는 join인데 /me 시점에 취소됨 → 취소 안내", () => {

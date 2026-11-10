@@ -111,16 +111,21 @@ describe("POST /api/v1/promises/[promiseId]/cancel (STATE-API-07)", () => {
     ["forbidden", 403, "FORBIDDEN"],
     ["unauthenticated", 401, "UNAUTHENTICATED"],
     ["draft_expired", 410, "DRAFT_EXPIRED"],
-  ])("잠금 후 %s → %i %s, 쿠키는 잠금 후 다시 읽은 세션 기준으로 갱신", async (kind, status, code) => {
-    cancelPromise.mockResolvedValueOnce({
-      kind,
-      session: { expiresAt: AUTH.session.expiresAt, now: new Date(NOW.getTime() + 2000) },
-    });
-    const res = await call();
-    expect(res.status).toBe(status);
-    expect((await res.json()).code).toBe(code);
-    expect(res.headers.get("set-cookie")).toBe(`${COOKIE_PREFIX}tok${COOKIE_ATTRS}; Max-Age=3598`);
-  });
+  ])(
+    "잠금 후 %s → %i %s, 쿠키는 잠금 후 다시 읽은 세션 기준으로 갱신",
+    async (kind, status, code) => {
+      cancelPromise.mockResolvedValueOnce({
+        kind,
+        session: { expiresAt: AUTH.session.expiresAt, now: new Date(NOW.getTime() + 2000) },
+      });
+      const res = await call();
+      expect(res.status).toBe(status);
+      expect((await res.json()).code).toBe(code);
+      expect(res.headers.get("set-cookie")).toBe(
+        `${COOKIE_PREFIX}tok${COOKIE_ATTRS}; Max-Age=3598`,
+      );
+    },
+  );
 
   it.each([
     ["not_found", 404, "PROMISE_NOT_FOUND"],

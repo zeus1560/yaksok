@@ -52,7 +52,10 @@ const tx = {
   }),
   $executeRaw: vi.fn(async (strings: TemplateStringsArray) => {
     const sql = sqlOf(strings);
-    if (sql.startsWith("UPDATE promises SET status = 'closed'") && db.promise?.status === "collecting") {
+    if (
+      sql.startsWith("UPDATE promises SET status = 'closed'") &&
+      db.promise?.status === "collecting"
+    ) {
       db.promise.status = "closed";
       return 1;
     }
@@ -178,19 +181,38 @@ function seed(status = "collecting") {
   };
   db.people = [
     {
-      id: "pt-1", role: "host", status: "active", availabilitySubmittedAt: SUBMITTED, availabilityVersion: 2,
+      id: "pt-1",
+      role: "host",
+      status: "active",
+      availabilitySubmittedAt: SUBMITTED,
+      availabilityVersion: 2,
       slots: [
         { id: "a1", slotStartAt: at("2026-11-10T09:00") },
         { id: "a2", slotStartAt: at("2026-11-12T11:00") },
       ],
     },
     {
-      id: "pt-2", role: "member", status: "active", availabilitySubmittedAt: SUBMITTED, availabilityVersion: 1,
+      id: "pt-2",
+      role: "member",
+      status: "active",
+      availabilitySubmittedAt: SUBMITTED,
+      availabilityVersion: 1,
       slots: [{ id: "b1", slotStartAt: at("2026-11-11T10:00") }],
     },
-    { id: "pt-3", role: "member", status: "active", availabilitySubmittedAt: null, availabilityVersion: 0, slots: [] },
     {
-      id: "pt-4", role: "member", status: "cancelled", availabilitySubmittedAt: SUBMITTED, availabilityVersion: 1,
+      id: "pt-3",
+      role: "member",
+      status: "active",
+      availabilitySubmittedAt: null,
+      availabilityVersion: 0,
+      slots: [],
+    },
+    {
+      id: "pt-4",
+      role: "member",
+      status: "cancelled",
+      availabilitySubmittedAt: SUBMITTED,
+      availabilityVersion: 1,
       slots: [{ id: "d1", slotStartAt: at("2026-11-12T11:00") }],
     },
   ];
@@ -308,7 +330,10 @@ describe("updateSettings (STATE-API-03)", () => {
 
     it("31명이면 VALIDATION_FAILED(전용 코드 없음)", async () => {
       const result = await updateSettings(AUTH, { participantLimit: 31 });
-      expect(result).toMatchObject({ kind: "validation_failed", violation: { field: "participantLimit" } });
+      expect(result).toMatchObject({
+        kind: "validation_failed",
+        violation: { field: "participantLimit" },
+      });
       expect(result.kind === "validation_failed" && result.violation.code).toBeUndefined();
     });
   });
@@ -329,7 +354,10 @@ describe("updateSettings (STATE-API-03)", () => {
 
     it("현재보다 과거면 공통 규칙이 먼저 — VALIDATION_FAILED", async () => {
       const result = await updateSettings(AUTH, { votingDeadlineAt: new Date(NOW.getTime() - 1) });
-      expect(result).toMatchObject({ kind: "validation_failed", violation: { field: "votingDeadlineAt" } });
+      expect(result).toMatchObject({
+        kind: "validation_failed",
+        violation: { field: "votingDeadlineAt" },
+      });
       expect(result.kind === "validation_failed" && result.violation.code).toBeUndefined();
     });
 
@@ -341,20 +369,30 @@ describe("updateSettings (STATE-API-03)", () => {
 
     it("연장해도 마지막 날짜 00:00 이상이면 VALIDATION_FAILED", async () => {
       const result = await updateSettings(AUTH, { votingDeadlineAt: at("2026-11-12T00:00") });
-      expect(result).toMatchObject({ kind: "validation_failed", violation: { field: "votingDeadlineAt" } });
+      expect(result).toMatchObject({
+        kind: "validation_failed",
+        violation: { field: "votingDeadlineAt" },
+      });
       expect(sessionsNow()).toEqual(unchangedSessions());
     });
 
     it("범위를 줄여 기존 마감이 새 마지막 날짜 00:00 이후가 되면 VALIDATION_FAILED(마감은 그대로라도)", async () => {
-      const result = await updateSettings(AUTH, { dateRange: { startDate: "2026-11-09", endDate: "2026-11-09" } });
-      expect(result).toMatchObject({ kind: "validation_failed", violation: { field: "votingDeadlineAt" } });
+      const result = await updateSettings(AUTH, {
+        dateRange: { startDate: "2026-11-09", endDate: "2026-11-09" },
+      });
+      expect(result).toMatchObject({
+        kind: "validation_failed",
+        violation: { field: "votingDeadlineAt" },
+      });
       expect(peopleNow()).toEqual(unchangedPeople());
     });
   });
 
   describe("범위 변경 (STATE-09-03·09-04)", () => {
     it("날짜 확대: 모든 active 참여자 제출 해제·버전 +1(미제출자 포함), 슬롯·탈퇴자 그대로, 세션 그대로", async () => {
-      const result = await updateSettings(AUTH, { dateRange: { startDate: "2026-11-10", endDate: "2026-11-13" } });
+      const result = await updateSettings(AUTH, {
+        dateRange: { startDate: "2026-11-10", endDate: "2026-11-13" },
+      });
       expect(impactOf(result)).toEqual({
         rangeChanged: true,
         hasAddedSelectableSlots: true,
@@ -374,7 +412,9 @@ describe("updateSettings (STATE-API-03)", () => {
     });
 
     it("날짜 축소: 제출 유지, 슬롯이 지워진 방장만 버전 +1", async () => {
-      const result = await updateSettings(AUTH, { dateRange: { startDate: "2026-11-10", endDate: "2026-11-11" } });
+      const result = await updateSettings(AUTH, {
+        dateRange: { startDate: "2026-11-10", endDate: "2026-11-11" },
+      });
       expect(impactOf(result)).toEqual({
         rangeChanged: true,
         hasAddedSelectableSlots: false,
@@ -392,23 +432,40 @@ describe("updateSettings (STATE-API-03)", () => {
     });
 
     it("이동(11-11~11-13): 범위 밖 슬롯 삭제와 전원 제출 해제·버전 +1", async () => {
-      const result = await updateSettings(AUTH, { dateRange: { startDate: "2026-11-11", endDate: "2026-11-13" } });
-      expect(impactOf(result)).toMatchObject({ removedSlotCount: 1, submissionsReset: true, versionChangedParticipantCount: 3 });
+      const result = await updateSettings(AUTH, {
+        dateRange: { startDate: "2026-11-11", endDate: "2026-11-13" },
+      });
+      expect(impactOf(result)).toMatchObject({
+        removedSlotCount: 1,
+        submissionsReset: true,
+        versionChangedParticipantCount: 3,
+      });
       expect(person("pt-1")).toEqual({ submitted: false, version: 3, slots: ["a2"] });
       expect(person("pt-2")).toEqual({ submitted: false, version: 2, slots: ["b1"] });
     });
 
     it("하루 범위 축소(10:00~12:00): 09:00 슬롯이 있던 방장만 버전 +1, 제출 유지", async () => {
-      const result = await updateSettings(AUTH, { dailyTimeRange: { startMinute: 600, endMinute: 720 } });
-      expect(impactOf(result)).toMatchObject({ rangeChanged: true, submissionsReset: false, removedSlotCount: 1 });
+      const result = await updateSettings(AUTH, {
+        dailyTimeRange: { startMinute: 600, endMinute: 720 },
+      });
+      expect(impactOf(result)).toMatchObject({
+        rangeChanged: true,
+        submissionsReset: false,
+        removedSlotCount: 1,
+      });
       expect(person("pt-1")).toEqual({ submitted: true, version: 3, slots: ["a2"] });
       expect(person("pt-2")).toEqual({ submitted: true, version: 1, slots: ["b1"] });
       expect(db.promise).toMatchObject({ daily_start_minute: 600, daily_end_minute: 720 });
     });
 
     it("하루 범위 확대(~13:00): 전원 제출 해제", async () => {
-      const result = await updateSettings(AUTH, { dailyTimeRange: { startMinute: 540, endMinute: 780 } });
-      expect(impactOf(result)).toMatchObject({ submissionsReset: true, versionChangedParticipantCount: 3 });
+      const result = await updateSettings(AUTH, {
+        dailyTimeRange: { startMinute: 540, endMinute: 780 },
+      });
+      expect(impactOf(result)).toMatchObject({
+        submissionsReset: true,
+        versionChangedParticipantCount: 3,
+      });
     });
 
     it("같은 범위를 다시 보내면 rangeChanged=false, 아무것도 바뀌지 않는다", async () => {
@@ -429,12 +486,20 @@ describe("updateSettings (STATE-API-03)", () => {
 
     it("소요 시간이 유지한 하루 범위보다 길면 VALIDATION_FAILED", async () => {
       const result = await updateSettings(AUTH, { durationMinutes: 210 });
-      expect(result).toMatchObject({ kind: "validation_failed", violation: { field: "durationMinutes" } });
+      expect(result).toMatchObject({
+        kind: "validation_failed",
+        violation: { field: "durationMinutes" },
+      });
     });
 
     it("보낸 시작 날짜가 어제면 VALIDATION_FAILED(시작 날짜 하한, R-12)", async () => {
-      const result = await updateSettings(AUTH, { dateRange: { startDate: "2026-11-07", endDate: "2026-11-12" } });
-      expect(result).toMatchObject({ kind: "validation_failed", violation: { field: "dateRange" } });
+      const result = await updateSettings(AUTH, {
+        dateRange: { startDate: "2026-11-07", endDate: "2026-11-12" },
+      });
+      expect(result).toMatchObject({
+        kind: "validation_failed",
+        violation: { field: "dateRange" },
+      });
     });
 
     it("dateRange를 생략하면 이미 지난 기존 시작일이어도 다른 값을 바꿀 수 있다 (R-26)", async () => {
@@ -448,7 +513,9 @@ describe("updateSettings (STATE-API-03)", () => {
       ["2027-02-08(3개월 경계) 허용", "2027-02-08", "ok"],
       ["2027-02-09 거절", "2027-02-09", "validation_failed"],
     ])("종료일 %s (R-07)", async (_n, endDate, kind) => {
-      const result = await updateSettings(AUTH, { dateRange: { startDate: "2026-11-10", endDate } });
+      const result = await updateSettings(AUTH, {
+        dateRange: { startDate: "2026-11-10", endDate },
+      });
       expect(result.kind).toBe(kind);
     });
 
@@ -477,13 +544,16 @@ describe("updateSettings (STATE-API-03)", () => {
       expect((await updateSettings(AUTH, { participantLimit: 8 })).kind).toBe("ok");
     });
 
-    it.each(["closed", "confirmed", "draft"])("%s → invalid_state, 아무것도 바꾸지 않는다", async (status) => {
-      seed(status);
-      const result = await updateSettings(AUTH, { participantLimit: 8 });
-      expect(result).toMatchObject({ kind: "invalid_state", promiseStatus: status });
-      expect(db.promise).toMatchObject({ ...unchangedPromise(), status });
-      expect(tx.$executeRaw).not.toHaveBeenCalled();
-    });
+    it.each(["closed", "confirmed", "draft"])(
+      "%s → invalid_state, 아무것도 바꾸지 않는다",
+      async (status) => {
+        seed(status);
+        const result = await updateSettings(AUTH, { participantLimit: 8 });
+        expect(result).toMatchObject({ kind: "invalid_state", promiseStatus: status });
+        expect(db.promise).toMatchObject({ ...unchangedPromise(), status });
+        expect(tx.$executeRaw).not.toHaveBeenCalled();
+      },
+    );
 
     it("잠금 후 cancelled면 세션 재확인 전에 cancelled", async () => {
       seed("cancelled");
@@ -529,7 +599,10 @@ describe("updateSettings (STATE-API-03)", () => {
     it("마감 연장 → 다른 필드 변경: 두 변경이 모두 남는다", async () => {
       await updateSettings(AUTH, { votingDeadlineAt: LATER_DEADLINE });
       await updateSettings(AUTH, { durationMinutes: 90 });
-      expect(db.promise).toMatchObject({ voting_deadline_at: LATER_DEADLINE, duration_minutes: 90 });
+      expect(db.promise).toMatchObject({
+        voting_deadline_at: LATER_DEADLINE,
+        duration_minutes: 90,
+      });
     });
 
     it("같은 축소를 두 번: 두 번째는 지울 슬롯이 없어 버전을 다시 올리지 않는다", async () => {

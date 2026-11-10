@@ -48,7 +48,8 @@ export function resolveJoinAccess(promise: JoinPromise, now: Date): JoinRejectio
       ? { kind: "draft_expired" }
       : { kind: "not_open" };
   }
-  if (promise.status !== "collecting") return { kind: "invalid_state", promiseStatus: promise.status };
+  if (promise.status !== "collecting")
+    return { kind: "invalid_state", promiseStatus: promise.status };
   // 경계값: 판정 시각 = 마감이면 거절. DB 상태는 바꾸지 않는다 (마감 처리는 STATE 담당)
   if (!promise.votingDeadlineAt) throw new Error("마감 시각이 없는 collecting 약속");
   if (promise.votingDeadlineAt.getTime() <= now.getTime()) return { kind: "deadline_passed" };
@@ -89,7 +90,8 @@ export async function registerParticipant(
   ]);
   if (!found) return { kind: "not_found" };
   if (found.status === "cancelled") return { kind: "cancelled" };
-  if (await findActivePromiseSession(request, found.id, now)) return { kind: "already_participant" };
+  if (await findActivePromiseSession(request, found.id, now))
+    return { kind: "already_participant" };
 
   // 해시 계산은 수백 ms 걸리므로 잠금을 잡기 전에 끝낸다
   const passwordHash = await hashPin(input.pin);
@@ -103,7 +105,9 @@ export async function registerParticipant(
         FROM promises AS p JOIN promise_links AS l ON l.id = p.promise_link_id
         WHERE p.id = ${found.id}::uuid
         FOR UPDATE OF p`;
-      const [{ now: lockedNow }] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`;
+      const [{ now: lockedNow }] = await tx.$queryRaw<
+        { now: Date }[]
+      >`SELECT clock_timestamp() AS now`;
 
       // 사전 확인과 잠금 사이에 만료 draft가 정리됐다
       if (!promise) return { kind: "not_found" };
@@ -124,7 +128,10 @@ export async function registerParticipant(
       // cancelled 행도 중복으로 본다 — 재참여 불가 (MEMBER-05-06, 11-01, 11-02)
       const taken = await tx.participant.findUnique({
         where: {
-          promiseId_normalizedNickname: { promiseId: promise.id, normalizedNickname: input.nickname },
+          promiseId_normalizedNickname: {
+            promiseId: promise.id,
+            normalizedNickname: input.nickname,
+          },
         },
         select: { id: true },
       });

@@ -103,10 +103,7 @@ type SessionRow = {
   participant?: { id?: string; promiseId?: string; status?: string };
 };
 
-function prepare(
-  promise: unknown,
-  { session = {} as SessionRow, sessionMissing = false } = {},
-) {
+function prepare(promise: unknown, { session = {} as SessionRow, sessionMissing = false } = {}) {
   txQueryResults.push([{ now: NOW }], promise ? [promise] : []);
   tx.participantSession.findUnique.mockResolvedValue(
     sessionMissing
@@ -136,7 +133,12 @@ describe("getParticipantList (MEMBER-API-06)", () => {
   it("탈퇴자는 명단과 인원에서 빠지고 등록순(created_at → id)으로 정렬된다", async () => {
     rows = [
       row({ id: "pt-c", nickname: "철수", createdAt: at("2026-11-08T09:05:00+09:00") }),
-      row({ id: "pt-host", nickname: "승주", role: "host", createdAt: at("2026-11-08T09:00:00+09:00") }),
+      row({
+        id: "pt-host",
+        nickname: "승주",
+        role: "host",
+        createdAt: at("2026-11-08T09:00:00+09:00"),
+      }),
       row({
         id: "pt-left",
         nickname: "탈퇴",
@@ -166,7 +168,11 @@ describe("getParticipantList (MEMBER-API-06)", () => {
 
   it("제출 여부·status·PIN 해시·정규화 닉네임을 명단 항목에 넣지 않는다 (미제출자도 포함)", async () => {
     rows = [
-      row({ id: "pt-host", role: "host", availabilitySubmittedAt: at("2026-11-09T10:00:00+09:00") }),
+      row({
+        id: "pt-host",
+        role: "host",
+        availabilitySubmittedAt: at("2026-11-09T10:00:00+09:00"),
+      }),
       row({ id: "pt-me", createdAt: at("2026-11-08T09:10:00+09:00") }),
     ];
     prepare(promiseRow());
@@ -272,16 +278,21 @@ describe("getParticipantList (MEMBER-API-06)", () => {
       ["참여자 탈퇴", { participant: { status: "cancelled" } }],
       ["다른 약속 소속", { participant: { promiseId: OTHER_PROMISE_ID } }],
       ["다른 참여자", { participant: { id: "pt-other" } }],
-    ] as [string, SessionRow][])("%s → unauthenticated, 명단을 읽지 않는다", async (_label, session) => {
-      prepare(promiseRow(), { session });
-      expect((await getParticipantList(AUTH)).kind).toBe("unauthenticated");
-      expect(tx.participant.findMany).not.toHaveBeenCalled();
-    });
+    ] as [string, SessionRow][])(
+      "%s → unauthenticated, 명단을 읽지 않는다",
+      async (_label, session) => {
+        prepare(promiseRow(), { session });
+        expect((await getParticipantList(AUTH)).kind).toBe("unauthenticated");
+        expect(tx.participant.findMany).not.toHaveBeenCalled();
+      },
+    );
 
     it("draft + 방장 → forbidden, 쿠키 유지, 명단을 읽지 않는다", async () => {
       rows = [row({ id: "pt-me", role: "host" })];
       prepare(promiseRow({ status: "draft", participant_limit: null, voting_deadline_at: null }));
-      expect(await getParticipantList({ ...AUTH, participant: { id: "pt-me", role: "host" } })).toEqual({
+      expect(
+        await getParticipantList({ ...AUTH, participant: { id: "pt-me", role: "host" } }),
+      ).toEqual({
         kind: "forbidden",
         ...keep,
       });
@@ -289,7 +300,9 @@ describe("getParticipantList (MEMBER-API-06)", () => {
     });
 
     it("draft라도 세션이 무효면 403보다 401이 먼저다", async () => {
-      prepare(promiseRow({ status: "draft" }), { session: { participant: { status: "cancelled" } } });
+      prepare(promiseRow({ status: "draft" }), {
+        session: { participant: { status: "cancelled" } },
+      });
       expect((await getParticipantList(AUTH)).kind).toBe("unauthenticated");
     });
 

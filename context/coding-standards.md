@@ -34,16 +34,16 @@
 
 ## 파일 배치
 
-| 경로 | 역할 |
-| --- | --- |
-| `app/` | 페이지, 레이아웃 |
-| `app/api/` | Route Handler (API 명세 엔드포인트) |
-| `components/<기능>/` | UI 컴포넌트 |
-| `lib/prisma.ts` | Prisma Client 싱글턴 |
-| `lib/<도메인>/` | 서버 전용 서비스 로직 (예: `lib/time/`, `lib/member/`) |
-| `lib/` | 공통 유틸리티 |
-| `types/` | 공유 타입 |
-| `prisma/` | 스키마와 마이그레이션 |
+| 경로                 | 역할                                                   |
+| -------------------- | ------------------------------------------------------ |
+| `app/`               | 페이지, 레이아웃                                       |
+| `app/api/`           | Route Handler (API 명세 엔드포인트)                    |
+| `components/<기능>/` | UI 컴포넌트                                            |
+| `lib/prisma.ts`      | Prisma Client 싱글턴                                   |
+| `lib/<도메인>/`      | 서버 전용 서비스 로직 (예: `lib/time/`, `lib/member/`) |
+| `lib/`               | 공통 유틸리티                                          |
+| `types/`             | 공유 타입                                              |
+| `prisma/`            | 스키마와 마이그레이션                                  |
 
 ## 오류와 검증
 

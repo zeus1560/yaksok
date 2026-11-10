@@ -88,11 +88,31 @@ describe("GET /api/v1/promises/[promiseId]/candidates (STATE-API-10)", () => {
       hasMore: true,
       nextOffset: 5,
       candidates: [
-        { startAt: "2026-11-11T09:00:00+09:00", endAt: "2026-11-11T10:00:00+09:00", availableParticipantCount: 3 },
-        { startAt: "2026-11-12T14:00:00+09:00", endAt: "2026-11-12T15:00:00+09:00", availableParticipantCount: 3 },
-        { startAt: "2026-11-10T13:00:00+09:00", endAt: "2026-11-10T14:00:00+09:00", availableParticipantCount: 2 },
-        { startAt: "2026-11-10T13:30:00+09:00", endAt: "2026-11-10T14:30:00+09:00", availableParticipantCount: 2 },
-        { startAt: "2026-11-10T23:00:00+09:00", endAt: "2026-11-11T00:00:00+09:00", availableParticipantCount: 2 },
+        {
+          startAt: "2026-11-11T09:00:00+09:00",
+          endAt: "2026-11-11T10:00:00+09:00",
+          availableParticipantCount: 3,
+        },
+        {
+          startAt: "2026-11-12T14:00:00+09:00",
+          endAt: "2026-11-12T15:00:00+09:00",
+          availableParticipantCount: 3,
+        },
+        {
+          startAt: "2026-11-10T13:00:00+09:00",
+          endAt: "2026-11-10T14:00:00+09:00",
+          availableParticipantCount: 2,
+        },
+        {
+          startAt: "2026-11-10T13:30:00+09:00",
+          endAt: "2026-11-10T14:30:00+09:00",
+          availableParticipantCount: 2,
+        },
+        {
+          startAt: "2026-11-10T23:00:00+09:00",
+          endAt: "2026-11-11T00:00:00+09:00",
+          availableParticipantCount: 2,
+        },
       ],
     });
     expect(getPromiseCandidates).toHaveBeenCalledWith(AUTH);
@@ -207,7 +227,11 @@ describe("GET /api/v1/promises/[promiseId]/candidates (STATE-API-10)", () => {
     it.each(["collecting", "draft", "confirmed"])(
       "%s → 409 INVALID_PROMISE_STATE (details)",
       async (promiseStatus) => {
-        getPromiseCandidates.mockResolvedValueOnce({ kind: "invalid_state", promiseStatus, ...keep });
+        getPromiseCandidates.mockResolvedValueOnce({
+          kind: "invalid_state",
+          promiseStatus,
+          ...keep,
+        });
         const res = await call();
         expect(res.status).toBe(409);
         expect(await res.json()).toEqual({

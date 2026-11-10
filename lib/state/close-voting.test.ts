@@ -76,7 +76,10 @@ describe("closeVoting (STATE-API-04)", () => {
       session: { expiresAt: SESSION_EXPIRES, now: NOW },
     });
     expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
-    const [strings, ...values] = tx.$executeRaw.mock.calls[0] as unknown as [string[], ...unknown[]];
+    const [strings, ...values] = tx.$executeRaw.mock.calls[0] as unknown as [
+      string[],
+      ...unknown[],
+    ];
     const sql = strings.join("?").replace(/\s+/g, " ").trim();
     expect(sql).toBe(
       "UPDATE promises SET status = 'closed' WHERE id = ?::uuid AND status = 'collecting'",
@@ -116,12 +119,15 @@ describe("closeVoting (STATE-API-04)", () => {
     ["정확히 마감 시각", 0],
     ["마감 1ms 뒤", 1],
     ["마감 하루 뒤", 24 * 60 * MIN],
-  ])("마감이 지난 collecting(%s)도 closed로 저장, deadlineReached=true (공통 마감)", async (_n, after) => {
-    queue({ voting_deadline_at: new Date(NOW.getTime() - after) });
-    const result = await closeVoting(AUTH);
-    expect(result).toMatchObject({ kind: "ok", changed: true, deadlineReached: true });
-    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
-  });
+  ])(
+    "마감이 지난 collecting(%s)도 closed로 저장, deadlineReached=true (공통 마감)",
+    async (_n, after) => {
+      queue({ voting_deadline_at: new Date(NOW.getTime() - after) });
+      const result = await closeVoting(AUTH);
+      expect(result).toMatchObject({ kind: "ok", changed: true, deadlineReached: true });
+      expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("마감 1ms 전이면 조기 마감(deadlineReached=false)", async () => {
     queue({ voting_deadline_at: new Date(NOW.getTime() + 1) });
@@ -134,7 +140,9 @@ describe("closeVoting (STATE-API-04)", () => {
     const all = [...tx.$queryRaw.mock.calls, ...tx.$executeRaw.mock.calls]
       .map((c) => (c[0] as unknown as string[]).join("?"))
       .join(" ");
-    expect(all).not.toMatch(/participant_sessions|voting_deadline_at\s*=|available_slots|confirmed_start_at|availability/);
+    expect(all).not.toMatch(
+      /participant_sessions|voting_deadline_at\s*=|available_slots|confirmed_start_at|availability/,
+    );
     expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
   });
 

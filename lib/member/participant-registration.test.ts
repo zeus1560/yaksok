@@ -62,7 +62,11 @@ function lockedRow(overrides: Record<string, unknown> = {}) {
 
 function prepare(
   row: unknown,
-  { taken = false, activeCount = 1, lockNow = LOCK_NOW }: {
+  {
+    taken = false,
+    activeCount = 1,
+    lockNow = LOCK_NOW,
+  }: {
     taken?: boolean;
     activeCount?: number;
     lockNow?: Date;
@@ -227,14 +231,24 @@ describe("registerParticipant (MEMBER-API-03)", () => {
 
   it.each([
     ["cancelled", lockedRow({ status: "cancelled" }), LOCK_NOW, { kind: "cancelled" }],
-    ["진행 중 draft", lockedRow({ status: "draft", created_at: NOW }), LOCK_NOW, { kind: "not_open" }],
+    [
+      "진행 중 draft",
+      lockedRow({ status: "draft", created_at: NOW }),
+      LOCK_NOW,
+      { kind: "not_open" },
+    ],
     [
       "10분 지난 draft(삭제 없음)",
       lockedRow({ status: "draft", created_at: NOW }),
       new Date(NOW.getTime() + 10 * MIN),
       { kind: "draft_expired" },
     ],
-    ["closed", lockedRow({ status: "closed" }), LOCK_NOW, { kind: "invalid_state", promiseStatus: "closed" }],
+    [
+      "closed",
+      lockedRow({ status: "closed" }),
+      LOCK_NOW,
+      { kind: "invalid_state", promiseStatus: "closed" },
+    ],
     [
       "confirmed",
       lockedRow({ status: "confirmed" }),
@@ -256,7 +270,11 @@ describe("registerParticipant (MEMBER-API-03)", () => {
   it("정원 경계: active = limit - 1이면 통과(등록 후 = limit)", async () => {
     prepare(lockedRow({ participant_limit: 4 }), { activeCount: 3 });
     const result = await registerParticipant(request(), PROMISE_ID, INPUT);
-    expect(result).toMatchObject({ kind: "created", currentParticipantCount: 4, participantLimit: 4 });
+    expect(result).toMatchObject({
+      kind: "created",
+      currentParticipantCount: 4,
+      participantLimit: 4,
+    });
   });
 
   it("정원 경계: active = limit이면 full, 생성 없음", async () => {
@@ -271,7 +289,9 @@ describe("registerParticipant (MEMBER-API-03)", () => {
       kind: "nickname_taken",
     });
     expect(tx.participant.findUnique).toHaveBeenCalledWith({
-      where: { promiseId_normalizedNickname: { promiseId: PROMISE_ID, normalizedNickname: "혜승" } },
+      where: {
+        promiseId_normalizedNickname: { promiseId: PROMISE_ID, normalizedNickname: "혜승" },
+      },
       select: { id: true },
     });
   });

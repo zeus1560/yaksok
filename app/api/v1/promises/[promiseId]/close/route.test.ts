@@ -60,17 +60,22 @@ describe("POST /api/v1/promises/[promiseId]/close (STATE-API-04)", () => {
     ["조기 마감", ok()],
     ["기한 경과 마감", ok({ deadlineReached: true })],
     ["이미 closed(변경 없음)", ok({ changed: false })],
-  ])("%s → 200 { promiseId, promiseStatus: closed }, 쿠키는 갱신되지 않은 세션 기준, no-store", async (_n, result) => {
-    closeVoting.mockResolvedValueOnce(result);
+  ])(
+    "%s → 200 { promiseId, promiseStatus: closed }, 쿠키는 갱신되지 않은 세션 기준, no-store",
+    async (_n, result) => {
+      closeVoting.mockResolvedValueOnce(result);
 
-    const res = await call();
+      const res = await call();
 
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ promiseId: PROMISE_ID, promiseStatus: "closed" });
-    expect(res.headers.get("set-cookie")).toBe(`${COOKIE_PREFIX}tok${COOKIE_ATTRS}; Max-Age=3598`);
-    expect(res.headers.get("cache-control")).toBe("no-store");
-    expect(closeVoting).toHaveBeenCalledWith(AUTH);
-  });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ promiseId: PROMISE_ID, promiseStatus: "closed" });
+      expect(res.headers.get("set-cookie")).toBe(
+        `${COOKIE_PREFIX}tok${COOKIE_ATTRS}; Max-Age=3598`,
+      );
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(closeVoting).toHaveBeenCalledWith(AUTH);
+    },
+  );
 
   it("본문은 읽지 않는다 (명세상 본문 없음, 보내도 무시)", async () => {
     closeVoting.mockResolvedValueOnce(ok());
@@ -122,19 +127,22 @@ describe("POST /api/v1/promises/[promiseId]/close (STATE-API-04)", () => {
     expect(res.headers.get("set-cookie")).toBe(`${COOKIE_PREFIX}tok${COOKIE_ATTRS}; Max-Age=3598`);
   });
 
-  it.each(["draft", "confirmed"])("%s 409는 현재 상태와 허용 상태를 details로 알린다", async (status) => {
-    closeVoting.mockResolvedValueOnce({
-      kind: "invalid_state",
-      promiseStatus: status,
-      session: { expiresAt: AUTH.session.expiresAt, now: NOW },
-    });
-    const json = await (await call()).json();
-    expect(json).toEqual({
-      code: "INVALID_PROMISE_STATE",
-      message: "현재 약속 상태에서는 요청할 수 없습니다.",
-      details: { promiseStatus: status, allowedStates: ["collecting", "closed"] },
-    });
-  });
+  it.each(["draft", "confirmed"])(
+    "%s 409는 현재 상태와 허용 상태를 details로 알린다",
+    async (status) => {
+      closeVoting.mockResolvedValueOnce({
+        kind: "invalid_state",
+        promiseStatus: status,
+        session: { expiresAt: AUTH.session.expiresAt, now: NOW },
+      });
+      const json = await (await call()).json();
+      expect(json).toEqual({
+        code: "INVALID_PROMISE_STATE",
+        message: "현재 약속 상태에서는 요청할 수 없습니다.",
+        details: { promiseStatus: status, allowedStates: ["collecting", "closed"] },
+      });
+    },
+  );
 
   it.each([
     ["not_found", 404, "PROMISE_NOT_FOUND"],

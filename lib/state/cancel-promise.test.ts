@@ -83,9 +83,7 @@ describe("cancelPromise (STATE-API-07)", () => {
       cancelledAt: NOW,
       session: { expiresAt: NOW, now: NOW },
     });
-    const update = tx.$executeRaw.mock.calls.map(
-      (c) => c as unknown as [string[], ...unknown[]],
-    );
+    const update = tx.$executeRaw.mock.calls.map((c) => c as unknown as [string[], ...unknown[]]);
     expect(update).toHaveLength(1);
     expect(update[0][0].join("?").replace(/\s+/g, " ").trim()).toBe(
       "UPDATE promises SET status = 'cancelled', cancelled_at = ? WHERE id = ?::uuid AND status <> 'cancelled'",
@@ -103,7 +101,9 @@ describe("cancelPromise (STATE-API-07)", () => {
 
     expect(result.kind).toBe("ok");
     const all = sqlTexts().join(" ");
-    expect(all).not.toMatch(/UPDATE participants\b|DELETE|participant_available_slots|confirmed_start_at|availability/);
+    expect(all).not.toMatch(
+      /UPDATE participants\b|DELETE|participant_available_slots|confirmed_start_at|availability/,
+    );
     expect(all).toMatch(/UPDATE promises SET status = 'cancelled'/);
   });
 
@@ -237,14 +237,17 @@ describe("cancelPromise (STATE-API-07)", () => {
   it("거절 응답의 쿠키는 잠금 후 다시 읽은 세션 expires_at 기준", async () => {
     const reread = new Date(SESSION_EXPIRES.getTime() - MIN);
     queue({});
-    tx.participantSession.findUnique.mockResolvedValueOnce(sessionRow({ expiresAt: reread, role: "member" }));
+    tx.participantSession.findUnique.mockResolvedValueOnce(
+      sessionRow({ expiresAt: reread, role: "member" }),
+    );
     expect((await cancelPromise(AUTH)).session).toEqual({ expiresAt: reread, now: NOW });
   });
 
   it("세션 만료 중 오류는 그대로 던져 약속 취소도 롤백된다", async () => {
     queue({});
     const failure = new Error("expire failed");
-    tx.$queryRaw.mockImplementationOnce(async () => [{ status: "collecting", created_at: CREATED }])
+    tx.$queryRaw
+      .mockImplementationOnce(async () => [{ status: "collecting", created_at: CREATED }])
       .mockImplementationOnce(async () => [{ now: NOW }])
       .mockRejectedValueOnce(failure);
     await expect(cancelPromise(AUTH)).rejects.toBe(failure);
