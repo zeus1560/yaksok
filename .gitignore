@@ -64,3 +64,6 @@ skills-lock.json
 
 # 개발 DB 확인 스크립트 — 본인 개발 DB에 확인 데이터를 만들고 지운다. 로컬에서만 다시 돌린다
 scripts/verify/
+
+# Figma 대조 촬영본 (029) — 로컬 비교용
+/docs/design/compare/
