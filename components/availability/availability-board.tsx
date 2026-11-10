@@ -13,6 +13,7 @@ import {
 } from "@/components/create-promise/api";
 import { formatDateRange, formatDuration } from "@/lib/create-promise/format";
 import { classifySubmitFailure, NOTICES } from "@/lib/availability/failure";
+import { createIntake } from "@/lib/availability/intake";
 import { decidePoll } from "@/lib/availability/poll";
 import {
   clipDraftToRange,
@@ -46,6 +47,8 @@ import {
 // 가능 시간 입력 화면 (TIME-API-01·02, TIME-10-04, DECISION_CONFLICTS R-19)
 // - 폴링은 SWR 주기 조회(5초). 탭이 숨겨지면 멈추고 돌아오면 바로 조회한다. 마감 뒤에도 계속한다
 // - fetcher는 예외를 던지지 않는다. SWR은 에러 상태에서 주기 조회를 멈추므로, 실패도 결과 값으로 받아 분기한다
+// - 응답은 onSuccess가 아니라 SWR data로 받는다. 같은 주소 요청(후보 화면의 "모두의 시간" 등)에 합류해 새로 그려져도
+//   결과를 받아야 하기 때문이다. createIntake가 새 응답마다 정확히 한 번만 넘긴다(lib/availability/intake.ts)
 // - 드래그·제출 중에는 조회를 멈추고, 그사이 도착한 응답은 드래그가 끝난 뒤 반영한다(제출 중 응답은 버린다)
 // - 지난 칸·남은 시간은 serverTime + 받은 뒤 흐른 시간(단조 시계) 기준이다
 
@@ -95,7 +98,7 @@ export function AvailabilityBoard({
   const draftRef = useRef<LocalDraft | null>(draft);
   const draggingRef = useRef(false);
   const submittingRef = useRef(false);
-  const pendingRef = useRef<Snapshot | null>(null);
+  const pendingRef = useRef<{ snapshot: Snapshot; decideLocal: boolean } | null>(null);
   const lastWriteRef = useRef(0); // 제출 결과를 반영한 시각. 그 전에 시작한 조회 응답은 낡았다
 
   const setDraft = useCallback(
@@ -110,9 +113,15 @@ export function AvailabilityBoard({
 
   // 서버 응답 반영: 새 설정 범위 밖 칸을 로컬 입력에서 먼저 지우고(028), 버전을 비교한다 (TIME-10-04)
   // 범위가 줄어도 저장된 슬롯이 없던 참여자는 버전이 그대로라, 자르지 않으면 "선택 N칸"이 화면보다 많다
+  // decideLocal이 false면 화면만 채운다 — 이 화면이 생기기 전에 시작된 요청의 응답이라 로컬 입력 판단에 쓰지 않는다
   const applyServer = useCallback(
-    (next: Snapshot) => {
+    (next: Snapshot, decideLocal = true) => {
       const now = estimateServerNow(next.serverTimeMs, next.receivedAt, performance.now());
+      if (!decideLocal) {
+        setSnapshot(next);
+        setNowMs(now);
+        return;
+      }
       let local = draftRef.current;
       let clipped = 0;
       if (local) {
@@ -139,7 +148,7 @@ export function AvailabilityBoard({
     [setDraft],
   );
 
-  const { mutate } = useSWR(path, fetchAvailability, {
+  const { data: polled, mutate } = useSWR(path, fetchAvailability, {
     refreshInterval: POLL_MS,
     refreshWhenHidden: false,
     refreshWhenOffline: false,
@@ -148,33 +157,41 @@ export function AvailabilityBoard({
     dedupingInterval: 1000,
     shouldRetryOnError: false,
     isPaused: () => draggingRef.current || submittingRef.current,
-    onSuccess: ({ result, startedAt, receivedAt }) => {
-      const outcome = decidePoll(result, {
-        startedAt,
-        lastWriteAt: lastWriteRef.current,
-        dragging: draggingRef.current,
-        submitting: submittingRef.current,
-      });
-      if (outcome.kind === "stale") return;
-      if (outcome.kind === "relink") {
-        onRelink();
-        return;
-      }
-      if (outcome.kind === "keep_last") {
-        // 마지막 성공 응답과 로컬 입력을 그대로 둔다
-        setOffline(true);
-        return;
-      }
-      setOffline(false);
-      if (outcome.kind === "skip") return;
-      const next = toSnapshot(outcome.data, receivedAt);
-      if (outcome.kind === "defer") {
-        pendingRef.current = next;
-        return;
-      }
-      applyServer(next);
-    },
   });
+
+  // 새 응답마다 한 번: 다시 그려지기만 하면(같은 data) 아무것도 하지 않는다. 기준 시각은 첫 렌더(SWR 첫 요청보다 앞)
+  const [intake] = useState(() => createIntake<Polled>(performance.now()));
+  useEffect(() => {
+    const taken = intake(polled);
+    if (!taken) return;
+    const { result, startedAt, receivedAt } = taken.data;
+    const outcome = decidePoll(result, {
+      startedAt,
+      lastWriteAt: lastWriteRef.current,
+      dragging: draggingRef.current,
+      submitting: submittingRef.current,
+    });
+    // 합류한 응답은 이 화면이 생기기 전 상태일 수 있다. 화면을 채운 뒤 새로 조회해 그 응답으로 판단한다
+    if (taken.joined) void mutate();
+    if (outcome.kind === "stale") return;
+    if (outcome.kind === "relink") {
+      onRelink();
+      return;
+    }
+    if (outcome.kind === "keep_last") {
+      // 마지막 성공 응답과 로컬 입력을 그대로 둔다
+      setOffline(true);
+      return;
+    }
+    setOffline(false);
+    if (outcome.kind === "skip") return;
+    const next = toSnapshot(outcome.data, receivedAt);
+    if (outcome.kind === "defer") {
+      pendingRef.current = { snapshot: next, decideLocal: !taken.joined };
+      return;
+    }
+    applyServer(next, !taken.joined);
+  }, [polled, intake, mutate, onRelink, applyServer]);
 
   // 지난 칸 판정용 서버 시각을 주기적으로 갱신한다
   useEffect(() => {
@@ -192,7 +209,7 @@ export function AvailabilityBoard({
         const pending = pendingRef.current;
         pendingRef.current = null;
         // 드래그 결과(onCommit)가 먼저 로컬 입력에 반영된 뒤 서버 응답을 비교한다
-        queueMicrotask(() => applyServer(pending));
+        queueMicrotask(() => applyServer(pending.snapshot, pending.decideLocal));
       }
     },
     [applyServer],

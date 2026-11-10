@@ -36,12 +36,13 @@ export type CandidatePage = {
 
 // 폴링 응답이 쓰기 결과보다 먼저 시작했는지 비교하려고 시작 시각(단조 시계)을 함께 돌려준다
 // 실패도 값으로 돌려준다(SWR은 에러 상태에서 주기 조회를 멈춘다, R-19)
-export type Timed<T> = { result: ApiResult<T>; startedAt: number; finishedAt: number };
+// 받은 시각은 receivedAt(lib/availability/intake.ts Timing과 같은 이름). 응답마다 새 객체라 SWR data가 매번 바뀐다
+export type Timed<T> = { result: ApiResult<T>; startedAt: number; receivedAt: number };
 
 export async function fetchTimed<T>(path: string): Promise<Timed<T>> {
   const startedAt = performance.now();
   const result = await callApi<T>(path);
-  return { result, startedAt, finishedAt: performance.now() };
+  return { result, startedAt, receivedAt: performance.now() };
 }
 
 export const PAGE_SIZE = 5; // RESULT-06-01 상위 5개, STATE-API-10 limit 최대 5

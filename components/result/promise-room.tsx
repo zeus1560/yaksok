@@ -8,6 +8,7 @@ import { callApi, type MyParticipation } from "@/components/create-promise/api";
 import { SessionPanel } from "@/components/leave/leave-panel";
 import { HostMenu } from "@/components/manage/host-menu";
 import { ParticipantListPanel } from "@/components/manage/participant-list";
+import { createIntake } from "@/lib/availability/intake";
 import { decidePoll } from "@/lib/availability/poll";
 import { classifyListFailure, type ManageAction } from "@/lib/manage/failure";
 import type { PromiseSettings } from "@/lib/manage/settings-form";
@@ -34,6 +35,8 @@ import { ResultPanel } from "./result-panel";
 // 참여 뒤 화면 (018). 상태 조회(STATE-API-01)를 SWR로 5초 폴링해 시간 입력·후보·결과 화면을 고른다
 // - 방장이 마감·확정하면 다른 참여자 화면도 다음 폴링에서 바뀐다
 // - 탭이 숨겨지면 멈추고 돌아오면 바로 조회한다. 일시 실패는 마지막 성공 값을 유지한다(012와 같은 방식, R-19)
+// - 응답은 onSuccess가 아니라 SWR data로 받는다. 다시 그려진 이 화면이 같은 주소의 진행 중인 요청(앞 화면이 시작)에 합류해도
+//   결과를 받아야 한다. createIntake가 새 응답마다 정확히 한 번만 넘긴다(lib/availability/intake.ts)
 // - 버튼 표시는 /me의 role·permissions. /me의 deadlinePassed는 쓰지 않는다(조기 마감에서 false)
 // - 027: 화면 위쪽에 방장 메뉴(마감·설정 변경·재조율·취소)와 참여자 명단(MEMBER-API-06, 같은 간격 폴링)을 둔다
 // - 028: 화면 아래쪽에 로그아웃·약속 나가기. 명단 폴링에서 내 역할이 /me와 달라지면(자동 승계) /me를 다시 불러
@@ -59,8 +62,6 @@ export function PromiseRoom({
   const [me, setMe] = useState(initialMe);
   const [detail, setDetail] = useState<RoomDetail | null>(null);
   const [settings, setSettings] = useState<PromiseSettings | null>(null);
-  const [list, setList] = useState<ParticipantList | null>(null);
-  const [listUnstable, setListUnstable] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -81,66 +82,90 @@ export function PromiseRoom({
     onRelinkRef.current();
   }, []);
 
-  const { mutate } = useSWR(promisePath(promiseId), fetchTimed<PromiseDetail>, {
+  const { data: polledDetail, mutate } = useSWR(promisePath(promiseId), fetchTimed<PromiseDetail>, {
     refreshInterval: (latest?: Timed<PromiseDetail>) =>
-      latest ? pollDelay(latest.finishedAt - latest.startedAt, POLL_MS) : POLL_MS,
+      latest ? pollDelay(latest.receivedAt - latest.startedAt, POLL_MS) : POLL_MS,
     refreshWhenHidden: false,
     refreshWhenOffline: false,
     revalidateOnFocus: true,
     focusThrottleInterval: 1000,
     dedupingInterval: 1000,
     shouldRetryOnError: false,
-    onSuccess: ({ result, startedAt }: Timed<PromiseDetail>) => {
-      const outcome = decidePoll(result, {
-        startedAt,
-        lastWriteAt: lastWriteRef.current,
-        dragging: false,
-        submitting: false,
-      });
-      if (outcome.kind === "stale") return;
-      if (outcome.kind === "relink") {
-        onRelink();
-        return;
-      }
-      if (outcome.kind === "keep_last") {
-        setOffline(true);
-        return;
-      }
-      setOffline(false);
-      if (outcome.kind === "apply" || outcome.kind === "defer") {
-        setDetail({
-          promiseStatus: outcome.data.promiseStatus,
-          currentConfirmation: outcome.data.currentConfirmation,
-        });
-        setSettings(outcome.data.settings);
-      }
-    },
   });
 
   // 참여자 명단. 상태 조회와 같은 간격으로 다시 조회한다(탭 숨김 중지). 일시 실패는 마지막 명단을 유지한다
-  const { mutate: mutateList } = useSWR(
+  const { data: polledList, mutate: mutateList } = useSWR(
     promisePath(promiseId, "/participants"),
     fetchTimed<ParticipantList>,
     {
       refreshInterval: (latest?: Timed<ParticipantList>) =>
-        latest ? pollDelay(latest.finishedAt - latest.startedAt, POLL_MS) : POLL_MS,
+        latest ? pollDelay(latest.receivedAt - latest.startedAt, POLL_MS) : POLL_MS,
       refreshWhenHidden: false,
       refreshWhenOffline: false,
       revalidateOnFocus: true,
       focusThrottleInterval: 1000,
       dedupingInterval: 1000,
       shouldRetryOnError: false,
-      onSuccess: ({ result }: Timed<ParticipantList>) => {
-        if (result.ok) {
-          setList(result.data);
-          setListUnstable(false);
-          return;
-        }
-        if (classifyListFailure(result).kind === "relink") onRelink();
-        else setListUnstable(true);
-      },
     },
   );
+
+  // 새 응답마다 한 번씩 처리한다. 합류한 응답(이 화면이 생기기 전에 시작한 요청)은 반영한 뒤 새로 조회한다
+  const [takeDetail] = useState(() => createIntake<Timed<PromiseDetail>>(performance.now()));
+  const [takeList] = useState(() => createIntake<Timed<ParticipantList>>(performance.now()));
+
+  useEffect(() => {
+    const taken = takeDetail(polledDetail);
+    if (!taken) return;
+    if (taken.joined) void mutate();
+    const { result, startedAt } = taken.data;
+    const outcome = decidePoll(result, {
+      startedAt,
+      lastWriteAt: lastWriteRef.current,
+      dragging: false,
+      submitting: false,
+    });
+    if (outcome.kind === "stale") return;
+    if (outcome.kind === "relink") {
+      onRelink();
+      return;
+    }
+    if (outcome.kind === "keep_last") {
+      setOffline(true);
+      return;
+    }
+    setOffline(false);
+    if (outcome.kind === "apply" || outcome.kind === "defer") {
+      setDetail({
+        promiseStatus: outcome.data.promiseStatus,
+        currentConfirmation: outcome.data.currentConfirmation,
+      });
+      setSettings(outcome.data.settings);
+    }
+  }, [polledDetail, takeDetail, mutate, onRelink]);
+
+  // 명단 화면 값: 새 data가 올 때마다 렌더 중에 한 번 반영한다(React의 "이전 값과 비교해 상태 조정" 방식).
+  // 성공이면 그 명단, 일시 실패면 마지막 명단을 두고 불안정 표시. 링크 재조회 같은 부수 효과는 아래 효과에서 한다
+  const [listSeen, setListSeen] = useState<Timed<ParticipantList> | undefined>(undefined);
+  const [list, setList] = useState<ParticipantList | null>(null);
+  const [listUnstable, setListUnstable] = useState(false);
+  if (polledList !== listSeen) {
+    setListSeen(polledList);
+    const listResult = polledList?.result;
+    if (listResult?.ok) {
+      setList(listResult.data);
+      setListUnstable(false);
+    } else if (listResult && classifyListFailure(listResult).kind !== "relink") {
+      setListUnstable(true);
+    }
+  }
+
+  useEffect(() => {
+    const taken = takeList(polledList);
+    if (!taken) return;
+    if (taken.joined) void mutateList();
+    const { result } = taken.data;
+    if (!result.ok && classifyListFailure(result).kind === "relink") onRelink();
+  }, [polledList, takeList, mutateList, onRelink]);
 
   // 자동 승계(MEMBER-12-03) 반영: 명단의 내 역할이 /me와 다르면 /me를 한 번 다시 부른다
   // 명단이 이미 5초마다 오므로 요청을 늘리지 않는다. 같은 요청이 겹치지 않게 막는다
