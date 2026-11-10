@@ -1,12 +1,29 @@
 import { callApi, type ApiResult } from "@/components/create-promise/api";
 import type { CandidateItem } from "@/lib/result/format";
+import type { PromiseSettings } from "@/lib/manage/settings-form";
 import type { Confirmation } from "@/lib/result/view";
 
 // STATE-API-01 응답 중 화면이 쓰는 부분 (실제 구현 lib/state/promise-view.ts)
+// settings는 collecting·closed·confirmed에서 모든 값이 채워져 있다(draft만 null이 있고 이 화면은 draft를 그리지 않는다)
 export type PromiseDetail = {
   promiseId: string;
   promiseStatus: string;
+  settings: PromiseSettings;
   currentConfirmation: Confirmation | null;
+};
+
+// MEMBER-API-06 응답 (실제 구현 app/api/v1/promises/[promiseId]/participants/route.ts GET)
+export type ParticipantRow = {
+  participantId: string;
+  nickname: string;
+  role: "host" | "member";
+  isMe: boolean;
+};
+
+export type ParticipantList = {
+  participantLimit: number;
+  currentParticipantCount: number;
+  participants: ParticipantRow[];
 };
 
 // STATE-API-10 응답 (실제 구현 app/api/v1/promises/[promiseId]/candidates/route.ts)
