@@ -12,6 +12,11 @@
 
 # testing
 /coverage
+# 통합 테스트(031) 결과·실행 기록
+/test-results/
+/playwright-report/
+/blob-report/
+/tests/e2e/.state/
 
 # next.js
 /.next/
@@ -32,6 +37,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# 통합 테스트 DB(Neon e2e 브랜치) 주소 — 위 .env*에도 걸리지만 명시해 둔다
+.env.e2e
 
 # vercel
 .vercel
