@@ -52,7 +52,8 @@ npm run db:generate       # prisma generate
 npm run db:deploy         # 개발 DB에 커밋된 마이그레이션을 적용한다
 npm run dev               # http://localhost:3000
 
-npm run test              # Vitest
+npm run test              # Vitest (Windows는 PowerShell에서 실행)
+npm run test:e2e          # 통합 테스트(Playwright). .env.e2e 필요, dev 서버를 끈 뒤 실행한다
 npm run lint
 npm run typecheck         # next typegen && tsc --noEmit
 npm run build             # prisma generate && next build. dev 서버를 끈 뒤 실행한다
@@ -60,7 +61,8 @@ npm run build             # prisma generate && next build. dev 서버를 끈 뒤
 
 - 스키마를 바꿀 때는 `npm run db:migrate -- --name <변경명>`을 쓴다. `db push`는 쓰지 않는다.
 - CI는 `.github/workflows/ci.yml`에 있다. CI 빌드는 가짜 DB 주소로 돌기 때문에 DB를 읽는 페이지는 동적 렌더링이어야 한다.
-- 브라우저 확인에는 Playwright와 로컬 Chromium을 scratchpad에 설치해서 쓴다. 프로젝트 의존성에는 추가하지 않는다.
+- 통합 테스트는 `tests/e2e/`에 두고 devDependencies의 `@playwright/test`로 돌린다(운영 모드 `next start`, chromium·webkit·webkit 모바일). DB는 `.env.e2e`(Neon e2e 브랜치)만 쓴다. 준비는 `docs/architecture/SETUP.md` 4-5.
+- 한 번만 확인하고 버릴 스크립트는 `scripts/verify/`(Git 제외)에 둔다. 남길 시나리오는 `tests/e2e/`로 옮긴다.
 
 ## 4. 설계 원칙
 
@@ -79,7 +81,8 @@ npm run build             # prisma generate && next build. dev 서버를 끈 뒤
 ## 5. 작업 시 주의
 
 - **Windows 인코딩:** PowerShell `Get-Content`를 옵션 없이 쓰면 한글이 깨진다. `-Encoding utf8`을 붙이거나 Read 도구를 쓴다.
-- **dev 서버:** `npm run build` 전에 dev 서버를 반드시 끈다. 같은 `.next`를 써서 500이 난다. 작업이 끝나면 3000 포트와 남은 `next` 프로세스를 정리한다.
+- **dev 서버:** `npm run build`와 `npm run test:e2e` 전에 dev 서버를 반드시 끈다. 둘 다 같은 `.next`에 운영 빌드를 만들어 dev 서버가 500을 낸다. `test:e2e` 뒤 배포용 빌드가 필요하면 `npm run build`를 다시 돌린다. 작업이 끝나면 3000·3100·3101 포트와 남은 `next` 프로세스를 정리한다.
+- **Vitest는 PowerShell에서:** Git Bash(경로가 소문자 `c:`)에서 `npm run test`를 돌리면 Vitest가 모듈을 두 번 읽어 모든 파일이 `Cannot read properties of undefined (reading 'config')`로 실패한다. PowerShell에서 실행한다.
 - **DB 확인 데이터:** 개발 DB로 확인한 뒤에는 확인용 데이터를 삭제한다. 모든 테이블의 스냅샷(행 수·md5)이 시작 상태와 같은지 확인한다. 운영 DB로는 테스트하지 않는다.
 - **Prisma 타입 이름:** 모델 `Promise`는 전역 Promise와 이름이 겹친다. `import type { Promise as PromiseModel } from "@/prisma/generated/client"`처럼 별칭을 쓴다.
 - **Git 규칙:**

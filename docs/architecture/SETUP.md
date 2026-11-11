@@ -304,10 +304,50 @@ npm run dev         # 개발 서버
 npm run lint        # 린트 (출력 없으면 통과)
 npm run typecheck   # 타입 검사 (출력 없으면 통과)
 npm run build       # 배포용 빌드
+npm run test:e2e    # 통합 테스트 (4-5 준비 필요)
 npx prisma studio   # 브라우저로 DB 테이블 보기 · 값 직접 입력 가능
 ```
 
 > 💡 `npx prisma studio`는 백엔드 입문 단계에서 제일 쓸모 있는 도구입니다. 내 DB에 뭐가 들어 있는지 눈으로 보면서 개발하면 훨씬 빠릅니다.
+
+### 4-5. 통합 테스트(e2e) DB와 실행
+
+통합 테스트(`tests/e2e/`, Playwright)는 화면을 실제 브라우저로 누르고 DB를 직접 확인합니다. **개발 DB와 다른 전용 DB**를 씁니다. 테스트가 시각을 조작하고 행을 지우기 때문입니다.
+
+**① Neon에 e2e 브랜치 만들기 (처음 한 번)**
+
+- [ ] 본인 Neon 프로젝트 → **Branches** → **Create branch**
+- [ ] 이름은 `e2e`, 부모는 `main`(개발 DB 브랜치). 데이터 복사 여부는 상관없습니다(테스트는 자기가 만든 데이터만 지웁니다)
+- [ ] 만든 브랜치의 **Connect**에서 연결 문자열을 복사합니다. 호스트 이름(`ep-…`)이 개발 DB와 **달라야** 합니다
+
+**② `.env.e2e` 만들기**
+
+저장소 루트에 `.env.e2e` 파일을 만들고 두 줄을 넣습니다. `.gitignore`에 들어 있어 커밋되지 않습니다.
+
+```bash
+DATABASE_URL="postgresql://…@ep-e2e브랜치-pooler.….neon.tech/neondb?sslmode=verify-full&channel_binding=require"
+DIRECT_URL="postgresql://…@ep-e2e브랜치.….neon.tech/neondb?sslmode=verify-full&channel_binding=require"
+```
+
+- `DIRECT_URL`은 `-pooler`가 없는 주소입니다(마이그레이션·테스트 DB 도우미가 씀). 비우면 `DATABASE_URL`을 씁니다.
+- **`.env.e2e`가 없거나, `.env`의 개발 DB와 같은 DB(같은 주소, 또는 풀러·직접 연결만 다른 같은 호스트)를 가리키면 테스트가 시작하지 않고 멈춥니다.**
+- 운영 DB 주소는 절대 넣지 않습니다.
+
+**③ 브라우저 설치와 실행**
+
+```bash
+npm run test:e2e:install    # Chromium·WebKit 내려받기 (처음 한 번, Playwright 버전을 올린 뒤에도)
+npm run test:e2e:migrate    # e2e DB에 커밋된 마이그레이션 적용 (test:e2e도 시작할 때 자동으로 함)
+npm run test:e2e            # 전체: chromium 데스크톱 · webkit 데스크톱 · webkit 모바일(iPhone 크기)
+npm run test:e2e:chromium   # 하나만: test:e2e:webkit, test:e2e:mobile
+npx playwright show-report test-results/e2e-report   # 결과 보고서
+```
+
+- 실행하면 `prisma generate` → `prisma migrate deploy`(e2e DB) → `next build` → `next start`(운영 모드) 순서로 서버를 띄웁니다. 빌드를 다시 쓰려면 `E2E_SKIP_BUILD=1`(같은 주소로 빌드한 표시가 있을 때만).
+- **`npm run dev`를 끄고 실행하세요.** 같은 `.next` 폴더에 운영 빌드를 만듭니다. 테스트 뒤 `npm run dev`는 그대로 쓸 수 있고, 배포용 빌드가 필요하면 `npm run build`를 다시 돌립니다.
+- 브라우저는 `https://localhost:3100`으로 엽니다. 세션 쿠키가 항상 `Secure`라 WebKit(아이폰 엔진)은 `http://localhost`로는 쿠키를 보내지 않기 때문에, 테스트가 자체 서명 인증서로 로컬 https 프록시를 띄우고 그 뒤에서 `next start`가 `127.0.0.1:3101`로 돕니다. 3000 포트(개발 서버)와 겹치지 않습니다.
+- 테스트마다 데이터를 만들고 지웁니다. 실행이 중간에 멈춰 남은 데이터는 다음 실행 시작 때 `tests/e2e/.state/`의 기록으로 지우고, 끝날 때 모든 테이블의 행 수·md5가 시작 상태와 같은지 확인합니다.
+- 작업자 수는 기본 2입니다(`E2E_WORKERS=1`로 줄일 수 있음).
 
 ---
 
@@ -341,6 +381,8 @@ npx prisma studio   # 브라우저로 DB 테이블 보기 · 값 직접 입력 �
 | 안 건드린 파일이 전부 변경으로 표시됨                                                                                     | 줄바꿈(CRLF/LF) 문제. `git config --global core.autocrlf false` 설정 후 `git add --renormalize .`                               |
 | 커밋에 파일 수백 개가 딸려옴                                                                                              | Prisma가 `.agents` · `.claude` · `.windsurf`에 문서를 복사합니다. `.gitignore`에 들어 있는지 확인하세요                         |
 | `npm ci` 실패                                                                                                             | `package-lock.json`이 최신이 아님. pull을 받았는지 확인                                                                         |
+| Git Bash에서 `npm run test`가 모든 파일 `Cannot read properties of undefined (reading 'config')`로 실패                   | Git Bash의 소문자 드라이브 경로(`c:/…`) 때문에 Vitest가 모듈을 두 번 읽습니다. **PowerShell**에서 실행하세요                    |
+| `npm run test:e2e` 중 개발 서버가 500을 냄                                                                                | 둘이 같은 `.next`를 씁니다. **dev 서버를 끄고** 통합 테스트를 돌리세요(4-5)                                                     |
 | `npm.ps1 ... 로드할 수 없습니다` (Windows)                                                                                | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`                                                                           |
 | cmd에서 `Ctrl+C`가 복사가 안 됨                                                                                           | cmd에서 그 조합은 **실행 중단**입니다. 복사는 드래그 후 `Enter` 또는 우클릭                                                     |
 

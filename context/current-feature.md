@@ -1,60 +1,59 @@
-# 현재 기능: 배포 전 정리 1 (030)
+# 현재 기능: 배포 전 정리 2 — 통합 테스트 (031)
 
 ## 상태
 
-완료
+검토 중
 
 ## 스펙
 
-`context/features/030-predeploy-cleanup-1.md`
+`context/features/031-integration-tests.md`
 
 ## 목표
 
-배포 전 정리. 기능 동작은 바꾸지 않는다. ① `npm audit` 패치·마이너 수정 ② Prisma 3종 정확한 버전 고정 ③ `sslmode` 경고 원인 확인과 `.env.example`·문서 정리 ④ Prettier 전체 재포맷 분리와 `.git-blame-ignore-revs` ⑤ fix 회귀 「재조율 뒤 3초 안에 채워짐」을 요청 순서 판정으로.
+`scripts/verify/`(Git 제외)에만 있던 브라우저·API 확인을 저장소의 통합 테스트(`tests/e2e/`, Playwright Test)로 옮기고, 운영 모드(`next build` → `next start`)와 WebKit(데스크톱·iPhone 크기)에서 돌린다. 테스트 DB는 `.env.e2e`(Neon e2e 브랜치)만. 제품 코드 변경 없음.
 
 ## 수용 기준
 
-스펙 `context/features/030-predeploy-cleanup-1.md` AC-1~6 참고.
+스펙 `context/features/031-integration-tests.md` AC-1~5 참고.
 
 ## 작업 기준점
 
-- 브랜치: `ahn/chore-배포전-정리` (`main` c877314에서 생성, 029 PR #34 병합 포함). PR #35 병합(22c648b)
-- 시작 시 작업 트리 깨끗함. 원격이 사라진 로컬 `ahn/` 브랜치 없음
-- 커밋(사용자 확인 뒤): 3064ad8 `docs: 029 완료 기록`, c1c72ae npm 취약점, a6fc5a3 Prisma 고정, 4d5aa8b sslmode, ed3597d 재포맷(서식만, `.git-blame-ignore-revs`에 등록), aecc1be blame 무시 목록, 이 기록
+- 브랜치: `ahn/test-통합테스트` (`main` 22c648b에서 생성, 030 PR #35 병합 포함). 원격이 사라진 로컬 `ahn/` 브랜치 없음
+- 시작 시 작업 트리 깨끗함
+- 커밋(사용자 확인 뒤): 첫 커밋 `docs: 030 완료 기록`, 이어서 통합 테스트
+
+## 구성
+
+- `playwright.config.ts`: 프로젝트 `chromium-desktop`·`webkit-desktop`·`webkit-mobile`(iPhone 13). API만 부르는 `tests/e2e/api/`는 chromium에서만. 작업자 2, 재시도 없음
+- `tests/e2e/support/`: `e2e-env.ts`(`.env.e2e` 가드 — 없음·같은 주소·같은 DB 호스트·이름이면 거부), `serve.ts`(generate → migrate deploy → next build → next start 127.0.0.1:3101 → https://localhost:3100 프록시), `self-signed.ts`(테스트 전용 인증서, 의존성 없음), `db.ts`(시각 조작·잠금·조회·스냅샷), `api.ts`(준비용 API·`Seed`), `ledger.ts`(만든 링크 기록), `fixtures.ts`(`seed`·`app` 픽스처, 요청 순서 판정 `expectPollReflects`·`changeClock`), `ui.ts`, `global-setup.ts`·`global-teardown.ts`(남은 데이터 정리·스냅샷 비교)
+- 테스트: `api/logout`·`api/common-guard`·`api/production`, `host-manage`, `participant-finish`, `modal`, `availability-sync`, `full-flow`, `links-and-forms` — 프로젝트별 43·28·28개(알려진 실패 1개 포함)
+- npm: `test:e2e`, `test:e2e:chromium`·`:webkit`·`:mobile`, `test:e2e:migrate`, `test:e2e:install`. devDependencies `@playwright/test` 1.64.1, `pg` 8.23.0(앱이 쓰는 버전), `@types/pg` 8.23.1
+- `.gitignore`: `.env.e2e`, `/test-results/`, `/tests/e2e/.state/` 등. `SETUP.md` 4-5 「통합 테스트(e2e) DB와 실행」
 
 ## 검증 결과
 
-2026-11-11, Node.js 24.20.0
+2026-11-11, Node.js 24.20.0, Playwright 1.64.1(Chromium·WebKit 27.2)
 
-| 단계          | 명령                                                                                                                                         | 결과                                                                                                                                                                                                       |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 시작          | `npm audit` / test·lint·typecheck / `prettier --check .`                                                                                     | 15건(critical 1·high 6·moderate 8) / 1647 통과·통과·통과 / 79파일 서식 불일치                                                                                                                              |
-| 1 npm 취약점  | `npm install next@16.4.6 eslint-config-next@16.4.6 --save-exact`, `npm update fast-uri zod minimatch typescript-eslint @typescript-eslint/*` | 11건(high 4·moderate 7)으로 감소. next critical·sharp·zod·fast-uri 해결. test 1647·lint·typecheck 통과                                                                                                     |
-| 2 Prisma 고정 | `package.json` `^` 제거 → `npm install`, `npm ls`, `npm run db:generate`, `npm run db:status`                                                | 3종 7.10.0, Generated Prisma Client (7.10.0), 「Database schema is up to date!」(마이그레이션 2개). test·lint·typecheck 통과                                                                               |
-| 3 sslmode     | `pg` 직접 연결 스크립트(지금 값 / `sslmode=verify-full`), `prisma migrate status`(환경변수로 `verify-full` 덮어씀, 풀러·직접 연결 각각)      | 지금 값: 연결 성공 + `SECURITY WARNING ... aliases for 'verify-full'`. `verify-full`: 경고 없이 연결 성공, Prisma CLI 둘 다 최신. 덮어쓴 값이 실제 쓰이는지 없는 호스트로 P1001 확인. `.env`는 바꾸지 않음 |
-| 4 재포맷      | `npx prettier --write .`, TypeScript AST·주석 비교 스크립트, test·lint·typecheck                                                             | 79파일. 코드 파일 44개 AST·주석 동일(1건은 문자열 속 `//`를 주석으로 오인한 비교 스크립트 문제, 줄바꿈만 바뀜). 재포맷 전후 test 1647·lint·typecheck 같음                                                  |
-| 5 RED         | 시간 입력 보드에 `if (taken.joined) return;`을 임시로 넣어 fix 001 이전처럼 합류 응답을 버리게 함                                            | 준비(합류 상황) 통과, 판정 실패 — 5회 모두 전환 뒤 +6.1초, 정기 폴링(+6.0초) 응답 뒤에 채워짐. 원복 확인                                                                                                   |
-| 5 GREEN       | 이 브랜치 dev 서버(Next 16.4.6)에서 10회 연속                                                                                                | 10/10(각 22개 항목), 50회차 중 상태 전환이 3초 넘게 늦은 2회차(+5.8초·+6.1초)도 통과                                                                                                                       |
-| 5 `main`      | scratchpad에 `main` 작업 트리(c877314, `npm ci`, Next 16.3.5) → dev 서버에서 10회 연속                                                       | 10/10, 전환이 3초 넘게 늦은 3회차도 통과                                                                                                                                                                   |
-| 마지막        | PowerShell `$env:TZ` `UTC`(오프셋 0)·`America/Los_Angeles`(오프셋 480) test                                                                  | 둘 다 1647 통과                                                                                                                                                                                            |
-|               | `npm run build`(dev 서버 종료·3000 포트·`next` 프로세스 없음 확인 뒤)                                                                        | 통과                                                                                                                                                                                                       |
-
-| 브라우저 (dev 서버, Next 16.4.6, Playwright 1.56.1 + 로컬 Chromium) | 결과                                                                                                                                                                  |
-| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 027 회귀 `scripts/verify/027-host-manage.mjs`                       | 84/84                                                                                                                                                                 |
-| 028 회귀 `scripts/verify/028-participant-finish.mjs`                | 75/75                                                                                                                                                                 |
-| fix 회귀 `scripts/verify/fix-availability-intake.mjs`(새 판정)      | 위 표 — 이 브랜치 10/10, `main` 10/10                                                                                                                                 |
-| 정리                                                                | 실행마다 확인 링크·약속·참여자·세션·슬롯 삭제, 6개 테이블 행 수·md5 시작 상태와 동일(모든 실행). dev 서버 종료, 3000 포트·`next` 프로세스 없음, `main` 작업 트리 삭제 |
+| 단계           | 명령·방법                                                                                               | 결과                                                                                                                                     |
+| -------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 통합 1회차     | `npm run test:e2e`(빌드 포함)                                                                           | 95 통과, 1 건너뜀(모바일의 마우스 드래그), 전체 14.2분. 프로젝트 구간 chromium 4.9분·webkit 5.0분·mobile 5.8분(병렬로 겹침). 스냅샷 동일 |
+| 통합 2회차     | 바로 이어서 같은 명령                                                                                   | 95 통과, 1 건너뜀, 전체 20.3분. chromium 5.3분·webkit 9.0분·mobile 8.2분(절전 없음, DB 왕복 지연). 스냅샷 동일                           |
+| 사용자 확인 뒤 | CLAUDE.md·SETUP.md 정리, 드래그 0ms 알려진 실패 테스트(`test.fail`, webkit 데스크톱), `--repeat-each=5` | webkit 5/5 예상대로 실패(1칸·2칸 선택), chromium 5/5 통과                                                                                |
+| 통합 3회차     | `npm run test:e2e`                                                                                      | 진행 중 네트워크 끊김(Neon 호스트 `ENOTFOUND`)으로 2건 실패·46.9분 — 환경 문제. 남은 링크 2개 종료 단계에서 정리, 스냅샷 동일            |
+| 통합 4회차     | `npm run test:e2e`(빌드 포함, `E2E_SKIP_BUILD` 조건 변경 뒤)                                            | 97 예상대로(알려진 실패 1 = 예상대로 실패 포함), 2 건너뜀, 예상 밖 0, 전체 16.5분. chromium 4.8분·webkit 4.8분·mobile 7.8분. 스냅샷 동일 |
+| 가드           | 임시 폴더로 `loadE2eEnv`, `.env.e2e`를 잠시 옮기고 `playwright test --list`                             | 없음·같은 주소·풀러/직접만 다른 같은 DB 거부, 다른 브랜치 허용. Playwright가 서버 시작 전에 멈춤                                         |
+| 중단 뒤 정리   | 전체 흐름 실행 중 프로세스 강제 종료 → 다음 실행                                                        | 「지난 실행이 남긴 테스트 링크 1개 정리」, 스냅샷 동일                                                                                   |
+| 단위·정적      | `npm run test`(PowerShell), `lint`, `typecheck`, `prettier --check`, `npm run build`                    | 1647 통과, 통과, 통과, 통과, 통과. 제품 코드(`app`·`components`·`lib`·`prisma`) 변경 없음                                                |
+| 정리           | 포트 3000·3100·3101, `next`·playwright 프로세스                                                         | 없음. `.next`는 `npm run build`로 일반 빌드로 되돌림                                                                                     |
 
 ## 메모
 
-- 남은 취약점 11건(메이저 업데이트로만 고칠 수 있는 것은 없음)
-  - `prisma` → `@prisma/config` → `deepmerge-ts` <8 (high), `prisma` → `mysql2` ≤3.23.0 (high): Prisma CLI(generate·migrate·studio)에서만 쓰고 앱 실행 번들에는 들어가지 않는다. `mysql2`는 MySQL용이라 우리 연결 경로(PostgreSQL)에서 쓰이지 않는다. 고치려면 `prisma` 7.10.1(패치) — `AGENTS.md`의 7.10.0 고정·팀 합의 규칙 때문에 올리지 않았다
-  - `typescript-eslint` 계열 6개 → `minimatch` 10.x (moderate): lint에서만 쓴다. `minimatch` 11.0.1 이상이 필요한데 `@typescript-eslint/typescript-estree` 8.72.2가 `^10.2.2`로 묶고 있고 수정판은 아직 알파(8.72.3-alpha)뿐이다 → 상위 정식판 대기
-- Next.js 16.3.5 → 16.4.6: 마이너 업데이트지만 `TECH_STACK.md`가 확정 버전을 팀이 같이 정하도록 하고 있어 팀 공유가 필요하다. critical(RCE 등 11건) 때문에 사용자 지시 범위(패치·마이너)에서 올렸다. Next 16.4.6 `next dev`가 `AGENTS.md` 상단 블록 제목을 `#` → `##`로 다시 만들어 이 변경도 의존성 커밋에 넣는다
-- sslmode: 지금 `.env`는 `sslmode=require&channel_binding=require`. `pg` 8.23(`pg-connection-string` 2.14)은 `uselibpqcompat` 없이 `require`를 `verify-full`(인증서·호스트 이름 확인)로 처리하며 경고를 낸다. `pg` 9부터 `require`는 libpq 뜻(암호화만, 확인 안 함)이 된다. 지금 동작을 유지하는 `verify-full`로 명시했다(`.env.example`·`SETUP.md` 1-3·1-4·자주 터지는 오류)
-- fix 회귀 판정(⑤): 흔들림의 원인은 상태 조회 SWR의 포커스 재조회 1초 제한(`focusThrottleInterval`·`dedupingInterval` 1000) — 포커스 직전 1초 안에 상태 폴링이 있었으면 포커스 재조회가 생략되어 다음 5초 폴링에서야 화면이 바뀐다. 이 시간은 fix 001과 무관해 판정 대상에서 뺐다. 기준점을 「재조율 응답 뒤 처음 받은 collecting 상태 응답(화면 전환)」으로 두고, 「전환 + 5초 이후에 보낸 /availability 요청(시간 입력 화면의 첫 정기 폴링)의 응답보다 먼저 채워지는가」로 판정한다. 또 지금 네트워크에서는 「모두의 시간」 조회가 전환 전에 끝나 합류가 재현되지 않아(첫 시험 5회 모두 새 요청), 그 조회 하나를 전환 직후까지 붙잡아 합류를 확실히 만들고 「준비: 합류 상황」 검사를 더했다
-- 확인 스크립트는 Git 제외(`scripts/verify/`)라 ⑤의 변경은 커밋에 들어가지 않는다. 저장소로 옮기는 일은 다음 PR
+- WebKit은 `http://localhost`에서 Secure 쿠키를 저장만 하고 보내지 않는다(실험으로 확인). 세션 쿠키가 항상 Secure라 테스트는 로컬 https 프록시로 연다 — 덕분에 Secure 속성도 확인됨
+- 판정은 요청 순서(030 방식): 변경 응답을 받은 순간 이후에 시작한 첫 폴링 응답이 새 값이어야 하고(캐시 없음), 그 응답 뒤 화면이 바뀐다. 변경 중 나가 있던 폴링이 새 값을 받아 먼저 바뀐 경우도 인정. 폴링이 멈추는 화면(취소·로그아웃)은 변경 전에 대기를 건다
+- 제품 문제(다음 PR에서 수정): WebKit에서 드래그 마지막 칸에 들어가자마자(0ms) 놓으면 그 칸이 빠짐(50ms 두면 정상). `availability-sync`의 「0ms 놓아도 3칸」 테스트를 webkit 데스크톱 `test.fail`로 둠 — 고치는 PR에서 표시를 지우면 RED. Playwright는 예상대로 실패를 expected(통과 수)로 센다
+- 제품 문제(다음 PR에서 수정): `/api/health`에 `Cache-Control`이 없다
+- Git Bash(소문자 `c:` 경로)에서 `npm run test`가 모든 파일 실패 — Vitest가 모듈을 두 번 읽는 경로 문제. PowerShell에서는 통과. CLAUDE.md 5절·SETUP.md 「자주 터지는 오류」에 기록
+- CLAUDE.md 3절의 「Playwright를 프로젝트 의존성에 넣지 않는다」를 「통합 테스트는 `tests/e2e/`·`@playwright/test`, 일회성 확인은 `scripts/verify/`(Git 제외)」로 바꿈. `test:e2e`도 dev 서버를 끄고 실행
 
 ## 완료 이력
 
