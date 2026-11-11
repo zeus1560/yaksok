@@ -2,7 +2,7 @@
 
 ## 상태
 
-검토 중
+완료
 
 ## 스펙
 
@@ -18,7 +18,7 @@
 
 ## 작업 기준점
 
-- 브랜치: `ahn/chore-배포전-정리` (`main` c877314에서 생성, 029 PR #34 병합 포함)
+- 브랜치: `ahn/chore-배포전-정리` (`main` c877314에서 생성, 029 PR #34 병합 포함). PR #35 병합(22c648b)
 - 시작 시 작업 트리 깨끗함. 원격이 사라진 로컬 `ahn/` 브랜치 없음
 - 커밋(사용자 확인 뒤): 3064ad8 `docs: 029 완료 기록`, c1c72ae npm 취약점, a6fc5a3 Prisma 고정, 4d5aa8b sslmode, ed3597d 재포맷(서식만, `.git-blame-ignore-revs`에 등록), aecc1be blame 무시 목록, 이 기록
 
@@ -291,3 +291,11 @@
 - 변경: 1단계 차이 목록 `docs/design/FIGMA_DIFF.md`(차이 63개 — 고침 29, 보류 5, 그대로 29). 2단계 토큰 정리(`app/globals.css` `@theme`, 컴포넌트 직접 값 0곳), 시각 18개·구성 11개, 공통 확인 모달 `components/common/modal.tsx`(확인 창 6곳 + 모든 기기 로그아웃, 판단 순수 함수 `lib/ui/modal.ts`), 헤더 「닉네임 · 역할」(`components/common/identity.tsx`, `/me` 기준), 설정 달력 반 폭, 선택 요약 `lib/availability/summary.ts`·`maxAvailable`. API·DB 변경 없음. 문서: DECISION_CONFLICTS R-35 신설
 - 검증: Vitest 1647건(이번 17건, 기존 기대값 수정 없음), `TZ=UTC`·`America/Los_Angeles`에서도 통과, lint·typecheck·build 통과. 브라우저 모달 29개 항목, 027 회귀 84개·028 회귀 75개 항목 통과(선택자만 수정), fix 회귀 20/21(재조율 뒤 3초 기준 — `main`에서도 같은 비율로 흔들림, 030에서 테스트 개선). 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
 - 남은 제한: 그리드 개편(07-1·07-2·07-4·21-1·13~16)·23-1 보류, R-35 판단 팀 확인 필요, fix 회귀 3초 기준 흔들림(030)
+
+### 2026-11-11 — 배포 전 정리 1 (030)
+
+- 스펙: `context/features/030-predeploy-cleanup-1.md`
+- 브랜치: `ahn/chore-배포전-정리` (PR #35 병합)
+- 변경: `next`·`eslint-config-next` 16.3.5 → 16.4.6(critical 포함 15건 → 11건, 남은 것은 Prisma CLI·lint 전용), Prisma 3종 `^` 없이 7.10.0 고정, `.env.example`·`SETUP.md` `sslmode=verify-full` 명시(`pg` 8의 `require` = `verify-full` 경고 제거, `.env`는 그대로), Prettier 전체 재포맷 커밋 분리(79파일, AST·주석 동일)와 `.git-blame-ignore-revs`, fix 회귀 「재조율 뒤 3초 안에 채워짐」을 요청 순서 판정(정기 폴링 응답보다 먼저 채워지는가)으로 변경(Git 제외 스크립트). 기능 동작 변경 없음
+- 검증: Vitest 1647건(재포맷 전후 같음), `TZ=UTC`·`America/Los_Angeles` 통과, lint·typecheck·build 통과, `prisma migrate status` 최신. 새 판정 RED(합류 응답 무시 흉내) 5/5 실패 → 이 브랜치 10/10·`main` 10/10. 027 회귀 84/84·028 회귀 75/75. 확인용 데이터 삭제, 스냅샷 시작 상태와 동일
+- 남은 제한: 남은 취약점 11건(Prisma 7.10.1은 팀 합의 필요, `typescript-eslint`는 상위 수정 대기), Next 16.4.6 업데이트 팀 공유 필요, 확인 스크립트 저장소 이동은 031
