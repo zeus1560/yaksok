@@ -3,7 +3,7 @@
 ## 식별자와 상태
 
 - 스펙 ID: `032-preview-deploy`
-- 상태: 진행 중 — 1부(저장소 이전·배포 준비 코드·배포 안내 문서) 구현·검증·커밋 완료. 2부(배포된 주소로 확인·문서 반영·`main` 배포 끄기·휴대폰 체크리스트)는 문서·설정 작업 완료, **AC-7(`@smoke` 2회 연속 통과)은 미충족** — 함수 지역(미국 동부)과 DB(싱가포르)가 멀어 전체 흐름 1개가 실패. `vercel.json`에 `"regions": ["sin1"]`을 넣었고, 그 커밋의 새 Preview 배포에서 다시 확인
+- 상태: 진행 중 — 1부(저장소 이전·배포 준비 코드·배포 안내 문서)와 2부(배포된 주소로 확인·문서 반영·`main` 배포 끄기·함수 지역 고정·휴대폰 체크리스트) 구현·검증 완료. AC-7 충족(2026-11-12, 함수 지역 `sin1` 배포 5c90481에서 `@smoke` 9개 2회 연속 통과 — 테스트 도우미 판정 수정 뒤). 남은 것: 실제 휴대폰 확인(MOBILE_CHECKLIST), `main` 병합 뒤 운영 배포가 생기지 않는지 확인, 취소와 겹친 조회의 401(다음 수정 PR)
 - 문서 작성만으로 구현이나 검증을 완료 처리하지 않는다.
 
 ## 근거
@@ -45,11 +45,11 @@
 - [x] AC-4: `npm run test:e2e:preview`가 서버 없이 `E2E_BASE_URL`에 `@smoke` 묶음을 돌리고, DB 도우미는 `.env.preview`, 보호 우회 헤더를 보낸다. `.env.preview`가 개발 DB와 같으면 시작하지 않는다
 - [x] AC-5: DEPLOY.md에 Neon 미리보기 브랜치·`.env.preview`·마이그레이션·Vercel 가입·불러오기·빌드·Node·환경변수 표·보호 우회·배포 후 확인·운영 주소 비공유
 - [x] AC-6: 단위 테스트(PowerShell)·lint·typecheck·build, `TZ=UTC`·`America/Los_Angeles` 통과, 로컬 `test:e2e` 세 프로젝트 1회 회귀 없음
-- [ ] AC-7 (2부): 배포된 미리보기 주소에서 `@smoke` 9개 2회 연속 통과 — 2026-11-12 2회 모두 8/9(API 확인 6개·chromium·webkit 모바일 전체 흐름 통과, webkit 데스크톱 전체 흐름 실패). 원인은 함수 지역 `iad1` ↔ DB `ap-southeast-1` 지연(배포 설정). `vercel.json` `regions: ["sin1"]` 커밋의 새 배포에서 다시 실행
+- [x] AC-7 (2부): 배포된 미리보기 주소에서 `@smoke` 9개 2회 연속 통과 — 2026-11-12 배포 5c90481(함수 지역 `sin1`, `/api/health` 112~198ms)에서 9/9 두 번 연속(2.2분·2.4분). 경과: ① 배포 522784f(함수 지역 `iad1`)는 2회 모두 8/9 — 함수 지역 ↔ DB 지연(배포 설정) → `vercel.json` `regions`로 해결. ② 배포 5c90481도 처음 2회는 8/9 — 테스트 문제: `expectPollReflects`가 취소 커밋 직후 도착한 새 값(409) 폴링을 기준 시각(`mark()`) 전이라고 버려, 폴링이 멈춘 화면에서 다음 응답을 20초 기다리다 실패. 새 값이면 받도록 판정을 고친 뒤 통과(`tests/e2e/support/fixtures.ts`)
 - [x] AC-8 (2부): DEPLOY.md에 Production으로 잡힌 첫 배포와 해결(새 커밋 push), 대시보드 직접 배포 주의, 한글 브랜치 이름의 브랜치 주소 겹침과 배포 고유 주소 사용, 스키마 PR의 push 전 `db:deploy:preview`, 함수 지역 확인 방법
 - [x] AC-9 (2부): 브랜치 이름 규칙 `<이름>/<타입>-<영어 설명>` — CLAUDE.md, `/feature` start·complete, `context/ai-interaction.md`, SETUP.md 4-1. 이미 만든 브랜치는 그대로
 - [x] AC-10 (2부): `vercel.json` `git.deploymentEnabled.main: false`와 DEPLOY.md 9절 「다시 켜는 방법」. 실제로 `main` 배포가 멈추는지는 병합 뒤에만 확인 가능(남은 확인)
-- [x] AC-12 (2부): 함수 지역을 `vercel.json` `"regions": ["sin1"]`로 고정, DEPLOY.md 3절 ⑤는 「저장소 `vercel.json`이 기준, 대시보드 설정은 참고」. 실제 지역(`x-vercel-id` `…::sin1::…`)은 새 배포에서 확인(남은 확인, AC-7과 함께)
+- [x] AC-12 (2부): 함수 지역을 `vercel.json` `"regions": ["sin1"]`로 고정, DEPLOY.md 3절 ⑤는 「저장소 `vercel.json`이 기준, 대시보드 설정은 참고」. 배포 5c90481에서 확인 — 시작 줄 `함수 지역 sin1`(4회 모두), `/api/health` 112~198ms(`iad1`일 때 453ms), 화면 조회 API 0.11~0.38초(`iad1`일 때 2.4~5.5초)
 - [x] AC-11 (2부): `docs/architecture/MOBILE_CHECKLIST.md` — 휴대폰에서 여는 방법(Vercel 로그인·Share 링크), 항목마다 기대 결과와 아이폰·안드로이드 결과 칸
 
 ## 데이터와 인터페이스
