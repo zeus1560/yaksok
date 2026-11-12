@@ -1,4 +1,4 @@
-// 운영 모드(next start) 확인 — GET API no-store, Next.js 캐시가 끼지 않음, 세션 쿠키 속성 (031)
+// 운영 모드(next start·배포 주소) 확인 — GET API no-store, Next.js 캐시가 끼지 않음, 세션 쿠키 속성 (031). 배포 확인 묶음 @smoke(032)
 import { test, expect } from "../support/fixtures";
 import {
   as,
@@ -17,7 +17,7 @@ const expectNoStore = (label: string, res: ApiResponse, status: number) => {
   expect(res.cacheControl, `${label}: Cache-Control`).toBe("no-store");
 };
 
-test("GET API는 성공·실패 응답 모두 Cache-Control: no-store", async ({ seed }) => {
+test("GET API는 성공·실패 응답 모두 Cache-Control: no-store @smoke", async ({ seed }) => {
   const P = await seed.collecting({ members: 1 });
   const host = as(P.promiseId, P.hostToken);
   await host.submit([slotAt(2, "10:00"), slotAt(2, "10:30")]);
@@ -42,7 +42,7 @@ test("GET API는 성공·실패 응답 모두 Cache-Control: no-store", async ({
   expectNoStore("후보 200(마감 뒤)", await host.get("/candidates?limit=5&offset=0"), 200);
 });
 
-test("상태가 바뀐 직후의 GET이 새 값을 돌려준다(운영 모드 캐시 없음)", async ({ seed }) => {
+test("상태가 바뀐 직후의 GET이 새 값을 돌려준다(운영 모드 캐시 없음) @smoke", async ({ seed }) => {
   const P = await seed.collecting({ members: 0 });
   const host = as(P.promiseId, P.hostToken);
 
@@ -79,7 +79,9 @@ test("상태가 바뀐 직후의 GET이 새 값을 돌려준다(운영 모드 �
   expect((await as(P.promiseId, m.token).get()).json.code).toBe("PROMISE_CANCELLED");
 });
 
-test("세션 쿠키 속성: HttpOnly·Secure·SameSite=Lax·Path=약속 API·Max-Age", async ({ seed }) => {
+test("세션 쿠키 속성: HttpOnly·Secure·SameSite=Lax·Path=약속 API·Max-Age @smoke", async ({
+  seed,
+}) => {
   const P = await seed.collecting({ members: 0 });
   for (const [label, res] of [
     [

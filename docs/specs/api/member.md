@@ -1043,11 +1043,11 @@ Request Body: 없음. 본문을 보내도 무시한다. `source` 등 어떤 필�
 
 #### Status Code: 201 Created
 
-| 이름        | 타입   | 설명                                                                     |
-| ----------- | ------ | ------------------------------------------------------------------------ |
-| inviteToken | string | 발급된 초대 토큰                                                         |
-| inviteUrl   | string | 서버가 `NEXT_PUBLIC_BASE_URL + "/p/" + inviteToken`으로 조립한 초대 주소 |
-| nextAction  | string | 항상 `register_host`                                                     |
+| 이름        | 타입   | 설명                                                                                                                                         |
+| ----------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| inviteToken | string | 발급된 초대 토큰                                                                                                                             |
+| inviteUrl   | string | 서버가 `NEXT_PUBLIC_BASE_URL + "/p/" + inviteToken`으로 조립한 초대 주소. Vercel 미리보기 배포에서는 요청이 온 그 배포 주소로 조립한다(R-36) |
+| nextAction  | string | 항상 `register_host`                                                                                                                         |
 
 `promiseId`는 넣지 않는다. 아직 약속이 없기 때문이다.
 

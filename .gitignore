@@ -39,6 +39,8 @@ yarn-error.log*
 .env*
 # 통합 테스트 DB(Neon e2e 브랜치) 주소 — 위 .env*에도 걸리지만 명시해 둔다
 .env.e2e
+# 미리보기 배포 DB(Neon 미리보기 브랜치)·배포 주소·보호 우회 비밀값 (032)
+.env.preview
 
 # vercel
 .vercel

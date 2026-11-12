@@ -2,7 +2,7 @@
 // 화면·API로 만들 수 없는 상황(마감 지남, 7일 지난 링크, 잠금 대기 중 세션 변화)만 여기서 만든다
 import { createHash } from "node:crypto";
 import pg from "pg";
-import { loadE2eEnv } from "./e2e-env";
+import { loadTargetDb } from "./e2e-env";
 
 let pool: pg.Pool | null = null;
 
@@ -10,7 +10,7 @@ export function db(): pg.Pool {
   if (!pool) {
     // 유휴 연결은 빨리 닫는다(Neon 절전·PC 절전 뒤 끊긴 연결을 다시 쓰지 않게). 유휴 연결 오류로 작업자가 죽지 않게 받는다
     pool = new pg.Pool({
-      connectionString: loadE2eEnv().DIRECT_URL,
+      connectionString: loadTargetDb().DIRECT_URL,
       max: 4,
       idleTimeoutMillis: 5_000,
     });
@@ -201,7 +201,7 @@ export async function withRowLocked<T>(
   send: () => Promise<T>,
   between: () => Promise<void>,
 ): Promise<{ result: T; waited: boolean }> {
-  const locker = new pg.Client({ connectionString: loadE2eEnv().DIRECT_URL });
+  const locker = new pg.Client({ connectionString: loadTargetDb().DIRECT_URL });
   await locker.connect();
   try {
     await locker.query("BEGIN");

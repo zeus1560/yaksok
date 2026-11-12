@@ -41,11 +41,11 @@
 
 **헤더**
 
-| Name         | Value                                          | 필수 |
-| ------------ | ---------------------------------------------- | ---- |
-| Cookie       | `ys_session_{promiseId}=...`                   | O    |
-| Origin       | 서비스 도메인(`NEXT_PUBLIC_BASE_URL`의 origin) | O    |
-| Content-Type | `application/json`                             | O    |
+| Name         | Value                                                                          | 필수 |
+| ------------ | ------------------------------------------------------------------------------ | ---- |
+| Cookie       | `ys_session_{promiseId}=...`                                                   | O    |
+| Origin       | 서비스 도메인(`NEXT_PUBLIC_BASE_URL`의 origin, 미리보기는 그 배포 주소 — R-36) | O    |
+| Content-Type | `application/json`                                                             | O    |
 
 **Path 파라미터**
 

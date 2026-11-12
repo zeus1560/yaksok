@@ -1,59 +1,57 @@
-# 현재 기능: 배포 전 정리 2 — 통합 테스트 (031)
+# 현재 기능: 배포 전 정리 3 — 미리보기 배포 (032) 1부
 
 ## 상태
 
-완료
+진행 중 (1부 구현·검증·커밋 완료. 2부는 Vercel 설정 뒤 배포된 주소로 확인)
 
 ## 스펙
 
-`context/features/031-integration-tests.md`
+`context/features/032-preview-deploy.md`
 
 ## 목표
 
-`scripts/verify/`(Git 제외)에만 있던 브라우저·API 확인을 저장소의 통합 테스트(`tests/e2e/`, Playwright Test)로 옮기고, 운영 모드(`next build` → `next start`)와 WebKit(데스크톱·iPhone 크기)에서 돌린다. 테스트 DB는 `.env.e2e`(Neon e2e 브랜치)만. 제품 코드 변경 없음.
+브랜치를 Vercel 미리보기로 띄울 준비. 저장소를 개인 저장소로 옮기고(Vercel Hobby), Origin 검사·초대 링크를 배포 환경별로 결정(미리보기는 그 배포 주소), 미리보기 DB 수동 마이그레이션, 배포된 주소에 통합 테스트 확인 묶음(`@smoke`)을 돌릴 수 있게 하고, 따라 할 배포 안내(`DEPLOY.md`)를 쓴다.
 
 ## 수용 기준
 
-스펙 `context/features/031-integration-tests.md` AC-1~5 참고.
+스펙 `context/features/032-preview-deploy.md` AC-0~7 참고(AC-7은 2부).
 
 ## 작업 기준점
 
-- 브랜치: `ahn/test-통합테스트` (`main` 22c648b에서 생성, 030 PR #35 병합 포함). PR #36 병합(94e9568). 원격이 사라진 로컬 `ahn/` 브랜치 없음
-- 시작 시 작업 트리 깨끗함
-- 커밋(사용자 확인 뒤): 첫 커밋 `docs: 030 완료 기록`, 이어서 통합 테스트
+- 원격: `team` = `yeonseong0224/yaksok`(옛 `origin`), `origin` = `zeus1560/yaksok`(새 개인 저장소). `main`만 push — 새 `origin/main` 94e9568 = 로컬 `main`(`git ls-remote`로 확인). 열린 `ahn/` 브랜치는 옮기지 않음(로컬 브랜치는 그대로 `team/…`을 추적)
+- 브랜치: `ahn/feat-미리보기-배포` (`origin/main` 94e9568에서 생성, upstream 없음 — 첫 push 때 `-u origin`)
+- 준비 단계: 작업 트리 깨끗, `main` 22c648b → 94e9568 fast-forward, 원격이 사라진 로컬 `ahn/` 브랜치 없음(원격이 남은 로컬 `ahn/` 26개는 그대로)
+- 커밋(사용자 확인 뒤): 90fe993 `docs: 031 완료 기록`(요청의 「fix 002」는 아직 하지 않은 작업으로 확인), 이어서 미리보기 배포 준비. `git push -u origin ahn/feat-미리보기-배포`
 
 ## 구성
 
-- `playwright.config.ts`: 프로젝트 `chromium-desktop`·`webkit-desktop`·`webkit-mobile`(iPhone 13). API만 부르는 `tests/e2e/api/`는 chromium에서만. 작업자 2, 재시도 없음
-- `tests/e2e/support/`: `e2e-env.ts`(`.env.e2e` 가드 — 없음·같은 주소·같은 DB 호스트·이름이면 거부), `serve.ts`(generate → migrate deploy → next build → next start 127.0.0.1:3101 → https://localhost:3100 프록시), `self-signed.ts`(테스트 전용 인증서, 의존성 없음), `db.ts`(시각 조작·잠금·조회·스냅샷), `api.ts`(준비용 API·`Seed`), `ledger.ts`(만든 링크 기록), `fixtures.ts`(`seed`·`app` 픽스처, 요청 순서 판정 `expectPollReflects`·`changeClock`), `ui.ts`, `global-setup.ts`·`global-teardown.ts`(남은 데이터 정리·스냅샷 비교)
-- 테스트: `api/logout`·`api/common-guard`·`api/production`, `host-manage`, `participant-finish`, `modal`, `availability-sync`, `full-flow`, `links-and-forms` — 프로젝트별 43·28·28개(알려진 실패 1개 포함)
-- npm: `test:e2e`, `test:e2e:chromium`·`:webkit`·`:mobile`, `test:e2e:migrate`, `test:e2e:install`. devDependencies `@playwright/test` 1.64.1, `pg` 8.23.0(앱이 쓰는 버전), `@types/pg` 8.23.1
-- `.gitignore`: `.env.e2e`, `/test-results/`, `/tests/e2e/.state/` 등. `SETUP.md` 4-5 「통합 테스트(e2e) DB와 실행」
+- 순수 함수 `lib/public-url.ts`: `allowedOrigins(env)`(로컬·운영 `NEXT_PUBLIC_BASE_URL`, 운영 `VERCEL_PROJECT_PRODUCTION_URL`, 미리보기 `VERCEL_URL`·`VERCEL_BRANCH_URL` → https), `inviteBaseUrl(env, currentOrigin)`(미리보기는 요청이 온 배포 주소 → 브랜치 → 배포, 그 밖은 `NEXT_PUBLIC_BASE_URL` → 운영 도메인 → 현재 주소). 화면에서도 import
+- 사용처: `lib/origin.ts`(허용 목록 대조), `lib/member/invite-link.ts`(`issueInviteLink(source, requestOrigin)`), `app/api/v1/links/route.ts`(검사 통과한 Origin 전달), `components/create-promise/done-card.tsx`(`NEXT_PUBLIC_VERCEL_ENV` + `window.location.origin`)
+- `/api/health`: no-store, DB 실패 503 `{ ok: false }`
+- 통합 테스트 대상: `tests/e2e/support/e2e-env.ts`(`E2E_TARGET` local·preview, `.env.preview` 가드 — 개발·e2e DB와 같으면 거부, `E2E_BASE_URL` https·경로 없음, 보호 우회 헤더), `api.ts`·`fixtures.ts`(헤더·쿠키 도메인 = 대상 호스트, 미리보기는 인증서 확인), `db.ts`·`global-setup.ts`(대상 DB, 미리보기는 시작 때 `/api/health` 확인), 실행 기록 `tests/e2e/.state/preview/` 분리, `playwright.config.ts`(미리보기: webServer 없음·`grep @smoke`·결과 `test-results/preview/`), `run-preview.ts`
+- 묶음 `@smoke`: `api/smoke.spec.ts`(새: health·초대 링크 주소·다른 Origin 거부 5종 + 방장 등록), `api/production.spec.ts` 3개, `full-flow.spec.ts` — chromium 7개 + webkit 데스크톱·모바일 전체 흐름 각 1개
+- npm: `test:e2e:preview`, `db:deploy:preview`, `db:status:preview`(`migrate.ts --preview [--status]`). `.gitignore` `.env.preview`
+- 문서: `docs/architecture/DEPLOY.md`(신규), TECH_STACK 배포 절, SETUP(원격 두 곳·4-5 안내·배포 행), PRD 사본 6장, API_CONVENTIONS 3·7절, member.md `inviteUrl`, time.md Origin 행, DECISION_CONFLICTS R-36·7절, docs/README, `.env.example` 주석, CLAUDE.md(구조·배포·원격), `/feature` start·complete(원격 이름)
 
 ## 검증 결과
 
-2026-11-11, Node.js 24.20.0, Playwright 1.64.1(Chromium·WebKit 27.2)
+2026-11-12, Node.js 24, Playwright 1.64.1
 
-| 단계           | 명령·방법                                                                                               | 결과                                                                                                                                     |
-| -------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| 통합 1회차     | `npm run test:e2e`(빌드 포함)                                                                           | 95 통과, 1 건너뜀(모바일의 마우스 드래그), 전체 14.2분. 프로젝트 구간 chromium 4.9분·webkit 5.0분·mobile 5.8분(병렬로 겹침). 스냅샷 동일 |
-| 통합 2회차     | 바로 이어서 같은 명령                                                                                   | 95 통과, 1 건너뜀, 전체 20.3분. chromium 5.3분·webkit 9.0분·mobile 8.2분(절전 없음, DB 왕복 지연). 스냅샷 동일                           |
-| 사용자 확인 뒤 | CLAUDE.md·SETUP.md 정리, 드래그 0ms 알려진 실패 테스트(`test.fail`, webkit 데스크톱), `--repeat-each=5` | webkit 5/5 예상대로 실패(1칸·2칸 선택), chromium 5/5 통과                                                                                |
-| 통합 3회차     | `npm run test:e2e`                                                                                      | 진행 중 네트워크 끊김(Neon 호스트 `ENOTFOUND`)으로 2건 실패·46.9분 — 환경 문제. 남은 링크 2개 종료 단계에서 정리, 스냅샷 동일            |
-| 통합 4회차     | `npm run test:e2e`(빌드 포함, `E2E_SKIP_BUILD` 조건 변경 뒤)                                            | 97 예상대로(알려진 실패 1 = 예상대로 실패 포함), 2 건너뜀, 예상 밖 0, 전체 16.5분. chromium 4.8분·webkit 4.8분·mobile 7.8분. 스냅샷 동일 |
-| 가드           | 임시 폴더로 `loadE2eEnv`, `.env.e2e`를 잠시 옮기고 `playwright test --list`                             | 없음·같은 주소·풀러/직접만 다른 같은 DB 거부, 다른 브랜치 허용. Playwright가 서버 시작 전에 멈춤                                         |
-| 중단 뒤 정리   | 전체 흐름 실행 중 프로세스 강제 종료 → 다음 실행                                                        | 「지난 실행이 남긴 테스트 링크 1개 정리」, 스냅샷 동일                                                                                   |
-| 단위·정적      | `npm run test`(PowerShell), `lint`, `typecheck`, `prettier --check`, `npm run build`                    | 1647 통과, 통과, 통과, 통과, 통과. 제품 코드(`app`·`components`·`lib`·`prisma`) 변경 없음                                                |
-| 정리           | 포트 3000·3100·3101, `next`·playwright 프로세스                                                         | 없음. `.next`는 `npm run build`로 일반 빌드로 되돌림                                                                                     |
+| 단계                | 명령·방법                                                                                | 결과                                                                                                                                                                                                             |
+| ------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 저장소 이전         | `git push -u origin main`, `git ls-remote origin refs/heads/main`                        | 94e9568 = 로컬 `main`                                                                                                                                                                                            |
+| TDD RED             | 빈 구현(`[]`·`null`)으로 `npx vitest run lib/public-url.test.ts`                         | 13개 중 11개 실패(기대값 불일치, 예: `expected [] to deeply equal [ 'http://localhost:3000' ]`, `expected null to be 'https://yaksok-abc123-team.vercel.app'`). 빈 값 2개는 통과                                 |
+| GREEN·정리          | 구현 → `originOf`를 `lib/origin.ts`가 같이 쓰게 정리                                     | 13/13, 연결 테스트(route·invite-link) 포함 70/70                                                                                                                                                                 |
+| 단위·정적           | `npm run test`(PowerShell), `TZ=UTC`·`TZ=America/Los_Angeles`, lint, typecheck, prettier | 1667 통과(이번 20건) ×3, 통과, 통과, 통과                                                                                                                                                                        |
+| 빌드                | `npm run build` / `DATABASE_URL`·`DIRECT_URL` 빈 값으로 `next build`                     | 통과 / `Failed to collect page data for /api/health`로 실패(운영 첫 배포 예상 확인, DEPLOY.md 반영)                                                                                                              |
+| `.env.preview` 가드 | 임시 폴더로 `loadPreviewEnv`·`loadPreviewDb`, `npm run db:status:preview`(파일 없음)     | 없음·개발 DB 같음·풀러 차이·DIRECT_URL만 개발 DB·e2e DB 같음·주소 없음·http 거부, 정상·명령 환경변수 우선 허용. 마이그레이션 명령도 prisma 실행 전에 멈춤                                                        |
+| 목록                | `playwright test --list` / `--grep @smoke` / `E2E_TARGET=preview`(파일 없음)             | 102개 / 9개(chromium 7·webkit 전체 흐름 2) / 설정 단계에서 거부                                                                                                                                                  |
+| 로컬 통합           | `npm run test:e2e`(빌드 포함, 세 프로젝트 1회)                                           | 99 통과, 2 건너뜀, 1 「예상과 다름」 — 알려진 실패(WebKit 드래그 0ms, `test.fail`)가 이번엔 재현되지 않고 통과. 13.9분, 스냅샷 동일. 같은 테스트 `--repeat-each=5` → 5/5 예상대로 실패(흔들림, 이번 변경과 무관) |
+| 정리                | 포트 3000·3100·3101, `next`·playwright 프로세스                                          | 없음. `.next`는 `npm run build`로 일반 빌드                                                                                                                                                                      |
 
 ## 메모
 
-- WebKit은 `http://localhost`에서 Secure 쿠키를 저장만 하고 보내지 않는다(실험으로 확인). 세션 쿠키가 항상 Secure라 테스트는 로컬 https 프록시로 연다 — 덕분에 Secure 속성도 확인됨
-- 판정은 요청 순서(030 방식): 변경 응답을 받은 순간 이후에 시작한 첫 폴링 응답이 새 값이어야 하고(캐시 없음), 그 응답 뒤 화면이 바뀐다. 변경 중 나가 있던 폴링이 새 값을 받아 먼저 바뀐 경우도 인정. 폴링이 멈추는 화면(취소·로그아웃)은 변경 전에 대기를 건다
-- 제품 문제(다음 PR에서 수정): WebKit에서 드래그 마지막 칸에 들어가자마자(0ms) 놓으면 그 칸이 빠짐(50ms 두면 정상). `availability-sync`의 「0ms 놓아도 3칸」 테스트를 webkit 데스크톱 `test.fail`로 둠 — 고치는 PR에서 표시를 지우면 RED. Playwright는 예상대로 실패를 expected(통과 수)로 센다
-- 제품 문제(다음 PR에서 수정): `/api/health`에 `Cache-Control`이 없다
-- Git Bash(소문자 `c:` 경로)에서 `npm run test`가 모든 파일 실패 — Vitest가 모듈을 두 번 읽는 경로 문제. PowerShell에서는 통과. CLAUDE.md 5절·SETUP.md 「자주 터지는 오류」에 기록
-- CLAUDE.md 3절의 「Playwright를 프로젝트 의존성에 넣지 않는다」를 「통합 테스트는 `tests/e2e/`·`@playwright/test`, 일회성 확인은 `scripts/verify/`(Git 제외)」로 바꿈. `test:e2e`도 dev 서버를 끄고 실행
+- Vercel 확인(공식 문서, 2026-11-12): 시스템 변수 `VERCEL_ENV`·`VERCEL_URL`·`VERCEL_BRANCH_URL`·`VERCEL_PROJECT_PRODUCTION_URL`은 빌드·실행 모두, 스킴 없는 호스트. Next.js에 `NEXT_PUBLIC_VERCEL_ENV` 제공. 우회 헤더 `x-vercel-protection-bypass`, 비밀값은 Settings → Deployment Protection → Protection Bypass for Automation(모든 플랜), Vercel이 `VERCEL_AUTOMATION_BYPASS_SECRET` 자동 추가. Standard Protection은 운영 도메인을 막지 않음. Node 26.x 기본·24.x 선택 가능, `engines.node`가 설정보다 우선. Build Command는 `build` 스크립트 사용. Hobby는 조직의 비공개 저장소 배포 불가·커밋 작성자가 계정 주인이어야 함
 
 ## 완료 이력
 

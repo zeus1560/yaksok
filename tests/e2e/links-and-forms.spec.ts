@@ -5,6 +5,7 @@
 // - 세션 쿠키 속성(브라우저가 받은 값): HttpOnly·SameSite·Path(+ 로컬 https라 Secure도)
 import { test, expect } from "./support/fixtures";
 import { nick, seoulDate } from "./support/api";
+import { E2E_HOST } from "./support/e2e-env";
 import { ageLinkPastExpiry, agePromisePastLinkExpiry } from "./support/db";
 import {
   DANGER_RGB,
@@ -178,7 +179,7 @@ test("브라우저가 받은 세션 쿠키 속성과 HttpOnly(스크립트에서
   // SameSite는 chromium에서만 보고, WebKit은 위의 Set-Cookie 원문으로 확인한다
   if (test.info().project.name.startsWith("chromium")) expect(c.sameSite, "SameSite").toBe("Lax");
   expect(c.path, "Path").toBe(`/api/v1/promises/${P.promiseId}`);
-  expect(c.domain, "호스트 전용").toBe("localhost");
+  expect(c.domain, "호스트 전용").toBe(E2E_HOST);
   expect(c.secure, "Secure(로컬 https 프록시라 확인 가능)").toBe(true);
   expect(c.expires * 1000, "만료 시각 = 마감 + 7일 근처").toBeGreaterThan(Date.now() + 6 * 86400e3);
   expect(await page.evaluate(() => document.cookie)).not.toContain("ys_session_");

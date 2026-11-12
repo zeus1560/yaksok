@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { inviteBaseUrl } from "@/lib/public-url";
 import { Prisma } from "@/prisma/generated/client";
 
 // 발급 출처. 클라이언트 입력으로 받지 않고 호출하는 서버 라우트가 고정값으로 넘긴다 (MEMBER-API-09)
@@ -29,10 +30,14 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 // 링크만 만든다. 약속·참여자는 방장 등록(MEMBER-API-02) 때 생긴다 (STATE-02-01)
-export async function issueInviteLink(source: InviteLinkSource): Promise<IssuedInviteLink> {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+// requestOrigin: 웹은 허용 검사를 통과한 요청 Origin. 미리보기 배포에서는 그 주소로 링크를 만든다(032)
+export async function issueInviteLink(
+  source: InviteLinkSource,
+  requestOrigin?: string | null,
+): Promise<IssuedInviteLink> {
+  const baseUrl = inviteBaseUrl(process.env, requestOrigin);
   if (!baseUrl) {
-    throw new Error("NEXT_PUBLIC_BASE_URL이 설정되지 않았습니다.");
+    throw new Error("초대 링크 기준 주소(NEXT_PUBLIC_BASE_URL)가 설정되지 않았습니다.");
   }
 
   // invite_token UNIQUE 위반이면 새 토큰으로 1회만 재시도한다

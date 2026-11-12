@@ -5,10 +5,10 @@
 프롬프트에 준비 단계가 없어도 매번 실행한다. 이미 이 기능의 브랜치에서 작업 중이면(이어서 하는 시작) 1번만 확인하고 건너뛴다.
 
 1. `git status`로 작업 트리가 깨끗한지 확인한다. 커밋하지 않은 변경이 있으면 아무것도 하지 말고 중단 후 보고한다.
-2. `git checkout main` → `git fetch --prune` → `git pull`.
-3. 이전 기능 브랜치 정리: 로컬 `ahn/` 브랜치 중 원격 브랜치가 사라진(`git branch -vv`에서 `: gone]`) 것만 `git branch -D`로 지운다. Squash 병합이라 `git branch --merged`로는 병합 여부를 알 수 없으므로 이 기준을 쓴다. 원격이 남아 있는 브랜치는 지우지 말고 목록만 보고한다.
+2. `git checkout main` → `git fetch --all --prune` → `git pull`. 원격은 `origin`(개인 저장소 `zeus1560/yaksok`, `main`과 작업 브랜치)과 `team`(팀 저장소 `yeonseong0224/yaksok`, 옛 `ahn/` 브랜치)이다. `main`은 `origin/main`을 따른다.
+3. 이전 기능 브랜치 정리: 로컬 `ahn/` 브랜치 중 추적하던 원격 브랜치(`origin` 또는 `team`)가 사라진(`git branch -vv`에서 `: gone]`) 것만 `git branch -D`로 지운다. Squash 병합이라 `git branch --merged`로는 병합 여부를 알 수 없으므로 이 기준을 쓴다. 원격이 남아 있는 브랜치는 지우지 말고 목록만 보고한다.
 4. 프롬프트에 적힌 전제 파일이 `main`에 있는지 확인하고, 없으면 중단 후 보고한다.
-5. 프롬프트에 적힌 브랜치 이름(없으면 `ahn/feat-<설명>`)으로 `main`에서 새 브랜치를 만든다.
+5. 프롬프트에 적힌 브랜치 이름(없으면 `ahn/feat-<설명>`)으로 `main`에서 새 브랜치를 만든다. `main`을 upstream으로 추적하지 않게 하고(`--no-track`), 첫 push 때 `git push -u origin <브랜치>`로 연결한다.
 
 ## 구현
 

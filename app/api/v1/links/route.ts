@@ -14,7 +14,7 @@ async function handle(request: Request): Promise<Response> {
   }
 
   try {
-    const { inviteToken, inviteUrl } = await issueInviteLink("web");
+    const { inviteToken, inviteUrl } = await issueInviteLink("web", request.headers.get("origin"));
     return Response.json({ inviteToken, inviteUrl, nextAction: "register_host" }, { status: 201 });
   } catch (error) {
     // 연결 문자열이 섞일 수 있는 원문 메시지 대신 오류 종류만 남긴다

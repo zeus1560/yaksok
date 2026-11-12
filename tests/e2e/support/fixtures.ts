@@ -12,6 +12,7 @@ import {
   type TestInfo,
 } from "@playwright/test";
 import { BASE, Seed, cookieName, type Draft } from "./api";
+import { E2E_HOST, IS_PREVIEW, bypassHeaders } from "./e2e-env";
 
 export { expect };
 
@@ -39,8 +40,10 @@ export class App {
       hasTouch: use.hasTouch,
       locale: "ko-KR",
       timezoneId: "Asia/Seoul",
-      ignoreHTTPSErrors: true,
+      ignoreHTTPSErrors: !IS_PREVIEW,
       baseURL: BASE,
+      // 미리보기의 Deployment Protection 우회(값이 없으면 빈 객체)
+      extraHTTPHeaders: bypassHeaders(),
     });
     this.contexts.push(context);
     this.trackLinks(context);
@@ -101,7 +104,7 @@ export async function addSession(context: BrowserContext, promiseId: string, tok
     {
       name: cookieName(promiseId),
       value: token,
-      domain: "localhost",
+      domain: E2E_HOST,
       path: `/api/v1/promises/${promiseId}`,
       httpOnly: true,
       secure: true,

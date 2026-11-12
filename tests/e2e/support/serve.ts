@@ -8,7 +8,13 @@ import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
 import path from "node:path";
-import { E2E_APP_PORT, E2E_BASE_URL, E2E_PORT, ROOT, loadE2eEnv } from "./e2e-env";
+import {
+  E2E_APP_PORT,
+  E2E_PORT,
+  LOCAL_BASE_URL as E2E_BASE_URL,
+  ROOT,
+  loadE2eEnv,
+} from "./e2e-env";
 import { createLocalhostCertificate } from "./self-signed";
 
 const log = (message: string) => console.error(`[e2e 서버] ${message}`);
