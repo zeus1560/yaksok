@@ -209,7 +209,9 @@ export async function expectPollReflects(
       if (req.method() !== "GET" || !opts.match(new URL(r.url()).pathname)) return false;
       const after = afterOf(opts.after);
       if (startedAt(req) >= after) return true;
-      if (Date.now() < after) return false;
+      // ②: 기준 시각(변경 응답을 받고 mark()한 때)보다 먼저 도착했어도 새 값이면 받는다. 새 값은 서버가 이미
+      // 변경을 커밋했다는 뜻이다. 응답이 빠른 배포에서는 커밋 직후의 폴링이 mark()보다 먼저 돌아오고,
+      // 취소처럼 폴링이 멈추는 화면은 그 응답을 버리면 다음 응답이 오지 않는다(032 2부)
       return opts.fresh(await r.json().catch(() => null), r);
     },
     { timeout: 20_000 },
