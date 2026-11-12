@@ -1,8 +1,8 @@
-# 현재 기능: 배포 전 정리 3 — 미리보기 배포 (032) 1부
+# 현재 기능: 배포 전 정리 3 — 미리보기 배포 (032) 2부
 
 ## 상태
 
-진행 중 (1부 구현·검증·커밋 완료. 2부는 Vercel 설정 뒤 배포된 주소로 확인)
+진행 중 (1부 구현·검증·커밋 완료. 2부: 문서·`vercel.json`·휴대폰 체크리스트 작성 완료, 배포 주소 `@smoke`는 2회 모두 8/9 — `vercel.json` `regions: ["sin1"]` 커밋의 새 Preview 배포에서 다시 확인)
 
 ## 스펙
 
@@ -14,7 +14,7 @@
 
 ## 수용 기준
 
-스펙 `context/features/032-preview-deploy.md` AC-0~7 참고(AC-7은 2부).
+스펙 `context/features/032-preview-deploy.md` AC-0~11 참고(AC-7~11은 2부, AC-7 미충족).
 
 ## 작업 기준점
 
@@ -49,8 +49,32 @@
 | 로컬 통합           | `npm run test:e2e`(빌드 포함, 세 프로젝트 1회)                                           | 99 통과, 2 건너뜀, 1 「예상과 다름」 — 알려진 실패(WebKit 드래그 0ms, `test.fail`)가 이번엔 재현되지 않고 통과. 13.9분, 스냅샷 동일. 같은 테스트 `--repeat-each=5` → 5/5 예상대로 실패(흔들림, 이번 변경과 무관) |
 | 정리                | 포트 3000·3100·3101, `next`·playwright 프로세스                                          | 없음. `.next`는 `npm run build`로 일반 빌드                                                                                                                                                                      |
 
+## 2부 구성 (커밋 전)
+
+- `vercel.json`(신규): `"regions": ["sin1"]` — 함수 지역 고정(저장소가 기준, 대시보드 설정은 참고. DEPLOY.md 3절 ⑤), `git.deploymentEnabled.main: false` — `main` 자동 배포 끔. 다시 켜는 방법은 DEPLOY.md 9절
+- `docs/architecture/DEPLOY.md`: 한눈에 보기(운영 배포·휴대폰 확인 행), 2절 스키마 PR은 push 전 `db:deploy:preview`(미리보기 DB는 모든 Preview가 공유), 3절 ⑤ 함수 지역 필수·`sin1`·확인 방법(`x-vercel-id`), 6절 배포 고유 주소 사용·Preview 표시 확인, 7절 Production으로 잡힌 배포와 해결(빈 커밋 push)·대시보드 직접 배포 주의, 8절 한글 브랜치 이름과 브랜치 주소, 9절 `main` 배포 끄기·다시 켜기, 문제 해결 4행
+- `docs/architecture/MOBILE_CHECKLIST.md`(신규): 여는 방법 2가지(Vercel 로그인·Share 링크), 0~9절 78개 항목(기대 결과 + 아이폰·안드로이드 결과 칸), 확인하지 않는 것
+- 브랜치 이름 `<이름>/<타입>-<영어 설명>`: CLAUDE.md, `/feature` start(이름 규칙·스키마 push 전 안내)·complete, `context/ai-interaction.md`, SETUP.md 4-1. docs/README 목차
+- `tests/e2e/support/global-setup.ts`: 미리보기 시작 때 `/api/health` 응답 시간과 함수 지역(`x-vercel-id`) 출력, 300ms 초과면 경고. 안내 문구의 절 번호 4 → 5
+
+## 2부 검증 결과
+
+2026-11-12, 배포 522784f(Preview, Ready), 배포 고유 주소, 미리보기 DB 마이그레이션 최신(`db:status:preview`)
+
+| 단계              | 명령·방법                                                                          | 결과                                                                                                                                                                                                                                                 |
+| ----------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| smoke 1회         | `npm run test:e2e:preview`                                                         | **8/9**, 6.4분. 실패: webkit 데스크톱 전체 흐름 — 제출 버튼이 「제출 중…」에서 10초 넘게 멈춤(PUT 응답 없음). 스냅샷 동일                                                                                                                            |
+| smoke 2회         | 같은 명령                                                                          | **8/9**, 5.3분. 실패: webkit 데스크톱 전체 흐름 — 취소 뒤 참여자 한 명의 폴링이 409가 아니라 401을 받고 멈춰 20초 대기 초과. 스냅샷 동일                                                                                                             |
+| webkit 데스크톱만 | `npm run test:e2e:preview -- --project=webkit-desktop`                             | 1/1, 3.9분 — 단독으로는 통과(WebKit 고유 문제 아님). 새 출력 `[e2e] 배포 응답: /api/health 453ms, 함수 지역 iad1` + 경고 확인                                                                                                                        |
+| 원인              | 응답 헤더·trace                                                                    | `x-vercel-id: icn1::iad1::…` — 함수는 미국 동부, DB는 `ap-southeast-1`. DB 없는 요청 0.24초, `/api/health`(쿼리 1번) 0.45초, 화면 폴링 조회 2.4~5.5초. webkit 데스크톱·모바일 흐름이 동시에 돌 때(8개 화면 폴링) 실패. **배포 설정 문제**            |
+| 실제 HTTPS 확인   | 통과한 API 확인 6개(2회 모두) + 직접 요청                                          | 세션 쿠키 `HttpOnly`·`Secure`·`SameSite=Lax`·`Path=/api/v1/promises/<id>`·Max-Age·Domain 없음, 다른 Origin 5종 403 `INVALID_ORIGIN`, 초대 링크 = 배포 주소이고 그 주소가 열림, GET API 성공·실패 모두 `no-store`(`x-vercel-cache: MISS`), health 200 |
+| 미리보기 DB       | 실행마다 끝 비교 + 직접 조회                                                       | 3회 모두 「시작 상태와 동일」. 직접 조회도 마지막 시작 스냅샷과 같고 실행 기록 파일 없음. 남은 행(링크 4·약속 1·참여자 1·세션 1)은 테스트 전부터 있던 것(개발 DB에서 복사된 3개 + 15:11 손 확인 1개)                                                 |
+| 단위·정적·빌드    | `npm run test`(PowerShell), lint, typecheck, `prettier --check .`, `npm run build` | 1667 통과(80파일), 통과, 통과, 통과, 통과. 포트 3000·3100·3101과 남은 `next`·playwright 프로세스 없음                                                                                                                                                |
+
 ## 메모
 
+- 2부에서 발견(032에서는 고치지 않음 — 다음 수정 PR에서 fix 002와 함께 공통 인증 모듈 수정, R-37): 취소 커밋과 겹친 조회의 401 — `session-auth.ts`가 약속 상태와 세션을 따로 읽어, 그 사이에 취소가 커밋되면 409 `PROMISE_CANCELLED` 대신 401. 화면 결과는 같음(401 뒤 링크 재조회 → 취소 안내). 스펙 미정 사항 참고
+- Vercel 확인(공식 문서, 2026-11-12, 2부): `git.deploymentEnabled`(브랜치별 `false`, 적지 않은 브랜치 기본 `true`, minimatch), `regions`는 대시보드 Function Region보다 우선·Hobby는 한 지역·기본 `iad1`·싱가포르 `sin1`, 공유 링크는 모든 플랜(Hobby는 계정 전체 1개, 배포 화면 Share → Anyone with the link), Ignored Build Step은 건너뛴 빌드가 Canceled로 남음. 문서에 없는 것: `vercel.json`을 어느 커밋에서 읽는지, 브랜치 주소에서 한글이 지워지는 규칙(관찰로만 확인), 대시보드 Create Deployment의 대상 환경
 - Vercel 확인(공식 문서, 2026-11-12): 시스템 변수 `VERCEL_ENV`·`VERCEL_URL`·`VERCEL_BRANCH_URL`·`VERCEL_PROJECT_PRODUCTION_URL`은 빌드·실행 모두, 스킴 없는 호스트. Next.js에 `NEXT_PUBLIC_VERCEL_ENV` 제공. 우회 헤더 `x-vercel-protection-bypass`, 비밀값은 Settings → Deployment Protection → Protection Bypass for Automation(모든 플랜), Vercel이 `VERCEL_AUTOMATION_BYPASS_SECRET` 자동 추가. Standard Protection은 운영 도메인을 막지 않음. Node 26.x 기본·24.x 선택 가능, `engines.node`가 설정보다 우선. Build Command는 `build` 스크립트 사용. Hobby는 조직의 비공개 저장소 배포 불가·커밋 작성자가 계정 주인이어야 함
 
 ## 완료 이력

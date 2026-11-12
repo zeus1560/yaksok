@@ -3,7 +3,7 @@
 ## 식별자와 상태
 
 - 스펙 ID: `032-preview-deploy`
-- 상태: 진행 중 — 1부(저장소 이전·배포 준비 코드·배포 안내 문서) 구현·검증·커밋 완료. 2부(배포된 주소로 확인)는 사용자의 Vercel 설정 뒤
+- 상태: 진행 중 — 1부(저장소 이전·배포 준비 코드·배포 안내 문서) 구현·검증·커밋 완료. 2부(배포된 주소로 확인·문서 반영·`main` 배포 끄기·휴대폰 체크리스트)는 문서·설정 작업 완료, **AC-7(`@smoke` 2회 연속 통과)은 미충족** — 함수 지역(미국 동부)과 DB(싱가포르)가 멀어 전체 흐름 1개가 실패. `vercel.json`에 `"regions": ["sin1"]`을 넣었고, 그 커밋의 새 Preview 배포에서 다시 확인
 - 문서 작성만으로 구현이나 검증을 완료 처리하지 않는다.
 
 ## 근거
@@ -25,7 +25,11 @@
   1. 배포 준비 코드: 허용 Origin 목록(로컬·운영·Vercel 미리보기)과 초대 링크 기준 주소를 순수 함수로(`lib/public-url.ts`), Origin 검사·링크 발급·완료 화면이 사용. 빌드(Prisma generate 위치·Node 24) 확인. 미리보기 DB 수동 마이그레이션 명령, `.env.preview` Git 제외. 저장소 문서의 배포 대상 Vercel로
   2. 배포 주소 테스트 준비: `E2E_TARGET=preview`·`E2E_BASE_URL` — webServer 없음, DB 도우미는 `.env.preview`(개발 DB와 같으면 거부), 묶음 `@smoke`, Vercel 보호 우회 헤더
   3. 배포 안내 문서 `docs/architecture/DEPLOY.md`
-- 2부 (다음): 사용자가 Vercel을 설정한 뒤 배포된 주소로 `@smoke` 실행·확인, 결과 기록
+- 2부: 사용자가 Vercel을 설정한 뒤
+  1. 배포된 주소로 `@smoke` 실행·확인(2회 연속 통과 목표), 실패 원인 구분(배포 설정·코드·테스트), 미리보기 DB 정리 확인
+  2. 겪은 일을 문서에 반영: 첫 배포가 Production으로 잡힌 일과 해결, 대시보드 직접 배포 주의, 한글 브랜치 이름과 브랜치 주소, 테스트는 배포 고유 주소, 브랜치 이름 영어 규칙(`<이름>/<타입>-<영어 설명>`), 스키마 PR은 push 전 `db:deploy:preview`
+  3. `main` 병합 뒤 운영 배포 끄기(`vercel.json`)와 다시 켜는 방법
+  4. 휴대폰 확인 체크리스트 `docs/architecture/MOBILE_CHECKLIST.md`
 - 하지 않을 일: Vercel 설정(사용자), 운영 DB·운영 환경변수, 공개 배포, 노션 PRD 수정(사용자), 빌드에 마이그레이션 넣기
 
 ## 선행 작업
@@ -41,7 +45,12 @@
 - [x] AC-4: `npm run test:e2e:preview`가 서버 없이 `E2E_BASE_URL`에 `@smoke` 묶음을 돌리고, DB 도우미는 `.env.preview`, 보호 우회 헤더를 보낸다. `.env.preview`가 개발 DB와 같으면 시작하지 않는다
 - [x] AC-5: DEPLOY.md에 Neon 미리보기 브랜치·`.env.preview`·마이그레이션·Vercel 가입·불러오기·빌드·Node·환경변수 표·보호 우회·배포 후 확인·운영 주소 비공유
 - [x] AC-6: 단위 테스트(PowerShell)·lint·typecheck·build, `TZ=UTC`·`America/Los_Angeles` 통과, 로컬 `test:e2e` 세 프로젝트 1회 회귀 없음
-- [ ] AC-7 (2부): 배포된 미리보기 주소에서 `@smoke` 통과
+- [ ] AC-7 (2부): 배포된 미리보기 주소에서 `@smoke` 9개 2회 연속 통과 — 2026-11-12 2회 모두 8/9(API 확인 6개·chromium·webkit 모바일 전체 흐름 통과, webkit 데스크톱 전체 흐름 실패). 원인은 함수 지역 `iad1` ↔ DB `ap-southeast-1` 지연(배포 설정). `vercel.json` `regions: ["sin1"]` 커밋의 새 배포에서 다시 실행
+- [x] AC-8 (2부): DEPLOY.md에 Production으로 잡힌 첫 배포와 해결(새 커밋 push), 대시보드 직접 배포 주의, 한글 브랜치 이름의 브랜치 주소 겹침과 배포 고유 주소 사용, 스키마 PR의 push 전 `db:deploy:preview`, 함수 지역 확인 방법
+- [x] AC-9 (2부): 브랜치 이름 규칙 `<이름>/<타입>-<영어 설명>` — CLAUDE.md, `/feature` start·complete, `context/ai-interaction.md`, SETUP.md 4-1. 이미 만든 브랜치는 그대로
+- [x] AC-10 (2부): `vercel.json` `git.deploymentEnabled.main: false`와 DEPLOY.md 9절 「다시 켜는 방법」. 실제로 `main` 배포가 멈추는지는 병합 뒤에만 확인 가능(남은 확인)
+- [x] AC-12 (2부): 함수 지역을 `vercel.json` `"regions": ["sin1"]`로 고정, DEPLOY.md 3절 ⑤는 「저장소 `vercel.json`이 기준, 대시보드 설정은 참고」. 실제 지역(`x-vercel-id` `…::sin1::…`)은 새 배포에서 확인(남은 확인, AC-7과 함께)
+- [x] AC-11 (2부): `docs/architecture/MOBILE_CHECKLIST.md` — 휴대폰에서 여는 방법(Vercel 로그인·Share 링크), 항목마다 기대 결과와 아이폰·안드로이드 결과 칸
 
 ## 데이터와 인터페이스
 
@@ -68,7 +77,8 @@
 ## 미정 사항
 
 - 운영 공개·운영 DB·운영 도메인 — 팀 결정 대기(그 전에는 Production 환경변수를 넣지 않음)
-- 미리보기를 팀원에게 보여 주는 방법(Hobby는 구성원 추가 불가) — 2부에서 확인
+- 미리보기를 팀원에게 보여 주는 방법(Hobby는 구성원 추가 불가) — 배포 화면 Share 링크(Hobby는 계정 전체 1개, 공식 문서 확인)를 MOBILE_CHECKLIST에 적음. 실제 동작은 휴대폰 확인 때 본다
+- (2부에서 발견, **032에서는 고치지 않음 — 다음 수정 PR에서 fix 002와 함께 공통 인증 모듈을 고친다**, R-37) 취소 커밋과 겹친 조회가 409 `PROMISE_CANCELLED` 대신 401을 받을 수 있음 — `lib/member/session-auth.ts`가 약속 상태와 세션을 따로 읽기 때문(취소 409가 세션 401보다 우선이라는 순서가 동시 요청에서 어긋남). 화면은 401 뒤 링크를 다시 조회해 취소 안내로 가므로 사용자 결과는 같다. 쿼리 왕복이 0.2초인 배포(함수 지역 `iad1`)에서만 재현(2회차 실패). 고칠 방향: 401을 내기 전에 약속 상태를 다시 확인(사용자 결정, 2026-11-12)
 
 ## 결과
 

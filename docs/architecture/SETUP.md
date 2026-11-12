@@ -230,24 +230,26 @@ if (process.env.NODE_ENV !== "production") {
 
 ### 4-1. 브랜치와 PR
 
-`main`에서 직접 작업하거나 push하지 않습니다. 브랜치 이름은 `<이름>/<타입>-<설명>` 형식이고(예: `ahn/feat-약속생성-api`), **기능 하나당 브랜치 하나**를 만들어 PR로 합칩니다.
+`main`에서 직접 작업하거나 push하지 않습니다. 브랜치 이름은 `<이름>/<타입>-<영어 설명>` 형식이고(예: `ahn/feat-create-promise-api`), **기능 하나당 브랜치 하나**를 만들어 PR로 합칩니다.
 
 ```bash
 git checkout main
 git pull
-git checkout -b ahn/feat-약속생성-api
+git checkout -b ahn/feat-create-promise-api
 # 작업...
 git add -A
 git commit -m "feat: 약속 생성 API 추가"
-git push -u origin ahn/feat-약속생성-api
+git push -u origin ahn/feat-create-promise-api
 ```
+
+> 🔤 **브랜치 설명은 영어로 씁니다(2026-11-12부터).** Vercel은 브랜치마다 미리보기 주소를 만드는데 한글은 주소에서 지워집니다. `ahn/feat-미리보기-배포`와 `ahn/feat-결과화면`이 둘 다 `…-git-ahn-feat-…`가 되어 주소를 나눠 쓰게 됩니다([`DEPLOY.md`](DEPLOY.md) 8절). 이미 만든 한글 브랜치는 그대로 둡니다. 커밋 메시지는 지금처럼 한국어입니다.
 
 push하면 터미널에 PR 생성 링크가 나옵니다. PR을 만들면 CI가 자동으로 돌아가고, **초록 체크를 확인한 뒤 `Squash and merge`** 합니다.
 
 | 브랜치 이름                            | 용도             |
 | -------------------------------------- | ---------------- |
-| `<이름>/feat-약속생성-api`             | 기능 추가        |
-| `<이름>/fix-투표-중복-버그`            | 버그 수정        |
+| `<이름>/feat-create-promise-api`       | 기능 추가        |
+| `<이름>/fix-vote-duplicate`            | 버그 수정        |
 | `<이름>/chore-...` · `<이름>/docs-...` | 설정·의존성·문서 |
 
 > ⚠️ 이름만으로 된 단독 브랜치(예: `ahn`)가 있으면 Git 규칙상 `ahn/...` 브랜치를 만들 수 없습니다. 단독 브랜치는 병합 후 지우고 시작하세요.

@@ -62,7 +62,7 @@ npm run build             # prisma generate && next build. dev 서버를 끈 뒤
 
 - 스키마를 바꿀 때는 `npm run db:migrate -- --name <변경명>`을 쓴다. `db push`는 쓰지 않는다.
 - CI는 `.github/workflows/ci.yml`에 있다. CI 빌드는 가짜 DB 주소로 돌기 때문에 DB를 읽는 페이지는 동적 렌더링이어야 한다.
-- 배포는 Vercel + Neon이다. 마이그레이션은 빌드에 넣지 않는다. 미리보기 DB는 `npm run db:deploy:preview`(`.env.preview`), 배포된 주소 확인은 `npm run test:e2e:preview`(`@smoke` 묶음). 순서는 `docs/architecture/DEPLOY.md`.
+- 배포는 Vercel + Neon이다. 마이그레이션은 빌드에 넣지 않는다. 미리보기 DB는 `npm run db:deploy:preview`(`.env.preview`) — 스키마가 바뀌는 브랜치는 push 전에 먼저 실행한다. 배포된 주소 확인은 `npm run test:e2e:preview`(`@smoke` 묶음, `E2E_BASE_URL`은 배포 고유 주소). 함수 지역(`sin1`)은 `vercel.json`이 기준이고, `main` 자동 배포도 `vercel.json`으로 꺼 두었다(공개 배포 결정 전). 순서는 `docs/architecture/DEPLOY.md`.
 - 통합 테스트는 `tests/e2e/`에 두고 devDependencies의 `@playwright/test`로 돌린다(운영 모드 `next start`, chromium·webkit·webkit 모바일). DB는 `.env.e2e`(Neon e2e 브랜치)만 쓴다. 준비는 `docs/architecture/SETUP.md` 4-5.
 - 한 번만 확인하고 버릴 스크립트는 `scripts/verify/`(Git 제외)에 둔다. 남길 시나리오는 `tests/e2e/`로 옮긴다.
 
@@ -89,7 +89,7 @@ npm run build             # prisma generate && next build. dev 서버를 끈 뒤
 - **Prisma 타입 이름:** 모델 `Promise`는 전역 Promise와 이름이 겹친다. `import type { Promise as PromiseModel } from "@/prisma/generated/client"`처럼 별칭을 쓴다.
 - **Git 규칙:**
   - 원격: `origin` = 개인 저장소 `zeus1560/yaksok`(작업 브랜치를 push, Vercel 연결), `team` = 팀 저장소 `yeonseong0224/yaksok`(2026-11-12까지의 이력과 옛 `ahn/` 브랜치). 새 브랜치는 `origin/main`에서 만든다.
-  - 브랜치 이름은 `ahn/<타입>-<설명>` 형식이다.
+  - 브랜치 이름은 `<이름>/<타입>-<영어 설명>` 형식이다(예: `ahn/feat-preview-deploy`). 한글은 Vercel 브랜치 주소에서 지워져 브랜치끼리 주소가 겹친다(`DEPLOY.md` 8절). 이미 만든 한글 브랜치는 그대로 둔다.
   - `main`에 직접 커밋하지 않는다.
   - 커밋과 푸시는 사용자가 요청할 때만 한다.
   - 커밋에 AI 공동 작성자 표시를 넣지 않는다.
