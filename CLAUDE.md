@@ -32,6 +32,7 @@ MVP 흐름: 약속 생성 → 참여자 등록(닉네임 + PIN) → 30분 슬롯
 | `lib/time/`                                            | 서울 시간 헬퍼(`seoul.ts`), 슬롯 파싱(`slots.ts`), 가능 시간 제출과 현황 조회                           |
 | `lib/create-promise/`                                  | 화면용 순수 로직. 브라우저에서도 import한다                                                             |
 | `lib/api-error.ts`, `lib/origin.ts`, `lib/no-store.ts` | 에러 응답 헬퍼, Origin 검사, `Cache-Control: no-store`                                                  |
+| `lib/public-url.ts`                                    | 배포 환경별 허용 Origin·초대 링크 기준 주소(로컬·운영·Vercel 미리보기). 브라우저에서도 import한다       |
 | `lib/prisma.ts`                                        | Prisma Client 싱글턴. 다른 곳에서는 `import { prisma } from "@/lib/prisma"`만 쓴다                      |
 | `prisma/schema.prisma`, `prisma/migrations/`           | 스키마와 마이그레이션. CHECK 제약과 부분 UNIQUE 인덱스는 마이그레이션 SQL에 있다                        |
 | `prisma/generated/`                                    | 생성된 클라이언트. Git에서 제외되어 있다                                                                |
@@ -61,6 +62,7 @@ npm run build             # prisma generate && next build. dev 서버를 끈 뒤
 
 - 스키마를 바꿀 때는 `npm run db:migrate -- --name <변경명>`을 쓴다. `db push`는 쓰지 않는다.
 - CI는 `.github/workflows/ci.yml`에 있다. CI 빌드는 가짜 DB 주소로 돌기 때문에 DB를 읽는 페이지는 동적 렌더링이어야 한다.
+- 배포는 Vercel + Neon이다. 마이그레이션은 빌드에 넣지 않는다. 미리보기 DB는 `npm run db:deploy:preview`(`.env.preview`) — 스키마가 바뀌는 브랜치는 push 전에 먼저 실행한다. 배포된 주소 확인은 `npm run test:e2e:preview`(`@smoke` 묶음, `E2E_BASE_URL`은 배포 고유 주소). 함수 지역(`sin1`)은 `vercel.json`이 기준이고, `main` 자동 배포도 `vercel.json`으로 꺼 두었다(공개 배포 결정 전). 순서는 `docs/architecture/DEPLOY.md`.
 - 통합 테스트는 `tests/e2e/`에 두고 devDependencies의 `@playwright/test`로 돌린다(운영 모드 `next start`, chromium·webkit·webkit 모바일). DB는 `.env.e2e`(Neon e2e 브랜치)만 쓴다. 준비는 `docs/architecture/SETUP.md` 4-5.
 - 한 번만 확인하고 버릴 스크립트는 `scripts/verify/`(Git 제외)에 둔다. 남길 시나리오는 `tests/e2e/`로 옮긴다.
 
@@ -86,7 +88,8 @@ npm run build             # prisma generate && next build. dev 서버를 끈 뒤
 - **DB 확인 데이터:** 개발 DB로 확인한 뒤에는 확인용 데이터를 삭제한다. 모든 테이블의 스냅샷(행 수·md5)이 시작 상태와 같은지 확인한다. 운영 DB로는 테스트하지 않는다.
 - **Prisma 타입 이름:** 모델 `Promise`는 전역 Promise와 이름이 겹친다. `import type { Promise as PromiseModel } from "@/prisma/generated/client"`처럼 별칭을 쓴다.
 - **Git 규칙:**
-  - 브랜치 이름은 `ahn/<타입>-<설명>` 형식이다.
+  - 원격: `origin` = 개인 저장소 `zeus1560/yaksok`(작업 브랜치를 push, Vercel 연결), `team` = 팀 저장소 `yeonseong0224/yaksok`(2026-11-12까지의 이력과 옛 `ahn/` 브랜치). 새 브랜치는 `origin/main`에서 만든다.
+  - 브랜치 이름은 `<이름>/<타입>-<영어 설명>` 형식이다(예: `ahn/feat-preview-deploy`). 한글은 Vercel 브랜치 주소에서 지워져 브랜치끼리 주소가 겹친다(`DEPLOY.md` 8절). 이미 만든 한글 브랜치는 그대로 둔다.
   - `main`에 직접 커밋하지 않는다.
   - 커밋과 푸시는 사용자가 요청할 때만 한다.
   - 커밋에 AI 공동 작성자 표시를 넣지 않는다.

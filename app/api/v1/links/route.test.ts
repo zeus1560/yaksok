@@ -97,6 +97,41 @@ describe("POST /api/v1/links (MEMBER-API-09)", () => {
     expect(text).not.toContain("secret-host");
   });
 
+  describe("Vercel 미리보기 배포 (032)", () => {
+    const DEPLOY = "https://yaksok-abc123-team.vercel.app";
+    const BRANCH = "https://yaksok-git-ahn-feat-team.vercel.app";
+    beforeEach(() => {
+      // 미리보기에는 NEXT_PUBLIC_BASE_URL을 넣지 않는다(DEPLOY.md)
+      vi.stubEnv("NEXT_PUBLIC_BASE_URL", "");
+      vi.stubEnv("VERCEL_ENV", "preview");
+      vi.stubEnv("VERCEL_URL", "yaksok-abc123-team.vercel.app");
+      vi.stubEnv("VERCEL_BRANCH_URL", "yaksok-git-ahn-feat-team.vercel.app");
+      vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "yaksok.vercel.app");
+    });
+
+    it.each([DEPLOY, BRANCH])("Origin %s에서 발급하면 그 주소로 초대 링크를 만든다", async (o) => {
+      create.mockResolvedValueOnce({ id: "link-1" });
+
+      const res = await POST(linkRequest({ origin: o }));
+      const body = await res.json();
+
+      expect(res.status).toBe(201);
+      expect(body.inviteUrl).toBe(`${o}/p/${body.inviteToken}`);
+    });
+
+    it.each([
+      "https://yaksok.vercel.app",
+      "https://yaksok-zzz999-team.vercel.app",
+      "http://localhost:3000",
+    ])("운영·다른 배포·로컬 Origin(%s)은 403 INVALID_ORIGIN", async (origin) => {
+      const res = await POST(linkRequest({ origin }));
+
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe("INVALID_ORIGIN");
+      expect(create).not.toHaveBeenCalled();
+    });
+  });
+
   it.each([
     ["201", () => create.mockResolvedValueOnce({ id: "link-1" }), { origin: BASE_URL }, 201],
     ["403 Origin 없음", () => {}, {}, 403],

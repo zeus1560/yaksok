@@ -5,21 +5,22 @@
 
 ---
 
-## ⚠️ 배포 방식 — 문서 간 불일치 정리
+## 배포 방식 — Vercel + Neon (확정, R-05)
 
-> 여러 문서에 배포 방식이 서로 다르게 적혀 있습니다. **「환경 설정」 6절이 가장 최신이자 실제 결정 사항**입니다. 아래 세 가지를 기준으로 삼으세요.
+> 처음에는 문서마다 배포 방식이 달랐습니다(Render·Docker). 지금은 아래가 실제 결정이며, 저장소 문서는 모두 이 기준입니다. 따라 하는 순서는 [`DEPLOY.md`](DEPLOY.md)에 있습니다.
 
-1. **배포는 Vercel + Neon 권장.**
-   Render 무료 플랜은 15분 유휴 후 잠들고 깨어나는 데 1분이 걸려서, 카카오의 **5초 응답 제한을 못 맞춥니다.** 무료 PostgreSQL DB도 **30일 후 만료**됩니다.
+1. **앱은 Vercel, DB는 Neon.**
+   - Vercel이 GitHub 저장소를 불러와 `npm run build`(`prisma generate && next build`)로 빌드합니다. Node.js는 `package.json`의 `engines`(24)를 따릅니다.
+   - 브랜치·PR마다 **미리보기(Preview) 배포**가 생기고, 미리보기는 Neon 미리보기 브랜치 DB를 씁니다. 운영(Production) DB는 따로 둡니다.
+   - 마이그레이션은 빌드에 넣지 않고 사람이 `prisma migrate deploy`로 적용합니다(미리보기: `npm run db:deploy:preview`).
+   - Render를 쓰지 않는 이유: 무료 플랜은 15분 유휴 후 잠들고 깨어나는 데 1분이 걸려서 카카오의 **5초 응답 제한을 못 맞춥니다.** 무료 PostgreSQL DB도 **30일 후 만료**됩니다.
 
 2. **Docker는 설치하지 않습니다.**
    DB를 클라우드(Neon)로 쓰기로 해서 필요가 없어졌습니다. 실제 레포에도 `Dockerfile`이 없습니다. 나중에 로컬 Docker DB로 바꾸고 싶으면 `.env` 한 줄만 고치면 되니, 지금 깔 이유가 없습니다.
 
-3. **아래 두 기술은 구버전입니다. 그대로 따르지 마세요.**
+3. **아래 서술은 구버전입니다. 그대로 따르지 마세요.**
    - 「기술 스택」 토글(오픈빌더 문제 해결 선택지)의 **"Render 절전되지 않는 유료 Web Service 권장"**
-   - PRD 6장의 **"Docker Compose + Render"**
-
-> 📌 **PRD 6장은 아직 Docker/Render 기준으로 적혀 있어 수정 대상입니다.** 배포 관련 서술을 Vercel + Neon 기준으로 고쳐야 합니다.
+   - 노션 PRD 6장의 **"Docker Compose + Render"** (저장소 사본 `docs/product/PRD.md`는 Vercel + Neon으로 고쳤고, 노션 원본은 따로 고칩니다)
 
 ---
 

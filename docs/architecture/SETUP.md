@@ -105,6 +105,8 @@ cd yaksok
 npm ci
 ```
 
+> 🔀 **원격 저장소 두 곳 (2026-11-12~):** 배포(Vercel Hobby)를 위해 안(ahn) 작업 폴더는 개인 저장소 `zeus1560/yaksok`을 `origin`, 팀 저장소 `yeonseong0224/yaksok`을 `team`으로 둡니다. 새 기능 브랜치는 `origin`에 push합니다. 팀원이 처음 받을 때는 위 팀 저장소 주소 그대로 쓰면 됩니다.
+
 > ⚠️ `npm install`이 아니라 **`npm ci`** 입니다. `package-lock.json`에 적힌 버전을 그대로 설치해서 팀 전체가 똑같은 환경이 됩니다.
 
 ### 1-3. 내 Neon DB 만들기
@@ -228,24 +230,26 @@ if (process.env.NODE_ENV !== "production") {
 
 ### 4-1. 브랜치와 PR
 
-`main`에서 직접 작업하거나 push하지 않습니다. 브랜치 이름은 `<이름>/<타입>-<설명>` 형식이고(예: `ahn/feat-약속생성-api`), **기능 하나당 브랜치 하나**를 만들어 PR로 합칩니다.
+`main`에서 직접 작업하거나 push하지 않습니다. 브랜치 이름은 `<이름>/<타입>-<영어 설명>` 형식이고(예: `ahn/feat-create-promise-api`), **기능 하나당 브랜치 하나**를 만들어 PR로 합칩니다.
 
 ```bash
 git checkout main
 git pull
-git checkout -b ahn/feat-약속생성-api
+git checkout -b ahn/feat-create-promise-api
 # 작업...
 git add -A
 git commit -m "feat: 약속 생성 API 추가"
-git push -u origin ahn/feat-약속생성-api
+git push -u origin ahn/feat-create-promise-api
 ```
+
+> 🔤 **브랜치 설명은 영어로 씁니다(2026-11-12부터).** Vercel은 브랜치마다 미리보기 주소를 만드는데 한글은 주소에서 지워집니다. `ahn/feat-미리보기-배포`와 `ahn/feat-결과화면`이 둘 다 `…-git-ahn-feat-…`가 되어 주소를 나눠 쓰게 됩니다([`DEPLOY.md`](DEPLOY.md) 8절). 이미 만든 한글 브랜치는 그대로 둡니다. 커밋 메시지는 지금처럼 한국어입니다.
 
 push하면 터미널에 PR 생성 링크가 나옵니다. PR을 만들면 CI가 자동으로 돌아가고, **초록 체크를 확인한 뒤 `Squash and merge`** 합니다.
 
 | 브랜치 이름                            | 용도             |
 | -------------------------------------- | ---------------- |
-| `<이름>/feat-약속생성-api`             | 기능 추가        |
-| `<이름>/fix-투표-중복-버그`            | 버그 수정        |
+| `<이름>/feat-create-promise-api`       | 기능 추가        |
+| `<이름>/fix-vote-duplicate`            | 버그 수정        |
 | `<이름>/chore-...` · `<이름>/docs-...` | 설정·의존성·문서 |
 
 > ⚠️ 이름만으로 된 단독 브랜치(예: `ahn`)가 있으면 Git 규칙상 `ahn/...` 브랜치를 만들 수 없습니다. 단독 브랜치는 병합 후 지우고 시작하세요.
@@ -348,6 +352,7 @@ npx playwright show-report test-results/e2e-report   # 결과 보고서
 - 브라우저는 `https://localhost:3100`으로 엽니다. 세션 쿠키가 항상 `Secure`라 WebKit(아이폰 엔진)은 `http://localhost`로는 쿠키를 보내지 않기 때문에, 테스트가 자체 서명 인증서로 로컬 https 프록시를 띄우고 그 뒤에서 `next start`가 `127.0.0.1:3101`로 돕니다. 3000 포트(개발 서버)와 겹치지 않습니다.
 - 테스트마다 데이터를 만들고 지웁니다. 실행이 중간에 멈춰 남은 데이터는 다음 실행 시작 때 `tests/e2e/.state/`의 기록으로 지우고, 끝날 때 모든 테이블의 행 수·md5가 시작 상태와 같은지 확인합니다.
 - 작업자 수는 기본 2입니다(`E2E_WORKERS=1`로 줄일 수 있음).
+- 배포된 Vercel 미리보기 주소에 확인 묶음(`@smoke`)만 돌리려면 `npm run test:e2e:preview`(`.env.preview` 필요, 서버를 띄우지 않음) — [`DEPLOY.md`](DEPLOY.md) 6절.
 
 ---
 
@@ -393,7 +398,7 @@ npx playwright show-report test-results/e2e-report   # 결과 보고서
 | 항목               | 내용                                                                                                                                                                                                                                                        |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 브랜치 보호 미작동 | GitHub 룰셋은 비공개 저장소에서 Pro 이상이 필요합니다. **GitHub Education(Student Developer Pack)** 을 신청하면 Pro를 무료로 받아 해결됩니다. 승인까지 며칠 걸리니 미리 신청해두는 게 좋습니다. 저장소를 공개로 전환하는 방법도 있지만 팀 논의가 필요합니다 |
-| 배포               | **Vercel + Neon** 권장. Render 무료 플랜은 15분 유휴 후 잠들어 깨어나는 데 1분이 걸려서, 카카오의 5초 응답 제한을 못 맞춥니다. 무료 DB도 30일 후 만료됩니다                                                                                                 |
+| 배포               | **Vercel + Neon** (확정, 순서는 [`DEPLOY.md`](DEPLOY.md)). Render 무료 플랜은 15분 유휴 후 잠들어 깨어나는 데 1분이 걸려서, 카카오의 5초 응답 제한을 못 맞춥니다. 무료 DB도 30일 후 만료됩니다                                                              |
 | 운영 DB 분리       | 배포 시 개발용과 별도의 Neon 프로젝트(또는 브랜치)를 씁니다. 운영 DB에는 `prisma migrate deploy`만 사용합니다                                                                                                                                               |
 
 ---

@@ -24,7 +24,7 @@
 `docs/architecture/SETUP.md` 4절을 따른다.
 
 - `main`에 직접 커밋·푸시하지 않는다.
-- 브랜치 이름은 `<이름>/<타입>-<설명>` 형식이다. 예: `ahn/feat-약속생성-api`, `ahn/fix-투표-중복`. 타입은 `feat`, `fix`, `chore`, `docs` 중 하나다.
+- 브랜치 이름은 `<이름>/<타입>-<영어 설명>` 형식이다. 예: `ahn/feat-preview-deploy`, `ahn/fix-vote-duplicate`. 타입은 `feat`, `fix`, `chore`, `docs` 중 하나다. 설명은 영어로 쓴다 — 한글은 Vercel 브랜치 주소에서 지워져 브랜치끼리 주소가 겹친다(`docs/architecture/DEPLOY.md` 8절). 이미 만든 한글 브랜치는 그대로 둔다.
 - 기능 하나당 브랜치 하나를 만들고 PR로 합친다. 병합된 브랜치는 지우고 다음 기능은 최신 `main`에서 새로 만든다.
 - 이름 접두어는 사용자가 알려 준 값을 쓴다. 모르면 묻고, 추측하지 않는다.
 - 커밋과 푸시는 사용자가 요청한 경우에만 한다. PR 생성과 병합(`Squash and merge`)은 사람이 한다.

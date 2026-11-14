@@ -74,6 +74,24 @@ describe("issueInviteLink", () => {
     expect(create).toHaveBeenCalledTimes(1);
   });
 
+  it("로컬·운영은 요청 Origin과 관계없이 NEXT_PUBLIC_BASE_URL로 만든다", async () => {
+    create.mockResolvedValueOnce({ id: "link-1" });
+
+    const result = await issueInviteLink("web", "https://other.example");
+
+    expect(result.inviteUrl).toBe(`http://localhost:3000/p/${result.inviteToken}`);
+  });
+
+  it("미리보기(VERCEL_ENV=preview)는 요청이 온 배포 주소로 만든다 (032)", async () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("VERCEL_URL", "yaksok-abc123-team.vercel.app");
+    create.mockResolvedValueOnce({ id: "link-1" });
+
+    const result = await issueInviteLink("web", "https://yaksok-abc123-team.vercel.app");
+
+    expect(result.inviteUrl).toBe(`https://yaksok-abc123-team.vercel.app/p/${result.inviteToken}`);
+  });
+
   it("NEXT_PUBLIC_BASE_URL이 없으면 저장하지 않는다", async () => {
     vi.stubEnv("NEXT_PUBLIC_BASE_URL", "");
 

@@ -11,6 +11,7 @@ import {
   formatSummaryTitle,
   timeToMinute,
 } from "@/lib/create-promise/format";
+import { inviteBaseUrl } from "@/lib/public-url";
 
 // 설정 완료 (Figma 35:379, 04). 약속 이름 대신 날짜 범위·정원 요약을 제목으로 쓴다 (R-15)
 // 복사가 되면 버튼이 2초 동안 어두운 "복사 완료" 상태가 된다(Figma 04). 복사하지 못하면 링크를 선택하고 알림으로 안내한다
@@ -18,8 +19,16 @@ import {
 const COPIED_MS = 2000;
 
 function inviteUrlOf(inviteToken: string): string {
-  // MEMBER-API-09의 inviteUrl과 같은 기준(NEXT_PUBLIC_BASE_URL)으로 조립한다
-  const base = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
+  // MEMBER-API-09의 inviteUrl과 같은 기준(lib/public-url.ts)으로 조립한다 — 미리보기 배포는 지금 연 배포 주소(032)
+  // NEXT_PUBLIC_ 값은 빌드 때 글자 그대로 바뀌므로 하나씩 적는다
+  const base =
+    inviteBaseUrl(
+      {
+        NEXT_PUBLIC_BASE_URL: process.env.NEXT_PUBLIC_BASE_URL,
+        VERCEL_ENV: process.env.NEXT_PUBLIC_VERCEL_ENV,
+      },
+      window.location.origin,
+    ) ?? window.location.origin;
   return `${base.replace(/\/$/, "")}/p/${encodeURIComponent(inviteToken)}`;
 }
 

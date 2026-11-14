@@ -5,10 +5,10 @@
 프롬프트에 준비 단계가 없어도 매번 실행한다. 이미 이 기능의 브랜치에서 작업 중이면(이어서 하는 시작) 1번만 확인하고 건너뛴다.
 
 1. `git status`로 작업 트리가 깨끗한지 확인한다. 커밋하지 않은 변경이 있으면 아무것도 하지 말고 중단 후 보고한다.
-2. `git checkout main` → `git fetch --prune` → `git pull`.
-3. 이전 기능 브랜치 정리: 로컬 `ahn/` 브랜치 중 원격 브랜치가 사라진(`git branch -vv`에서 `: gone]`) 것만 `git branch -D`로 지운다. Squash 병합이라 `git branch --merged`로는 병합 여부를 알 수 없으므로 이 기준을 쓴다. 원격이 남아 있는 브랜치는 지우지 말고 목록만 보고한다.
+2. `git checkout main` → `git fetch --all --prune` → `git pull`. 원격은 `origin`(개인 저장소 `zeus1560/yaksok`, `main`과 작업 브랜치)과 `team`(팀 저장소 `yeonseong0224/yaksok`, 옛 `ahn/` 브랜치)이다. `main`은 `origin/main`을 따른다.
+3. 이전 기능 브랜치 정리: 로컬 `ahn/` 브랜치 중 추적하던 원격 브랜치(`origin` 또는 `team`)가 사라진(`git branch -vv`에서 `: gone]`) 것만 `git branch -D`로 지운다. Squash 병합이라 `git branch --merged`로는 병합 여부를 알 수 없으므로 이 기준을 쓴다. 원격이 남아 있는 브랜치는 지우지 말고 목록만 보고한다.
 4. 프롬프트에 적힌 전제 파일이 `main`에 있는지 확인하고, 없으면 중단 후 보고한다.
-5. 프롬프트에 적힌 브랜치 이름(없으면 `ahn/feat-<설명>`)으로 `main`에서 새 브랜치를 만든다.
+5. 프롬프트에 적힌 브랜치 이름(없으면 `ahn/feat-<영어 설명>`)으로 `main`에서 새 브랜치를 만든다. 이름은 `<이름>/<타입>-<영어 설명>` 형식이다(예: `ahn/feat-preview-deploy`). 설명은 영어 소문자·숫자·하이픈으로 짧게 쓴다 — 한글은 Vercel 브랜치 주소에서 지워져 브랜치끼리 주소가 겹친다(`docs/architecture/DEPLOY.md` 8절). 프롬프트의 이름에 한글이 있으면 영어 이름을 제안하고 확인한다. 이미 만든 한글 브랜치는 이름을 바꾸지 않는다. `main`을 upstream으로 추적하지 않게 하고(`--no-track`), 첫 push 때 `git push -u origin <브랜치>`로 연결한다.
 
 ## 구현
 
@@ -17,7 +17,7 @@
 1. `git status`, 현재 브랜치, HEAD를 확인하고 작업 기준점에 기록한다.
 2. 준비 단계에서 만든 이 기능의 브랜치에 있는지 확인한다(수정 기록이면 `fix-`). 이름 접두어를 모르면 묻는다. 미커밋 변경이 있으면 브랜치를 바꾸지 말고 이유를 알린다.
 3. 상태를 `진행 중`으로 바꾸고 수용 기준을 만족하는 최소 변경을 구현한다. 소스는 루트의 `app/`, `components/`, `lib/` 등에, 스펙과 기록은 `context/`에 둔다.
-4. 스키마를 바꾸면 본인 Neon 개발 DB에 `npm run db:migrate -- --name <변경명>`으로 마이그레이션을 만들고 `npm run db:generate`를 실행한다.
+4. 스키마를 바꾸면 본인 Neon 개발 DB에 `npm run db:migrate -- --name <변경명>`으로 마이그레이션을 만들고 `npm run db:generate`를 실행한다. 이 브랜치를 push하면 Vercel Preview 배포가 생기므로, push 전에 미리보기 DB에 `npm run db:deploy:preview`를 먼저 적용해야 한다고 알린다(`docs/architecture/DEPLOY.md` 2절).
 5. 구현 중 요구사항이 달라지면 스펙도 동기화한다. 규칙 문서와 다르게 구현해야 할 것 같으면 멈추고 확인한다.
 6. 변경 파일, 실행한 검증, 아직 충족하지 못한 기준을 기록한다.
 

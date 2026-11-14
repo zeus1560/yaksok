@@ -44,7 +44,7 @@ async function showEveryone(page: Page) {
   await expect(text(page, "모두의 가능 시간")).toBeVisible();
 }
 
-test("약속 만들기부터 취소까지 한 약속의 전체 흐름", async ({ app, seed }) => {
+test("약속 만들기부터 취소까지 한 약속의 전체 흐름 @smoke", async ({ app, seed }) => {
   test.setTimeout(420_000);
   const hostNick = nick("방");
   const names = [nick("가"), nick("나"), nick("다")];

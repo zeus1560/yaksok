@@ -1,7 +1,8 @@
 // 통합 테스트 API 도우미 — 약속 준비는 API로 하고 화면 동작은 브라우저로 본다
-// 테스트 서버(https 프록시, 자체 서명 인증서)에 Node https로 직접 요청한다. 세션 토큰·쿠키 값은 출력하지 않는다
+// 테스트 서버(로컬: https 프록시·자체 서명 인증서, 미리보기: 배포 주소)에 Node https로 직접 요청한다
+// 세션 토큰·쿠키 값·보호 우회 비밀값은 출력하지 않는다
 import https from "node:https";
-import { E2E_BASE_URL } from "./e2e-env";
+import { E2E_BASE_URL, IS_PREVIEW, bypassHeaders } from "./e2e-env";
 import { deleteLinks } from "./db";
 import { recordLink } from "./ledger";
 
@@ -11,7 +12,9 @@ export const HOST_PIN = "1357";
 export const MEMBER_PIN = "2468";
 
 // keep-alive를 끈다: 서버가 닫은 유휴 소켓을 다시 써서 ECONNRESET이 나는 경쟁을 피한다
-const agent = new https.Agent({ keepAlive: false, rejectUnauthorized: false });
+// 자체 서명 인증서는 로컬에서만 받는다(배포 주소는 인증서를 확인한다)
+const agent = new https.Agent({ keepAlive: false, rejectUnauthorized: IS_PREVIEW });
+const BYPASS = bypassHeaders();
 
 export type ApiResponse = {
   status: number;
@@ -28,7 +31,7 @@ export function call(
   path: string,
   opts: { cookie?: string; origin?: string | null; body?: unknown } = {},
 ): Promise<ApiResponse> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...BYPASS };
   const origin = opts.origin === undefined ? ORIGIN : opts.origin;
   if (origin) headers.origin = origin;
   if (opts.cookie) headers.cookie = opts.cookie;
