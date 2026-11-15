@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { cellMs, slotRangeLabel, type Grid } from "@/lib/availability/grid";
+import type { DayPage } from "@/lib/availability/view";
 import {
   HEAT_LEVELS,
   heatLevel,
@@ -13,6 +14,8 @@ import { DayHeaderText, GridFrame } from "./grid-frame";
 
 // 모두의 가능 시간 (TIME-API-02, 읽기 전용). 제출값만 센다 — 내 미제출 입력은 들어가지 않는다 (TIME-10-02)
 // 색 농도 = 칸별 가능 인원 / 전체 참여자 (TIME-12-02). 칸을 누르면 가능한 사람 이름을 보여 준다
+// 034 휴대폰: 「내 시간」과 같은 4일 구간(page)만 그린다. 30분 단위 그대로(묶은 인원 수는 오해를 부름, R-39).
+//   「현재 최대 N명 가능」은 구간과 관계없이 전체 날짜 기준
 
 // 029 17-1: Figma TimeSlot Heat1~4(#eef2f8·#e6edff·#4063d8·#294baf). 0명은 칩 없음. 3·4단계는 흰 글자
 const HEAT_CLASS = ["bg-paper", "bg-muted", "bg-blue-soft", "bg-blue", "bg-ink"];
@@ -22,8 +25,10 @@ export function EveryoneGrid({
   participants,
   total,
   today,
+  page,
 }: {
   grid: Grid;
+  page?: DayPage;
   today: string | null;
   participants: HeatParticipant[];
   total: number;
@@ -44,6 +49,7 @@ export function EveryoneGrid({
         grid={grid}
         label="모두의 가능 시간"
         today={today}
+        page={page}
         renderHeader={(day) => <DayHeaderText day={day} />}
         renderCell={(d, r) => {
           const ms = cellMs(grid, { day: d, row: r });
