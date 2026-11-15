@@ -3,7 +3,7 @@
 // 터치 흉내 방식은 mobile-drag.spec.ts와 같다(webkit 모바일 = 합성 PointerEvent, chromium = CDP 실제 터치)
 import { devices, type Page } from "@playwright/test";
 import { test, expect } from "./support/fixtures";
-import { seoulDate, slotMs } from "./support/api";
+import { as, seoulDate, slotAt, slotMs, type Seed } from "./support/api";
 import { db } from "./support/db";
 import {
   dayRange,
@@ -446,6 +446,90 @@ async function rowsTo(page: Page, startMs: number, x: number, y: number) {
   expect(slot, "좌표 아래에 칸이 있음").toBeTruthy();
   return (Number(slot) - startMs) / (30 * 60 * 1000) + 1;
 }
+
+// ── 모두의 시간 표시 단위와 사람 목록 (034 실기기 확인 뒤 추가, R-40)
+// 두 번째 날 09:00–11:00: 첫째 = 네 칸 모두, 둘째 = 09:00·09:30, 셋째 = 10:30. 참여자 = 방장 + 3명
+async function seedEveryone(seed: Seed) {
+  const P = await seed.collecting({ members: 3, settings: WEEK });
+  const [a, b, c] = P.members;
+  const pick = (times: string[]) => times.map((t) => slotAt(2, t));
+  expect(
+    (await as(P.promiseId, a.token).submit(pick(["09:00", "09:30", "10:00", "10:30"]))).status,
+  ).toBe(200);
+  expect((await as(P.promiseId, b.token).submit(pick(["09:00", "09:30"]))).status).toBe(200);
+  expect((await as(P.promiseId, c.token).submit(pick(["10:30"]))).status).toBe(200);
+  return P;
+}
+const everyoneCell = (page: Page, attr: "data-slot" | "data-group", ms: number) =>
+  page.locator(`[aria-label="모두의 가능 시간"] button[${attr}="${ms}"]`);
+
+test("휴대폰: 모두의 시간도 같은 표시 단위 — 묶은 칸 숫자는 내내 가능한 사람, 누르면 아래 창에 내내·일부만 가능", async ({
+  seed,
+  app,
+}) => {
+  mobileOnly();
+  const P = await seedEveryone(seed);
+  const [a, b, c] = P.members;
+  const { page } = await app.open(P, P.hostToken, "방장");
+  await expectInputScreen(page, P.hostNick);
+
+  // 내 시간에서 2시간 → 모두의 시간도 2시간(두 탭이 같은 단위), 드래그 버튼은 모두의 시간에 없음
+  await unitButton(page, "2시간").tap();
+  await page.getByRole("tab", { name: "모두의 시간" }).tap();
+  await expect(unitButton(page, "2시간")).toHaveAttribute("aria-pressed", "true");
+  await expect(modeButton(page)).toBeHidden();
+  const g9 = everyoneCell(page, "data-group", slotMs(2, "09:00"));
+  await expect(g9).toHaveText("1");
+  await expect(g9).toHaveAttribute("aria-label", /09:00–11:00 내내 가능 1명, 일부만 가능 2명$/);
+
+  // 누르면 아래에서 올라오는 창: 내내 가능 / 일부만 가능(가능한 시간)
+  await g9.tap();
+  const sheet = page.getByRole("dialog");
+  await expect(sheet).toBeVisible();
+  await expect(sheet).toContainText("09:00–11:00 · 내내 가능 1/4명");
+  await expect(sheet.getByRole("region", { name: "내내 가능" }).locator("li")).toHaveText([
+    a.nickname,
+  ]);
+  await expect(sheet.getByRole("region", { name: "일부만 가능" }).locator("li")).toHaveText([
+    `${b.nickname}09:00–10:00`,
+    `${c.nickname}10:30–11:00`,
+  ]);
+  const box = (await sheet.boundingBox())!;
+  const viewport = page.viewportSize()!;
+  expect(Math.round(box.y + box.height), "화면 아래에 붙은 창").toBe(viewport.height);
+
+  // 아무도 없는 칸
+  await everyoneCell(page, "data-group", slotMs(2, "13:00")).tap();
+  await expect(sheet).toContainText("이 시간에 가능한 사람이 없어요.");
+  await sheet.getByRole("button", { name: "닫기" }).tap();
+  await expect(sheet).toHaveCount(0);
+
+  // 모두의 시간에서 30분으로 바꾸면 내 시간도 30분, 30분 칸은 그 30분에 가능한 사람
+  await unitButton(page, "30분").tap();
+  const s9 = everyoneCell(page, "data-slot", slotMs(2, "09:00"));
+  await expect(s9).toHaveText("2");
+  await s9.tap();
+  await expect(sheet).toContainText("09:00–09:30 · 가능 2/4명");
+  await expect(sheet.locator("li")).toHaveText([a.nickname, b.nickname]);
+  await page.getByRole("tab", { name: "내 시간" }).tap();
+  await expect(sheet, "내 시간 탭에서는 창이 없다").toHaveCount(0);
+  await expect(unitButton(page, "30분")).toHaveAttribute("aria-pressed", "true");
+  await expectNoHScroll(page);
+});
+
+test("데스크톱: 모두의 시간 칸 상세는 그리드 아래 그대로(아래 창 없음)", async ({ seed, app }) => {
+  test.skip(test.info().project.name === "webkit-mobile", "마우스 데스크톱");
+  const P = await seedEveryone(seed);
+  const [a, b] = P.members;
+  const { page } = await app.open(P, P.hostToken, "방장");
+  await expectInputScreen(page, P.hostNick);
+  await everyoneCell(page, "data-slot", slotMs(2, "09:00")).click();
+  const panel = page.locator("[data-people-detail]");
+  await expect(panel).toContainText("09:00–09:30 · 가능 2/4명");
+  await expect(panel.locator("li")).toHaveText([a.nickname, b.nickname]);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "표시 단위" })).toHaveCount(0);
+});
 
 test("데스크톱: 마우스 드래그 중 화면 아래 끝에서 자동 스크롤, 날짜 넘기기·표시 단위 없음", async ({
   seed,
