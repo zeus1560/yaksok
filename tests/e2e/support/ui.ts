@@ -91,6 +91,15 @@ export const pressedCells = (page: Page) =>
   page.locator('[aria-label="내 가능 시간"] button[aria-pressed="true"]').count();
 export const myCell = (page: Page, ms: number) =>
   page.locator(`[aria-label="내 가능 시간"] button[data-slot="${ms}"]`);
+// 휴대폰 1시간·2시간 보기의 묶은 칸(첫 30분 칸 시각, 034)
+export const myGroup = (page: Page, ms: number) =>
+  page.locator(`[aria-label="내 가능 시간"] button[data-group="${ms}"]`);
+// 휴대폰 날짜 넘기기 줄의 구간 글자 「11/16 (월) – 11/19 (목)」(보이는 탭의 것, 034)
+export const dayRange = (page: Page) => page.locator("[data-day-range]").filter({ visible: true });
+export const dayText = (ymd: string) => {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()} (${WEEKDAY[d.getUTCDay()]})`;
+};
 
 export const storageKeys = (page: Page, promiseId: string, inviteToken: string) =>
   page.evaluate(
