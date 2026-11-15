@@ -29,13 +29,13 @@ import {
   groupStateText,
   pressGroup,
   toSlotRect,
-  UNITS,
   type DayPage,
   type GroupState,
   type Unit,
 } from "@/lib/availability/view";
 import { seoulDateOf } from "@/lib/time/seoul";
-import { DayHeaderText, GridFrame, type FrameRow } from "./grid-frame";
+import { DayHeaderText, GridFrame } from "./grid-frame";
+import { GROUP_ROW_CLASS, groupFrameRows, UnitPicker } from "./unit-picker";
 import { useCoarsePointer } from "./media";
 
 // 내 가능 시간 그리드 (TIME-10-04, TIME-09-01, TIME-08-01)
@@ -49,7 +49,6 @@ import { useCoarsePointer } from "./media";
 
 // 자동 스크롤은 누른 자리에서 이만큼 움직인 뒤부터 — 화면 아래쪽 칸을 톡 누를 때 화면이 밀리지 않게
 const AUTO_SCROLL_ARM_PX = 10;
-const GROUP_ROW_CLASS: Record<Unit, string> = { 1: "h-slot", 2: "h-10", 4: "h-12" };
 
 // 보이는 영역의 아래 끝: 아래에 붙은 제출 바(data-drag-dock)가 있으면 그 위
 function visibleBottom(): number {
@@ -103,17 +102,7 @@ export function MyGrid({
   const offset = page?.start ?? 0;
   const dayCount = page?.count ?? grid.days.length;
   const groups = useMemo(() => groupRows(grid.rows.length, unit), [grid.rows.length, unit]);
-  const frameRows = useMemo<FrameRow[] | undefined>(
-    () =>
-      unit === 1
-        ? undefined
-        : groups.map((g) => ({
-            key: grid.rows[g.start].minute,
-            label: grid.rows[g.start].label,
-            line: true,
-          })),
-    [unit, groups, grid.rows],
-  );
+  const frameRows = useMemo(() => groupFrameRows(grid, groups, unit), [grid, groups, unit]);
 
   const shown = useMemo(() => {
     if (!drag) return selection;
@@ -277,25 +266,7 @@ export function MyGrid({
         // 휴대폰 도구 줄: 표시 단위 + 드래그로 선택 (034). 360px에서도 한 줄(줄바꿈 없음)
         <div className="mb-3">
           <div className="flex items-center justify-between gap-2" data-toolbar>
-            <div
-              role="group"
-              aria-label="표시 단위"
-              className="flex h-icon shrink-0 items-stretch rounded-field border border-line bg-paper p-0.5"
-            >
-              {UNITS.map((u) => (
-                <button
-                  key={u.unit}
-                  type="button"
-                  aria-pressed={unit === u.unit}
-                  onClick={() => onUnitChange?.(u.unit)}
-                  className={`whitespace-nowrap rounded-control px-2 text-sm ${
-                    unit === u.unit ? "bg-blue-soft font-bold text-ink" : "text-sub"
-                  }`}
-                >
-                  {u.label}
-                </button>
-              ))}
-            </div>
+            <UnitPicker unit={unit} onChange={(next) => onUnitChange?.(next)} />
             {dragButton}
           </div>
           {hintText}

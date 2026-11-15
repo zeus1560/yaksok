@@ -43,6 +43,7 @@ import { DayNav, dayText } from "./day-nav";
 import { EveryoneGrid } from "./everyone-grid";
 import { useNarrow } from "./media";
 import { Check, MyGrid } from "./my-grid";
+import { UnitPicker } from "./unit-picker";
 import {
   toSnapshot,
   withMe,
@@ -508,10 +509,19 @@ export function AvailabilityBoard({
             제출한 시간만 보여요. 색이 진할수록 가능한 사람이 많아요.
           </p>
           <div className="mt-3">
+            {/* 휴대폰: 「내 시간」과 같은 표시 단위(드래그 버튼 없음, R-40) */}
+            {narrow && (
+              <div className="mb-3 flex items-center">
+                <UnitPicker unit={unit} onChange={setUnit} />
+              </div>
+            )}
             {nav}
             <EveryoneGrid
               grid={grid}
               page={page}
+              unit={narrow ? unit : 1}
+              nowMs={nowMs}
+              sheet={narrow && tab === "all"}
               participants={snapshot.participants}
               total={snapshot.total}
               today={nowMs > 0 ? seoulDateOf(new Date(nowMs)) : null}
