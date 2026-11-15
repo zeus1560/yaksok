@@ -20,3 +20,10 @@ export function formatSelectionSummary(slots: Iterable<number>): string {
   if (minutes === 0) return "아직 선택한 시간이 없어요";
   return `${days}일 · 총 ${formatDuration(minutes)} 선택`;
 }
+
+// 좁은 화면(휴대폰) 제출 바: 「총」·「선택」을 빼 한 줄에 들어가게 한다(034 실기기 확인 뒤). 화면 낭독기는 위 전체 문구를 읽는다
+export function formatSelectionShort(slots: Iterable<number>): string {
+  const { days, minutes } = selectionSummary(slots);
+  if (minutes === 0) return "선택 없음";
+  return `${days}일 · ${formatDuration(minutes)}`;
+}

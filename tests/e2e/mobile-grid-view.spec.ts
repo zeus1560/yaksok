@@ -266,7 +266,35 @@ async function expectToolbarOneLine(page: Page) {
   await expectNoHScroll(page);
 }
 
-test("휴대폰: 도구 줄 한 줄 — 드래그 버튼은 손가락 아이콘 + 「드래그」, 이름은 「드래그로 선택」, 켜짐은 색·aria-pressed", async ({
+// 제출 바 선택 요약: 좁은 화면은 짧은 문구 한 줄(잘리지 않음), 화면 낭독기용 전체 문구는 그대로 남는다
+async function expectSummaryOneLine(page: Page, short: string, full: string) {
+  const line = page.locator("[data-selected-slots]");
+  const shown = line.locator("[data-summary-short]");
+  await expect(shown).toHaveText(short);
+  await expect(shown).toBeVisible();
+  await expect(shown).toHaveAttribute("aria-hidden", "true");
+  const box = await line.evaluate((el) => ({
+    height: el.getBoundingClientRect().height,
+    lineHeight: parseFloat(getComputedStyle(el).lineHeight),
+    cut: el.scrollWidth > el.clientWidth,
+  }));
+  expect(box.height, "제출 바 문구 한 줄").toBeLessThan(box.lineHeight * 1.5);
+  expect(box.cut, "말줄임 없이 다 보임").toBe(false);
+  // 접근성 트리: 전체 문구만 있고 짧은 문구(aria-hidden)는 없다
+  const tree = await line.ariaSnapshot();
+  expect(tree, "화면 낭독기는 전체 문구").toContain(full);
+  expect(tree).not.toContain(short);
+}
+
+// 선택 없음 → 1일 3칸(1시간 30분) 선택에서 제출 바 문구 확인
+async function checkSummary(page: Page) {
+  await expectSummaryOneLine(page, "선택 없음", "아직 선택한 시간이 없어요");
+  for (const t of ["09:00", "09:30", "10:00"]) await myCell(page, slotMs(2, t)).tap();
+  await expect.poll(() => selectedCount(page)).toBe(3);
+  await expectSummaryOneLine(page, "1일 · 1시간 30분", "1일 · 총 1시간 30분 선택");
+}
+
+test("휴대폰: 도구 줄·제출 바 문구 한 줄 — 드래그 버튼은 손가락 아이콘 + 「드래그」, 이름은 「드래그로 선택」, 켜짐은 색·aria-pressed", async ({
   seed,
   app,
 }) => {
@@ -277,6 +305,7 @@ test("휴대폰: 도구 줄 한 줄 — 드래그 버튼은 손가락 아이콘 
   await expect(modeButton(page)).toHaveText("드래그");
   await expect(modeButton(page).locator("svg")).toHaveCount(1);
   await expectToolbarOneLine(page);
+  await checkSummary(page);
   const off = await modeButton(page).evaluate((el) => getComputedStyle(el).backgroundColor);
   await modeButton(page).tap();
   await expect(modeButton(page)).toHaveAttribute("aria-pressed", "true");
@@ -290,7 +319,7 @@ test("휴대폰: 도구 줄 한 줄 — 드래그 버튼은 손가락 아이콘 
   await expectToolbarOneLine(page);
 });
 
-test("휴대폰 360px(chromium 터치 흉내): 도구 줄 한 줄", async ({ seed, app }) => {
+test("휴대폰 360px(chromium 터치 흉내): 도구 줄·제출 바 문구 한 줄", async ({ seed, app }) => {
   test.skip(test.info().project.name !== "chromium-desktop", "360px 휴대폰 흉내는 chromium");
   const P = await seed.collecting({ members: 0, settings: WEEK });
   const { page } = await app.open(P, P.hostToken, "방장", {
@@ -302,6 +331,7 @@ test("휴대폰 360px(chromium 터치 흉내): 도구 줄 한 줄", async ({ see
   });
   await expectInputScreen(page, P.hostNick);
   await expect(modeButton(page)).toBeVisible();
+  await checkSummary(page);
   for (const label of ["2시간", "30분"]) {
     await unitButton(page, label).tap();
     await expectToolbarOneLine(page);
@@ -428,6 +458,8 @@ test("데스크톱: 마우스 드래그 중 화면 아래 끝에서 자동 스�
   // 넓은 화면은 그대로: 모든 날짜, 날짜 넘기기·표시 단위·「?」 없음, 범례는 그리드 위
   await expect(page.locator("[data-day-range]")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "내 가능 시간" })).toBeVisible();
+  await expect(page.getByText("아직 선택한 시간이 없어요", { exact: true })).toBeVisible();
+  await expect(page.locator("[data-summary-short]")).toBeHidden();
   await expect(page.getByRole("group", { name: "표시 단위" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "칸 색 안내" })).toBeHidden();
   await expect(page.getByText("지난 시간", { exact: true }).first()).toBeVisible();

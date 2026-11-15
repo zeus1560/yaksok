@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatSelectionSummary, selectionSummary } from "./summary";
+import { formatSelectionShort, formatSelectionSummary, selectionSummary } from "./summary";
 
 const at = (iso: string) => Date.parse(iso);
 
@@ -37,5 +37,16 @@ describe("formatSelectionSummary", () => {
 
   it("고른 칸이 없으면 선택 전 문구", () => {
     expect(formatSelectionSummary([])).toBe("아직 선택한 시간이 없어요");
+  });
+});
+
+describe("formatSelectionShort (좁은 화면 제출 바, 034)", () => {
+  it("「총」과 「선택」을 빼고 「1일 · 1시간 30분」", () => {
+    const slots = [0, 1, 2].map((i) => at("2026-11-12T14:00:00+09:00") + i * 30 * 60e3);
+    expect(formatSelectionShort(slots)).toBe("1일 · 1시간 30분");
+  });
+
+  it("고른 칸이 없으면 짧은 문구", () => {
+    expect(formatSelectionShort([])).toBe("선택 없음");
   });
 });

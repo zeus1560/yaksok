@@ -15,7 +15,7 @@ import {
 import { formatDateRange, formatDuration } from "@/lib/create-promise/format";
 import { classifySubmitFailure, NOTICES } from "@/lib/availability/failure";
 import { createIntake } from "@/lib/availability/intake";
-import { formatSelectionSummary } from "@/lib/availability/summary";
+import { formatSelectionShort, formatSelectionSummary } from "@/lib/availability/summary";
 import { seoulDateOf } from "@/lib/time/seoul";
 import { decidePoll } from "@/lib/availability/poll";
 import { editableDaySlots, toggleDay } from "@/lib/availability/grid";
@@ -559,8 +559,17 @@ export function AvailabilityBoard({
           <div className="flex items-center gap-3">
             <div className="min-w-0 flex-1 text-sm">
               <p className="font-medium">{SUBMISSION_LABELS[state]}</p>
-              <p className="text-xs text-sub" data-selected-slots={futureSlots.length}>
-                {formatSelectionSummary(futureSlots)}
+              {/* 좁은 화면(lg 미만)은 짧은 문구를 한 줄로 보이고, 화면 낭독기는 늘 전체 문구를 읽는다(034) */}
+              <p
+                className="truncate whitespace-nowrap text-xs text-sub"
+                data-selected-slots={futureSlots.length}
+              >
+                <span aria-hidden="true" data-summary-short className="lg:hidden">
+                  {formatSelectionShort(futureSlots)}
+                </span>
+                <span className="sr-only lg:not-sr-only">
+                  {formatSelectionSummary(futureSlots)}
+                </span>
               </p>
             </div>
             <button
