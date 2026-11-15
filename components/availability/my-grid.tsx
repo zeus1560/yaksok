@@ -5,9 +5,9 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
   type MouseEvent,
   type PointerEvent,
+  type ReactNode,
 } from "react";
 import { cellAtPoint, createDragTracker, dragInput, type Drag } from "@/lib/availability/drag";
 import {
@@ -17,34 +17,46 @@ import {
   isPastSlot,
   slotRangeLabel,
   toggleDay,
-  toggleSlot,
   type CellPos,
   type Grid,
 } from "@/lib/availability/grid";
+import {
+  autoScrollSpeed,
+  groupMode,
+  groupRangeLabel,
+  groupRows,
+  groupState,
+  groupStateText,
+  pressGroup,
+  toSlotRect,
+  type DayPage,
+  type GroupState,
+  type Unit,
+} from "@/lib/availability/view";
 import { seoulDateOf } from "@/lib/time/seoul";
 import { DayHeaderText, GridFrame } from "./grid-frame";
+import { GROUP_ROW_CLASS, groupFrameRows, UnitPicker } from "./unit-picker";
+import { useCoarsePointer } from "./media";
 
 // 내 가능 시간 그리드 (TIME-10-04, TIME-09-01, TIME-08-01)
 // 마우스: 드래그한 사각형을 첫 칸의 반대 상태로 통일. 터치·펜·키보드: 칸을 눌러 하나씩 토글
 // 터치 기기는 「드래그로 선택」을 켜면 손가락으로도 마우스와 같은 규칙으로 끌어서 고른다(033, R-38).
 // 켰을 때만 칸 영역의 스크롤을 막고, 날짜 머리글·시각 열·그리드 밖에서는 스크롤된다
 // 날짜 머리글: 그날 전체 선택/해제. 지난 칸은 회색이며 바꿀 수 없다
+// 034 휴대폰(R-39): 4일 구간(page)만 그리고, 30분 칸 1·2·4개를 묶은 칸(unit)으로 보여 줄 수 있다.
+//   드래그·누름은 화면 위치(구간 안 날짜 · 묶음 순서)로 받아 toSlotRect로 30분 칸 사각형으로 바꾼 뒤 applyRect에 넘긴다.
+//   드래그 중 손가락·마우스가 보이는 영역 위·아래 끝(48px)에 가면 페이지를 자동 스크롤한다(휴대폰·데스크톱 모두)
 
-// 터치가 주 입력인 기기(손가락으로 쓰는 화면). 서버 렌더와 첫 하이드레이션은 false(버튼 없음)
-const COARSE_POINTER = "(pointer: coarse)";
+// 자동 스크롤은 누른 자리에서 이만큼 움직인 뒤부터 — 화면 아래쪽 칸을 톡 누를 때 화면이 밀리지 않게
+const AUTO_SCROLL_ARM_PX = 10;
 
-function subscribeCoarsePointer(onChange: () => void) {
-  const query = window.matchMedia(COARSE_POINTER);
-  query.addEventListener("change", onChange);
-  return () => query.removeEventListener("change", onChange);
-}
-
-function useCoarsePointer(): boolean {
-  return useSyncExternalStore(
-    subscribeCoarsePointer,
-    () => window.matchMedia(COARSE_POINTER).matches,
-    () => false,
-  );
+// 보이는 영역의 아래 끝: 아래에 붙은 제출 바(data-drag-dock)가 있으면 그 위
+function visibleBottom(): number {
+  const height = window.innerHeight;
+  const dock = document.querySelector("[data-drag-dock]");
+  if (!dock) return height;
+  const top = dock.getBoundingClientRect().top;
+  return top > 0 && top < height ? top : height;
 }
 
 export function MyGrid({
@@ -54,6 +66,11 @@ export function MyGrid({
   readOnly,
   onCommit,
   onDragActive,
+  page,
+  unit = 1,
+  onUnitChange,
+  onToggleDay,
+  nav,
 }: {
   grid: Grid;
   selection: ReadonlySet<number>;
@@ -61,6 +78,11 @@ export function MyGrid({
   readOnly: boolean;
   onCommit: (next: Set<number>) => void;
   onDragActive: (active: boolean) => void;
+  page?: DayPage; // 휴대폰 날짜 구간(034). 있으면 도구 줄(표시 단위 + 드래그로 선택)과 nav를 그린다
+  unit?: Unit;
+  onUnitChange?: (unit: Unit) => void;
+  onToggleDay?: (day: number) => void; // 없으면 하루 토글을 바로 확정
+  nav?: ReactNode; // 날짜 넘기기 줄
 }) {
   const [drag, setDrag] = useState<Drag | null>(null);
   // 드래그 상태는 이벤트마다 즉시 바뀌는 tracker가 기준이고, drag는 화면 표시용이다 (fix 002)
@@ -76,39 +98,76 @@ export function MyGrid({
   const [hint, setHint] = useState<"before" | "showing" | "done">("before");
   const selecting = touchDevice && selectMode && !readOnly;
 
-  const shown = useMemo(
-    () =>
-      drag ? applyRect(selection, grid, drag.anchor, drag.current, drag.mode, nowMs) : selection,
-    [drag, selection, grid, nowMs],
-  );
+  // 화면 좌표계: 날짜 = 구간 안 위치(0부터), 행 = 묶음 순서. 30분 보기는 묶음 = 30분 칸
+  const offset = page?.start ?? 0;
+  const dayCount = page?.count ?? grid.days.length;
+  const groups = useMemo(() => groupRows(grid.rows.length, unit), [grid.rows.length, unit]);
+  const frameRows = useMemo(() => groupFrameRows(grid, groups, unit), [grid, groups, unit]);
+
+  const shown = useMemo(() => {
+    if (!drag) return selection;
+    // drag.current는 React Compiler가 ref로 읽으므로 한 번에 꺼낸다
+    const { anchor, current: to, mode } = drag;
+    const rect = toSlotRect(groups, offset, anchor, to);
+    return applyRect(selection, grid, rect.anchor, rect.current, mode, nowMs);
+  }, [drag, selection, grid, groups, offset, nowMs]);
 
   // 드래그 중에 화면이 사라지면 놓기 리스너만 뗀다
   useEffect(() => () => detachFinish.current?.(), []);
 
-  function onPointerDown(pos: CellPos, event: PointerEvent<HTMLButtonElement>) {
+  const stateOf = (set: ReadonlySet<number>, view: CellPos): GroupState =>
+    groupState(set, grid, view.day + offset, groups[view.row], nowMs);
+
+  function onPointerDown(view: CellPos, event: PointerEvent<HTMLButtonElement>) {
     lastPointerType.current = event.pointerType;
     skipClick.current = false;
     const input = readOnly ? null : dragInput(event, selecting);
     if (!input) return;
     // 두 번째 손가락은 무시한다(첫 손가락의 드래그를 이어 간다)
     if (input === "touch" && detachFinish.current) return;
-    const ms = cellMs(grid, pos);
-    if (isPastSlot(ms, nowMs)) return;
+    const state = stateOf(selection, view);
+    if (state.kind === "past") return;
     event.preventDefault(); // 텍스트 선택 방지
     detachFinish.current?.();
     onDragActive(true);
-    tracker.start(pos, !selection.has(ms));
+    tracker.start(view, groupMode(state));
     // 드래그 끝: 그리드 밖에서 버튼을 놓거나 창을 벗어나도 끝낸다. 누른 그 자리에서 바로 달아
     // 렌더를 기다리지 않는다. 드래그 중에는 폴링 반영을 보류하므로 선택은 누른 시점 값을 기준으로 한다
     const base = selection;
     const pointerId = event.pointerId;
-    // 터치는 누른 칸이 포인터를 붙잡아 다른 칸의 pointerenter가 오지 않는다. 손가락 좌표로 칸을 찾는다
-    // 칸 크기는 칸을 감싼 틀(테두리 포함, 모든 칸이 같음) 기준. 끄는 동안 칸 영역은 스크롤되지 않는다
-    const rect = (event.currentTarget.parentElement ?? event.currentTarget).getBoundingClientRect();
-    const box = { pos, left: rect.left, top: rect.top, width: rect.width, height: rect.height };
-    const size = { days: grid.days.length, rows: grid.rows.length };
+    const rectGroups = groups;
+    const rectOffset = offset;
+    // 터치는 누른 칸이 포인터를 붙잡아 다른 칸의 pointerenter가 오지 않는다. 손가락 좌표로 칸을 찾는다.
+    // 칸 크기는 칸을 감싼 틀(테두리 포함, 모든 칸이 같음) 기준. 자동 스크롤로 칸이 움직이므로 위치는 매번 다시 잰다
+    const cell = event.currentTarget.parentElement ?? event.currentTarget;
+    const size = { days: dayCount, rows: groups.length };
+    const startX = event.clientX;
+    const startY = event.clientY;
+    let x = startX;
+    let y = startY;
+    let armed = false;
+    let frame = 0;
+    const follow = () => {
+      const r = cell.getBoundingClientRect();
+      const box = { pos: view, left: r.left, top: r.top, width: r.width, height: r.height };
+      tracker.move(cellAtPoint(box, size, x, y));
+    };
     const move = (e: globalThis.PointerEvent) => {
-      if (e.pointerId === pointerId) tracker.move(cellAtPoint(box, size, e.clientX, e.clientY));
+      if (e.pointerId !== pointerId) return;
+      x = e.clientX;
+      y = e.clientY;
+      if (!armed && Math.hypot(x - startX, y - startY) >= AUTO_SCROLL_ARM_PX) armed = true;
+      if (input === "touch") follow();
+    };
+    // 끝 가까이에 있는 동안 프레임마다 스크롤하고, 스크롤로 손가락 아래에 온 칸까지 선택에 넣는다
+    const tick = () => {
+      frame = window.requestAnimationFrame(tick);
+      if (!armed) return;
+      const speed = autoScrollSpeed(y, 0, visibleBottom());
+      if (speed === 0) return;
+      const before = window.scrollY;
+      window.scrollBy(0, speed);
+      if (window.scrollY !== before) follow();
     };
     const finish = (e: Event) => {
       if (input === "touch" && e instanceof globalThis.PointerEvent && e.pointerId !== pointerId)
@@ -117,39 +176,40 @@ export function MyGrid({
       const last = tracker.end();
       if (!last) return;
       onDragActive(false);
-      onCommit(applyRect(base, grid, last.anchor, last.current, last.mode, nowMs));
+      const rect = toSlotRect(rectGroups, rectOffset, last.anchor, last.current);
+      onCommit(applyRect(base, grid, rect.anchor, rect.current, last.mode, nowMs));
     };
     const detach = () => {
       window.removeEventListener("pointerup", finish);
       window.removeEventListener("pointercancel", finish);
       window.removeEventListener("blur", finish);
       window.removeEventListener("pointermove", move);
+      window.cancelAnimationFrame(frame);
       detachFinish.current = null;
     };
     window.addEventListener("pointerup", finish);
     window.addEventListener("pointercancel", finish);
     window.addEventListener("blur", finish);
-    if (input === "touch") {
-      skipClick.current = true; // 놓기에서 이미 한 칸(또는 사각형)을 확정했다
-      window.addEventListener("pointermove", move);
-    }
+    window.addEventListener("pointermove", move);
+    frame = window.requestAnimationFrame(tick);
+    // 놓기에서 이미 한 칸(또는 사각형)을 확정했다
+    if (input === "touch") skipClick.current = true;
     detachFinish.current = detach;
   }
 
-  function onPointerEnter(pos: CellPos) {
-    tracker.move(pos);
+  function onPointerEnter(view: CellPos) {
+    tracker.move(view);
   }
 
-  function onClick(pos: CellPos, event: MouseEvent<HTMLButtonElement>) {
+  function onClick(view: CellPos, event: MouseEvent<HTMLButtonElement>) {
     // 마우스 클릭과 선택 모드의 손가락 탭은 드래그가 처리했다. detail 0은 키보드(Enter·Space)
     if (readOnly) return;
     if (event.detail !== 0 && (lastPointerType.current === "mouse" || skipClick.current)) {
       skipClick.current = false;
       return;
     }
-    const ms = cellMs(grid, pos);
-    if (isPastSlot(ms, nowMs)) return;
-    onCommit(toggleSlot(selection, ms));
+    if (stateOf(selection, view).kind === "past") return;
+    onCommit(pressGroup(selection, grid, view.day + offset, groups[view.row], nowMs));
   }
 
   function toggleSelectMode() {
@@ -159,37 +219,75 @@ export function MyGrid({
     if (!next && hint === "showing") setHint("done");
   }
 
+  // 휴대폰 도구 줄(page)에서는 손가락 아이콘 + 「드래그」로 줄이고 켜짐·꺼짐은 색(켜짐 = 파랑 채움)과 aria-pressed로만
+  // 구분한다(실기기 확인 — 360px 한 줄). 화면 낭독기 이름은 「드래그로 선택」 그대로. 넓은 화면의 터치 기기는 033 모양 그대로
+  const dragButton =
+    touchDevice &&
+    !readOnly &&
+    (page ? (
+      <button
+        type="button"
+        aria-pressed={selectMode}
+        aria-label="드래그로 선택"
+        onClick={toggleSelectMode}
+        className={`flex h-icon shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-field border px-2.5 text-sm ${
+          selectMode ? "border-blue bg-blue font-bold text-white" : "border-line bg-paper text-sub"
+        }`}
+      >
+        <FingerIcon className="h-4 w-4" />
+        드래그
+      </button>
+    ) : (
+      <button
+        type="button"
+        aria-pressed={selectMode}
+        onClick={toggleSelectMode}
+        className={`flex h-icon w-full items-center justify-center gap-2 rounded-field border text-sm ${
+          selectMode
+            ? "border-blue bg-blue-soft font-bold text-ink"
+            : "border-line bg-paper text-sub"
+        }`}
+      >
+        드래그로 선택
+        <span aria-hidden="true" className="text-xs font-normal">
+          {selectMode ? "켜짐" : "꺼짐"}
+        </span>
+      </button>
+    ));
+  const hintText = selecting && hint === "showing" && (
+    <p role="status" className="mt-2 text-xs text-ink">
+      그리드 위에서는 끌어서 고르고, 스크롤은 날짜·시각 줄이나 그리드 밖에서 해 주세요.
+    </p>
+  );
+
   return (
     <>
-      {touchDevice && !readOnly && (
+      {page ? (
+        // 휴대폰 도구 줄: 표시 단위 + 드래그로 선택 (034). 360px에서도 한 줄(줄바꿈 없음)
         <div className="mb-3">
-          <button
-            type="button"
-            aria-pressed={selectMode}
-            onClick={toggleSelectMode}
-            className={`flex h-icon w-full items-center justify-center gap-2 rounded-field border text-sm ${
-              selectMode
-                ? "border-blue bg-blue-soft font-bold text-ink"
-                : "border-line bg-paper text-sub"
-            }`}
-          >
-            드래그로 선택
-            <span aria-hidden="true" className="text-xs font-normal">
-              {selectMode ? "켜짐" : "꺼짐"}
-            </span>
-          </button>
-          {selecting && hint === "showing" && (
-            <p role="status" className="mt-2 text-xs text-ink">
-              그리드 위에서는 끌어서 고르고, 스크롤은 날짜·시각 줄이나 그리드 밖에서 해 주세요.
-            </p>
-          )}
+          <div className="flex items-center justify-between gap-2" data-toolbar>
+            <UnitPicker unit={unit} onChange={(next) => onUnitChange?.(next)} />
+            {dragButton}
+          </div>
+          {hintText}
         </div>
+      ) : (
+        dragButton && (
+          <div className="mb-3">
+            {dragButton}
+            {hintText}
+          </div>
+        )
       )}
+      {nav}
       <GridFrame
         grid={grid}
         selecting={selecting}
         label="내 가능 시간"
         today={nowMs > 0 ? seoulDateOf(new Date(nowMs)) : null}
+        page={page}
+        rows={frameRows}
+        rowClass={GROUP_ROW_CLASS[unit]}
         renderHeader={(day, index) => {
           const editable = !readOnly && editableDaySlots(grid, index, nowMs).length > 0;
           if (!editable) return <DayHeaderText day={day} />;
@@ -198,42 +296,131 @@ export function MyGrid({
               type="button"
               className="h-full w-full hover:bg-faint"
               aria-label={`${day.label}(${day.weekday}) 하루 전체 선택 또는 해제`}
-              onClick={() => onCommit(toggleDay(selection, grid, index, nowMs))}
+              onClick={() =>
+                onToggleDay
+                  ? onToggleDay(index)
+                  : onCommit(toggleDay(selection, grid, index, nowMs))
+              }
             >
               <DayHeaderText day={day} />
             </button>
           );
         }}
         renderCell={(d, r) => {
-          const pos = { day: d, row: r };
-          const ms = cellMs(grid, pos);
-          const past = isPastSlot(ms, nowMs);
-          const on = shown.has(ms);
-          const color = past
-            ? on
-              ? "bg-sub/35"
-              : "bg-muted"
-            : on
-              ? "bg-blue"
-              : readOnly
-                ? "bg-paper"
-                : "bg-paper hover:bg-faint";
+          const view = { day: d - offset, row: r };
+          const group = groups[r];
           const day = grid.days[d];
+          const handlers = {
+            onPointerDown: (e: PointerEvent<HTMLButtonElement>) => onPointerDown(view, e),
+            onPointerEnter: () => onPointerEnter(view),
+            onClick: (e: MouseEvent<HTMLButtonElement>) => onClick(view, e),
+          };
+          if (unit === 1) {
+            const ms = cellMs(grid, { day: d, row: group.start });
+            const past = isPastSlot(ms, nowMs);
+            const on = shown.has(ms);
+            const color = past
+              ? on
+                ? "bg-sub/35"
+                : "bg-muted"
+              : on
+                ? "bg-blue"
+                : readOnly
+                  ? "bg-paper"
+                  : "bg-paper hover:bg-faint";
+            return (
+              <button
+                type="button"
+                data-slot={ms}
+                aria-pressed={on}
+                aria-disabled={past || readOnly}
+                aria-label={`${day.label}(${day.weekday}) ${slotRangeLabel(grid.rows[r].minute)} ${on ? "가능" : "불가능"}${past ? ", 지난 시간" : ""}`}
+                className={`flex h-full w-full items-center justify-center ${color} ${past || readOnly ? "cursor-default" : "cursor-pointer"}`}
+                {...handlers}
+              >
+                {on && <Check className="h-3 w-3 text-white" />}
+              </button>
+            );
+          }
+          const state = stateOf(shown, view);
+          const past = state.kind === "past";
           return (
             <button
               type="button"
-              data-slot={ms}
-              aria-pressed={on}
+              data-group={cellMs(grid, { day: d, row: group.start })}
+              aria-pressed={state.kind === "all" ? true : state.kind === "some" ? "mixed" : false}
               aria-disabled={past || readOnly}
-              aria-label={`${day.label}(${day.weekday}) ${slotRangeLabel(grid.rows[r].minute)} ${on ? "가능" : "불가능"}${past ? ", 지난 시간" : ""}`}
-              className={`block h-full w-full ${color} ${past || readOnly ? "cursor-default" : "cursor-pointer"}`}
-              onPointerDown={(e) => onPointerDown(pos, e)}
-              onPointerEnter={() => onPointerEnter(pos)}
-              onClick={(e) => onClick(pos, e)}
-            />
+              aria-label={`${day.label}(${day.weekday}) ${groupRangeLabel(grid, group)}, ${groupStateText(state)}`}
+              className={`flex h-full w-full items-center justify-center text-xs font-medium ${GROUP_CLASS[state.kind]} ${
+                !past && !readOnly && state.kind === "none" ? "hover:bg-faint" : ""
+              } ${past || readOnly ? "cursor-default" : "cursor-pointer"}`}
+              {...handlers}
+            >
+              <GroupMark state={state} />
+            </button>
           );
         }}
       />
     </>
+  );
+}
+
+// 묶은 칸 모양 (034): 전부 = 파랑 + 체크, 일부 = 연한 파랑 + 파란 테두리 + n/m, 없음 = 빈칸, 전부 지남 = 회색 + —
+const GROUP_CLASS: Record<GroupState["kind"], string> = {
+  all: "bg-blue",
+  some: "bg-blue-soft text-ink shadow-[inset_0_0_0_2px_var(--color-blue)]",
+  none: "bg-paper",
+  past: "bg-muted text-sub",
+};
+
+function GroupMark({ state }: { state: GroupState }) {
+  if (state.kind === "all") return <Check className="h-3.5 w-3.5 text-white" />;
+  if (state.kind === "some")
+    return (
+      <span aria-hidden="true">
+        {state.selected}/{state.total}
+      </span>
+    );
+  if (state.kind === "past") return <span aria-hidden="true">—</span>;
+  return null;
+}
+
+// 손가락 아이콘(휴대폰 「드래그」 버튼)
+function FingerIcon({ className }: { className: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M22 14a8 8 0 0 1-8 8" />
+      <path d="M18 11v-1a2 2 0 0 0-4 0" />
+      <path d="M14 10V9a2 2 0 0 0-4 0v1" />
+      <path d="M10 9.5V4a2 2 0 0 0-4 0v10" />
+      <path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+    </svg>
+  );
+}
+
+// 선택 표시(색만으로 구분하지 않게, 034)
+export function Check({ className }: { className: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 12 12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M2.5 6.2 5 8.5l4.5-5" />
+    </svg>
   );
 }

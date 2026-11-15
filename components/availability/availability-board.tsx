@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import useSWR from "swr";
 import { ConfirmDialog } from "@/components/common/modal";
 import { Badge, Button, Notice, PANEL_BOX } from "@/components/common/ui";
@@ -15,9 +15,11 @@ import {
 import { formatDateRange, formatDuration } from "@/lib/create-promise/format";
 import { classifySubmitFailure, NOTICES } from "@/lib/availability/failure";
 import { createIntake } from "@/lib/availability/intake";
-import { formatSelectionSummary } from "@/lib/availability/summary";
+import { formatSelectionShort, formatSelectionSummary } from "@/lib/availability/summary";
 import { seoulDateOf } from "@/lib/time/seoul";
 import { decidePoll } from "@/lib/availability/poll";
+import { editableDaySlots, toggleDay } from "@/lib/availability/grid";
+import { dayPage, initialPage, parseUnit, restoreDay, type Unit } from "@/lib/availability/view";
 import {
   clipDraftToRange,
   decideDraft,
@@ -37,8 +39,11 @@ import {
   type LocalDraft,
   type ServerMe,
 } from "@/lib/availability/sync";
+import { DayNav, dayText } from "./day-nav";
 import { EveryoneGrid } from "./everyone-grid";
-import { MyGrid } from "./my-grid";
+import { useNarrow } from "./media";
+import { Check, MyGrid } from "./my-grid";
+import { UnitPicker } from "./unit-picker";
 import {
   toSnapshot,
   withMe,
@@ -57,6 +62,14 @@ import {
 
 const POLL_MS = 5000;
 const CLOCK_TICK_MS = 15_000;
+// 034 휴대폰 보기 (R-39)
+// - 날짜 구간은 「내 시간」·「모두의 시간」이 함께 쓴다. 고르기 전에는 지나지 않은 첫 날이 있는 구간
+// - 「내 시간」 표시 단위는 이 기기에 기억한다(약속과 관계없음). 보기 방식일 뿐이라 켜진 채 와도 스크롤·선택이 막히지 않는다
+// - 날짜 머리글 하루 토글 뒤 약 3초 「되돌리기」 알림(손가락·포커스가 알림 위에 있는 동안은 닫지 않음)
+const UNIT_KEY = "yaksok:grid-unit";
+const UNDO_MS = 3000;
+
+type DayUndo = { id: number; date: string; text: string; before: ReadonlySet<number> };
 
 type Polled = { result: ApiResult<AvailabilityResponse>; startedAt: number; receivedAt: number };
 
@@ -96,6 +109,13 @@ export function AvailabilityBoard({
   const [submitting, setSubmitting] = useState(false);
   const [confirmEmpty, setConfirmEmpty] = useState(false);
   const [offline, setOffline] = useState(false);
+  const narrow = useNarrow();
+  const [unit, setUnitState] = useState<Unit>(() => parseUnit(readStorage(UNIT_KEY)));
+  const [pageChoice, setPageChoice] = useState<number | null>(null);
+  const [dayUndo, setDayUndo] = useState<DayUndo | null>(null);
+  const [undoHeld, setUndoHeld] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const undoSeq = useRef(0);
 
   // SWR 콜백·이벤트 처리기에서 최신 값을 읽기 위한 참조. 렌더 중에는 읽지 않는다
   const draftRef = useRef<LocalDraft | null>(draft);
@@ -234,6 +254,17 @@ export function AvailabilityBoard({
 
   const revalidate = useCallback(() => void mutate(), [mutate]);
 
+  const setUnit = useCallback((next: Unit) => {
+    setUnitState(next);
+    writeStorage(UNIT_KEY, String(next));
+  }, []);
+
+  useEffect(() => {
+    if (!dayUndo || undoHeld) return;
+    const timer = window.setTimeout(() => setDayUndo(null), UNDO_MS);
+    return () => window.clearTimeout(timer);
+  }, [dayUndo, undoHeld]);
+
   if (!snapshot) {
     return (
       <p role="status" className="py-16 text-center text-sub">
@@ -324,7 +355,34 @@ export function AvailabilityBoard({
     }
   }
 
-  const { settings } = snapshot;
+  const { settings, grid } = snapshot;
+  const pageIndex = pageChoice ?? initialPage(grid, nowMs);
+  const page = narrow ? dayPage(grid.days.length, pageIndex) : undefined;
+  const nav = page && <DayNav grid={grid} page={pageIndex} onChange={setPageChoice} />;
+
+  // 휴대폰 날짜 머리글: 하루 토글 + 되돌리기 알림
+  function toggleDayWithUndo(day: number) {
+    const slots = editableDaySlots(grid, day, nowMs);
+    const before = new Set(slots.filter((ms) => selection.has(ms)));
+    const next = toggleDay(selection, grid, day, nowMs);
+    onCommit(next);
+    undoSeq.current += 1;
+    setUndoHeld(false);
+    setDayUndo({
+      id: undoSeq.current,
+      date: grid.days[day].date,
+      text: `${dayText(grid.days[day])} 전체 ${slots.every((ms) => next.has(ms)) ? "선택됨" : "해제됨"}`,
+      before,
+    });
+  }
+
+  function undoDay() {
+    if (!dayUndo) return;
+    const day = grid.days.findIndex((d) => d.date === dayUndo.date);
+    if (day !== -1) onCommit(restoreDay(selection, grid, day, dayUndo.before, nowMs));
+    setDayUndo(null);
+  }
+
   const futureSlots = [...selection].filter((ms) => ms > nowMs);
   const status = STATUS_BADGE[snapshot.status] ?? STATUS_BADGE.collecting;
 
@@ -413,28 +471,32 @@ export function AvailabilityBoard({
         <section
           className={`min-w-0 ${PANEL_BOX} p-4 sm:p-6 ${tab === "mine" ? "" : "hidden lg:block"}`}
         >
-          <h2 className="text-lg font-bold">내 가능 시간</h2>
-          <p className="mt-1 text-sm text-sub">
+          {/* 휴대폰은 제목을 빼고(바로 위 탭 「내 시간」과 겹침, R-39) 설명·범례를 제출 바의 「?」로 옮긴다(034).
+              읽기 전용은 제출 바가 없어 설명·범례를 그대로 보인다 */}
+          <h2 className="hidden text-lg font-bold lg:block">내 가능 시간</h2>
+          <p className={`text-sm text-sub lg:mt-1 ${readOnly ? "" : "hidden lg:block"}`}>
             {readOnly
               ? "제출한 시간이에요."
               : "30분 단위예요. 빈 칸부터 끌면 추가, 고른 칸부터 끌면 해제돼요. 휴대폰은 칸을 눌러 하나씩 고르거나, 「드래그로 선택」을 켜고 끌어서 골라요. 날짜를 누르면 하루 전체를 골라요."}
           </p>
           <div
-            className="mt-3 flex flex-w
-          rap gap-3 text-xs text-sub"
+            className={`mt-3 flex-wrap gap-3 text-xs text-sub ${readOnly ? "flex" : "hidden lg:flex"}`}
           >
-            <Legend className="bg-blue" label="가능" />
-            <Legend className="border border-line bg-paper" label="불가능" />
-            <Legend className="bg-muted" label="지난 시간" />
+            {narrow ? <CellKey /> : <LegendItems />}
           </div>
-          <div className="mt-3">
+          <div className={readOnly ? "mt-3" : "lg:mt-3"}>
             <MyGrid
-              grid={snapshot.grid}
+              grid={grid}
               selection={selection}
               nowMs={nowMs}
               readOnly={readOnly}
               onCommit={onCommit}
               onDragActive={onDragActive}
+              page={page}
+              unit={narrow ? unit : 1}
+              onUnitChange={setUnit}
+              onToggleDay={narrow ? toggleDayWithUndo : undefined}
+              nav={nav}
             />
           </div>
         </section>
@@ -447,8 +509,19 @@ export function AvailabilityBoard({
             제출한 시간만 보여요. 색이 진할수록 가능한 사람이 많아요.
           </p>
           <div className="mt-3">
+            {/* 휴대폰: 「내 시간」과 같은 표시 단위(드래그 버튼 없음, R-40) */}
+            {narrow && (
+              <div className="mb-3 flex items-center">
+                <UnitPicker unit={unit} onChange={setUnit} />
+              </div>
+            )}
+            {nav}
             <EveryoneGrid
-              grid={snapshot.grid}
+              grid={grid}
+              page={page}
+              unit={narrow ? unit : 1}
+              nowMs={nowMs}
+              sheet={narrow && tab === "all"}
               participants={snapshot.participants}
               total={snapshot.total}
               today={nowMs > 0 ? seoulDateOf(new Date(nowMs)) : null}
@@ -458,14 +531,69 @@ export function AvailabilityBoard({
       </div>
 
       {!readOnly && (
-        <div className="sticky bottom-0 z-30 mt-4 -mx-4 border-t border-line bg-paper/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-card sm:border">
+        <div
+          data-drag-dock
+          className="sticky bottom-0 z-30 mt-4 -mx-4 border-t border-line bg-paper/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-card sm:border"
+        >
+          {dayUndo && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-full flex justify-center px-4 pb-2">
+              <div
+                key={dayUndo.id}
+                role="status"
+                onPointerEnter={() => setUndoHeld(true)}
+                onPointerLeave={() => setUndoHeld(false)}
+                onFocus={() => setUndoHeld(true)}
+                onBlur={() => setUndoHeld(false)}
+                className="pointer-events-auto flex items-center gap-2 rounded-field bg-text px-4 py-2 text-sm text-white shadow-lg"
+              >
+                <span>{dayUndo.text}</span>
+                <span aria-hidden="true">·</span>
+                <button
+                  type="button"
+                  onClick={undoDay}
+                  className="font-bold text-blue-soft underline underline-offset-2"
+                >
+                  되돌리기
+                </button>
+              </div>
+            </div>
+          )}
+          <div
+            id="grid-help"
+            hidden={!helpOpen}
+            className="mb-3 border-b border-line pb-3 lg:hidden"
+          >
+            <CellKey />
+            <p className="mt-2 text-xs text-sub">날짜를 누르면 하루 전체를 골라요.</p>
+          </div>
           <div className="flex items-center gap-3">
             <div className="min-w-0 flex-1 text-sm">
               <p className="font-medium">{SUBMISSION_LABELS[state]}</p>
-              <p className="text-xs text-sub" data-selected-slots={futureSlots.length}>
-                {formatSelectionSummary(futureSlots)}
+              {/* 좁은 화면(lg 미만)은 짧은 문구를 한 줄로 보이고, 화면 낭독기는 늘 전체 문구를 읽는다(034) */}
+              <p
+                className="truncate whitespace-nowrap text-xs text-sub"
+                data-selected-slots={futureSlots.length}
+              >
+                <span aria-hidden="true" data-summary-short className="lg:hidden">
+                  {formatSelectionShort(futureSlots)}
+                </span>
+                <span className="sr-only lg:not-sr-only">
+                  {formatSelectionSummary(futureSlots)}
+                </span>
               </p>
             </div>
+            <button
+              type="button"
+              aria-label="칸 색 안내"
+              aria-expanded={helpOpen}
+              aria-controls="grid-help"
+              onClick={() => setHelpOpen((open) => !open)}
+              className={`flex h-control w-10 shrink-0 items-center justify-center rounded-control border text-base font-bold lg:hidden ${
+                helpOpen ? "border-blue bg-blue-soft text-ink" : "border-line bg-paper text-ink"
+              }`}
+            >
+              ?
+            </button>
             <div className="w-36 shrink-0 sm:w-60">
               <Button disabled={submitting} onClick={() => void submit(false)}>
                 {submitting && !confirmEmpty
@@ -511,10 +639,57 @@ const STATUS_BADGE: Record<string, { label: string; tone: "blue" | "muted" }> = 
   confirmed: { label: "약속 확정", tone: "blue" },
 };
 
-function Legend({ className, label }: { className: string; label: string }) {
+// 넓은 화면 칸 색 범례(데스크톱 그대로, 가능 칸에 체크만 더함)
+function LegendItems() {
   return (
-    <span className="flex items-center gap-1.5">
-      <span className={`h-3 w-3 rounded-xs ${className}`} />
+    <>
+      <Legend className="bg-blue text-white" label="가능">
+        <Check className="h-2.5 w-2.5" />
+      </Legend>
+      <Legend className="border border-line bg-paper" label="불가능" />
+      <Legend className="bg-muted text-sub" label="지난 시간" />
+    </>
+  );
+}
+
+// 휴대폰 칸 모양 네 가지: 작은 견본 + 짧은 이름 한 줄(실기기 확인 뒤 단순화, 034)
+function CellKey() {
+  return (
+    <div data-cell-key className="flex flex-nowrap items-center gap-3 text-xs text-sub">
+      <Legend className="bg-blue text-white" label="선택">
+        <Check className="h-2.5 w-2.5" />
+      </Legend>
+      <Legend
+        className="w-6 bg-blue-soft text-[0.5625rem] font-medium leading-none text-ink shadow-[inset_0_0_0_1.5px_var(--color-blue)]"
+        label="일부"
+      >
+        n/m
+      </Legend>
+      <Legend className="bg-muted text-[0.625rem] leading-none text-sub" label="지난 시간">
+        —
+      </Legend>
+      <Legend className="border border-line bg-paper" label="선택 안 함" />
+    </div>
+  );
+}
+
+function Legend({
+  className,
+  label,
+  children,
+}: {
+  className: string;
+  label: string;
+  children?: ReactNode;
+}) {
+  return (
+    <span className="flex items-center gap-1.5 whitespace-nowrap">
+      <span
+        aria-hidden="true"
+        className={`flex h-3.5 min-w-3.5 items-center justify-center rounded-xs ${className}`}
+      >
+        {children}
+      </span>
       {label}
     </span>
   );

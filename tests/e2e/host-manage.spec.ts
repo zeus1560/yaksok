@@ -20,7 +20,10 @@ import {
   deadlineText,
   dialogOf,
   expectInputScreen,
+  dayRange,
+  dayText,
   expectNoHScroll,
+  isMobile,
   localOf,
   menuOf,
   openList,
@@ -182,7 +185,18 @@ test("방장 메뉴·명단, 설정 변경(정원·마감·범위), 내보내기
     await expect(
       text(host.page, "모든 참여자의 제출이 해제되어 다시 제출해야 해요."),
     ).toBeVisible();
-    await expect.poll(() => dayCount(mem.page), { timeout: 15_000 }).toBe(5);
+    if (isMobile(mem.page)) {
+      // 휴대폰은 4일씩 넘긴다(034): 첫 구간 4일 + 다음 구간에 5일째
+      await expect(dayRange(mem.page)).toHaveText(
+        `${dayText(seoulDate(1))} – ${dayText(seoulDate(4))}`,
+        { timeout: 15_000 },
+      );
+      expect(await dayCount(mem.page)).toBe(4);
+      await mem.page.getByRole("button", { name: "다음 4일" }).filter({ visible: true }).click();
+      await expect(dayRange(mem.page)).toHaveText(dayText(seoulDate(5)));
+    } else {
+      await expect.poll(() => dayCount(mem.page), { timeout: 15_000 }).toBe(5);
+    }
     await expectNoHScroll(mem.page);
   });
 
