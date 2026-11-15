@@ -2,7 +2,7 @@
 
 ## 상태
 
-진행 중 (1부·2부 구현·검증 완료. 배포 5c90481(함수 지역 `sin1`)에서 `@smoke` 9개 2회 연속 통과 — AC-7·AC-12 충족. 남은 것: 아이폰 확인(공개 배포 전 팀원 아이폰, 안드로이드는 2026-11-15 정상), `main` 병합 뒤 운영 배포 확인, 취소와 겹친 조회의 401은 다음 수정 PR)
+완료 (PR #1 병합 a393e87, 2026-11-15. 병합 뒤 `main`으로 새 Production 배포가 생기지 않음 — 사용자 확인, AC-10. 남은 일: 아이폰 Safari 확인은 공개 배포 전 팀원 아이폰으로(안드로이드는 2026-11-15 정상), 취소와 겹친 조회의 401은 이번 수정 PR `context/fixes/002`에서 처리)
 
 ## 스펙
 
@@ -19,7 +19,7 @@
 ## 작업 기준점
 
 - 원격: `team` = `yeonseong0224/yaksok`(옛 `origin`), `origin` = `zeus1560/yaksok`(새 개인 저장소). `main`만 push — 새 `origin/main` 94e9568 = 로컬 `main`(`git ls-remote`로 확인). 열린 `ahn/` 브랜치는 옮기지 않음(로컬 브랜치는 그대로 `team/…`을 추적)
-- 브랜치: `ahn/feat-미리보기-배포` (`origin/main` 94e9568에서 생성, upstream 없음 — 첫 push 때 `-u origin`)
+- 브랜치: `ahn/feat-미리보기-배포` (`origin/main` 94e9568에서 생성, upstream 없음 — 첫 push 때 `-u origin`). PR #1 병합(a393e87)
 - 준비 단계: 작업 트리 깨끗, `main` 22c648b → 94e9568 fast-forward, 원격이 사라진 로컬 `ahn/` 브랜치 없음(원격이 남은 로컬 `ahn/` 26개는 그대로)
 - 커밋(사용자 확인 뒤): 90fe993 `docs: 031 완료 기록`(요청의 「fix 002」는 아직 하지 않은 작업으로 확인), 이어서 미리보기 배포 준비. `git push -u origin ahn/feat-미리보기-배포`
 
@@ -91,7 +91,7 @@
 
 ## 메모
 
-- 2부에서 발견(032에서는 고치지 않음 — 다음 수정 PR에서 fix 002와 함께 공통 인증 모듈 수정, R-37): 취소 커밋과 겹친 조회의 401 — `session-auth.ts`가 약속 상태와 세션을 따로 읽어, 그 사이에 취소가 커밋되면 409 `PROMISE_CANCELLED` 대신 401. 화면 결과는 같음(401 뒤 링크 재조회 → 취소 안내). 스펙 미정 사항 참고
+- 2부에서 발견(032에서는 고치지 않음 — 이번 수정 PR `context/fixes/002`에서 공통 인증 모듈 수정, R-37): 취소 커밋과 겹친 조회의 401 — `session-auth.ts`가 약속 상태와 세션을 따로 읽어, 그 사이에 취소가 커밋되면 409 `PROMISE_CANCELLED` 대신 401. 화면 결과는 같음(401 뒤 링크 재조회 → 취소 안내). 스펙 미정 사항 참고
 - Vercel 확인(공식 문서, 2026-11-12, 2부): `git.deploymentEnabled`(브랜치별 `false`, 적지 않은 브랜치 기본 `true`, minimatch), `regions`는 대시보드 Function Region보다 우선·Hobby는 한 지역·기본 `iad1`·싱가포르 `sin1`, 공유 링크는 모든 플랜(Hobby는 계정 전체 1개, 배포 화면 Share → Anyone with the link), Ignored Build Step은 건너뛴 빌드가 Canceled로 남음. 문서에 없는 것: `vercel.json`을 어느 커밋에서 읽는지, 브랜치 주소에서 한글이 지워지는 규칙(관찰로만 확인), 대시보드 Create Deployment의 대상 환경
 - Vercel 확인(공식 문서, 2026-11-12): 시스템 변수 `VERCEL_ENV`·`VERCEL_URL`·`VERCEL_BRANCH_URL`·`VERCEL_PROJECT_PRODUCTION_URL`은 빌드·실행 모두, 스킴 없는 호스트. Next.js에 `NEXT_PUBLIC_VERCEL_ENV` 제공. 우회 헤더 `x-vercel-protection-bypass`, 비밀값은 Settings → Deployment Protection → Protection Bypass for Automation(모든 플랜), Vercel이 `VERCEL_AUTOMATION_BYPASS_SECRET` 자동 추가. Standard Protection은 운영 도메인을 막지 않음. Node 26.x 기본·24.x 선택 가능, `engines.node`가 설정보다 우선. Build Command는 `build` 스크립트 사용. Hobby는 조직의 비공개 저장소 배포 불가·커밋 작성자가 계정 주인이어야 함
 
@@ -346,3 +346,19 @@
 - 변경: `scripts/verify/` 시나리오를 `tests/e2e/`(Playwright Test 1.64.1)로 옮김 — 운영 모드(`next build` → `next start` 127.0.0.1:3101 → 로컬 https 프록시 `https://localhost:3100`), 프로젝트 chromium 데스크톱·webkit 데스크톱·webkit 모바일(iPhone 13, API 테스트는 chromium만), `.env.e2e`(Neon e2e 브랜치) 전용 가드(없음·같은 주소·같은 DB 호스트·이름 거부), 테스트별 데이터 생성·삭제와 중단 뒤 다음 실행 정리·끝 스냅샷 비교, 새 항목(전체 흐름·7일 지난 링크 410·서버 422·1분 강조·재조율 응답 유실·운영 모드 no-store·쿠키 속성). npm `test:e2e`·프로젝트별·`test:e2e:migrate`·`test:e2e:install`, devDependencies `@playwright/test`·`pg`·`@types/pg`. 문서: SETUP 4-5, CLAUDE.md 3·5절. 제품 코드 변경 없음
 - 검증: `npm run test:e2e` 97 예상대로(알려진 실패 1 포함)·2 건너뜀·예상 밖 0, 16.5분, 스냅샷 동일. 가드·중단 뒤 정리 확인. Vitest 1647건, lint·typecheck·prettier·build 통과
 - 남은 제한: WebKit 드래그 마지막 칸 0ms 놓기 누락(`test.fail`로 표시, 다음 수정), `/api/health` `Cache-Control` 없음(→ 032에서 수정), CI 연결(DB 비밀값) 없음
+
+### 2026-11-15 — 배포 전 정리 3: 미리보기 배포 (032)
+
+- 스펙: `context/features/032-preview-deploy.md`
+- 브랜치: `ahn/feat-미리보기-배포` (PR #1 병합, a393e87 — 개인 저장소 `zeus1560/yaksok`)
+- 변경: 1부 — 저장소 이전(`origin`=개인 저장소, `team`=팀 저장소), 허용 Origin·초대 링크 주소의 배포 환경별 결정(순수 함수 `lib/public-url.ts`, 화면도 같은 기준), `/api/health` no-store·DB 실패 503, 미리보기 DB 수동 마이그레이션(`db:deploy:preview`·`db:status:preview`, 개발·e2e DB면 거부), 배포 주소 확인 묶음(`test:e2e:preview`, `@smoke` 9개, 보호 우회 헤더), `docs/architecture/DEPLOY.md`(R-36). 2부 — `vercel.json`(함수 지역 `sin1`, `main` 자동 배포 끔), DEPLOY.md 배포 경험 반영(Production으로 잡힌 첫 배포·한글 브랜치 주소·스키마 PR push 전 마이그레이션·함수 지역 확인), 브랜치 이름 영어 규칙, `MOBILE_CHECKLIST.md`(78개 항목), 시작 때 health 응답 시간·함수 지역 출력, `expectPollReflects` 판정 수정(변경 전에 시작한 폴링도 새 값이면 인정)
+- 검증: 1부 — Vitest 1667건(이번 20건, TDD RED 11/13 실패 → GREEN), `TZ=UTC`·`America/Los_Angeles`, lint·typecheck·prettier·build 통과, 로컬 `test:e2e` 세 프로젝트 99 통과·2 건너뜀·예상 밖 0(알려진 흔들림 1). 2부 — 배포 5c90481(`sin1`)에서 `@smoke` 9/9 2회 연속(2.2분·2.4분, `/api/health` 112~198ms, `iad1` 때는 8/9·453ms), 실제 HTTPS 쿠키 속성·다른 Origin 403·초대 링크 주소·no-store 확인, 미리보기 DB 매 실행 스냅샷 동일, 로컬 회귀 chromium 18/18·webkit 18개 예상대로, 안드로이드 Chrome 휴대폰 확인 정상(2026-11-15). 병합 뒤 `main`으로 새 Production 배포가 생기지 않음(사용자 확인 — AC-10)
+- 남은 제한: 아이폰 Safari 미확인(기기 없음 — 공개 배포 전 팀원 아이폰으로 MOBILE_CHECKLIST 확인), 취소 커밋과 겹친 조회가 409 대신 401(R-37 — 이번 수정 PR `context/fixes/002`에서 처리), 운영 공개·운영 DB·도메인은 팀 결정 대기, CI의 통합 테스트 연결 없음
+
+### 2026-11-15 — 수정 002: 드래그 마지막 칸 누락(WebKit)과 취소와 겹친 조회의 401
+
+- 수정 기록: `context/fixes/002-drag-and-cancel-race.md`
+- 브랜치: `ahn/fix-drag-and-cancel-race` (`origin/main` a393e87에서 생성)
+- 변경: 드래그 상태를 즉시 바뀌는 순수 객체 `lib/availability/drag.ts` `createDragTracker`로 옮기고 놓기 리스너를 pointerdown에서 바로 담(`components/availability/my-grid.tsx` — 효과가 다시 달리기 전의 놓기 리스너가 앞 칸을 읽던 문제, trace로 확인). 공통 인증 `lib/member/session-auth.ts`가 세션 무효로 401을 내기 직전에 약속 상태를 다시 읽어 cancelled면 409 `PROMISE_CANCELLED`(R-37, 401 경로에만 쿼리 1번, `/me`·로그아웃 제외). 031의 webkit `test.fail` 삭제. 문서: GUARD_MATRIX 「이후 수정」, DECISION_CONFLICTS R-37
+- 검증: 드래그 RED webkit 5회 중 4회 실패(`Expected: 3, Received: 1`) → GREEN webkit·chromium 각 5회 모두 통과(50ms 테스트 포함 20/20). 401 RED(`expected { kind: 'unauthenticated' } to deeply equal { kind: 'cancelled' }`) → GREEN, `/me`·로그아웃 104개 그대로. Vitest 1676건 ×3 TZ, lint·typecheck·prettier·build 통과. 로컬 `test:e2e` 100 통과·2 건너뜀·실패 0, 스냅샷 동일
+- 배포 확인: b83f322(함수 지역 `sin1`)에서 `@smoke` 9/9 연속 2회(2.1분씩, `/api/health` 128·120ms). 그 전 1회도 9/9(166ms), 사이의 1회는 PC 네트워크 끊김(약 85분 DNS 실패)으로 무효 — 남은 테스트 링크는 다음 실행이 정리, 스냅샷 동일

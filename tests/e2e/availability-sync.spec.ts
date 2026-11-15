@@ -319,19 +319,14 @@ test("빈 제출 확인 취소 직후 첫 드래그 반영, 드래그 뒤 글자
   expect(await selection()).toBe("");
 });
 
-// 알려진 제품 문제(031에서 발견, 다음 PR에서 수정): 마지막 칸에 들어간 직후(0ms) 놓으면 WebKit에서 그 칸이 빠진다
-// (놓기 처리가 화면에 반영되기 전의 드래그 상태를 읽는 것으로 추정 — components/availability/my-grid.tsx)
-// webkit 데스크톱에서는 test.fail(예상대로 실패)로 둔다. 고치는 PR에서 test.fail을 지우면 RED → GREEN으로 확인한다
+// fix 002 회귀: 마지막 칸에 들어간 직후(0ms) 놓으면 WebKit에서 그 칸이 빠졌다
+// (놓기 리스너가 효과에서 다시 달리기 전의 드래그 상태를 읽음 → lib/availability/drag.ts가 즉시 바꾸는 상태로 수정)
 test("드래그 마지막 칸에 들어간 직후(0ms) 놓아도 3칸이 선택된다 (마우스)", async ({
   seed,
   app,
 }) => {
   const projectName = test.info().project.name;
   test.skip(projectName === "webkit-mobile", "마우스 드래그는 데스크톱만");
-  test.fail(
-    projectName === "webkit-desktop",
-    "알려진 실패: WebKit에서 들어가자마자 놓으면 마지막 칸 누락(031 보고서, 다음 PR에서 수정)",
-  );
   const P = await seed.collecting({
     members: 0,
     settings: {

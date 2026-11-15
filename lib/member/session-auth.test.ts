@@ -148,6 +148,47 @@ describe("authenticatePromiseSession (세션 인증 공통)", () => {
     expect((await authenticatePromiseSession(request(`${COOKIE}=${TOKEN}`), PROMISE_ID)).kind).toBe(
       "forbidden",
     );
+    expect(promiseFindUnique).toHaveBeenCalledTimes(1);
+  });
+
+  it("약속 상태를 읽은 뒤 취소가 커밋되고 세션이 만료됐으면 401이 아니라 409 PROMISE_CANCELLED (R-37)", async () => {
+    mockPromise("collecting");
+    // 취소는 세션 expires_at을 취소 시각(= 판정 시각 이전)으로 바꾼다
+    mockSession({ expiresAt: NOW });
+    promiseFindUnique.mockResolvedValueOnce({ status: "cancelled" });
+    expect(await authenticatePromiseSession(request(`${COOKIE}=${TOKEN}`), PROMISE_ID)).toEqual({
+      kind: "cancelled",
+    });
+    expect(promiseFindUnique).toHaveBeenCalledTimes(2);
+    expect(promiseFindUnique).toHaveBeenLastCalledWith({
+      where: { id: PROMISE_ID },
+      select: { status: true },
+    });
+  });
+
+  it("401 직전에 다시 읽어도 취소가 아니면 unauthenticated", async () => {
+    mockPromise("collecting");
+    promiseFindUnique.mockResolvedValueOnce({ status: "collecting" });
+    expect(await authenticatePromiseSession(request(), PROMISE_ID)).toEqual({
+      kind: "unauthenticated",
+    });
+    expect(promiseFindUnique).toHaveBeenCalledTimes(2);
+  });
+
+  it("401 직전에 약속이 사라졌어도(만료 draft 삭제) unauthenticated", async () => {
+    mockPromise("draft");
+    promiseFindUnique.mockResolvedValueOnce(null);
+    expect(await authenticatePromiseSession(request(), PROMISE_ID)).toEqual({
+      kind: "unauthenticated",
+    });
+  });
+
+  it("allowCancelled(/me, C-12)는 401 직전에 다시 읽지 않는다", async () => {
+    mockPromise("collecting");
+    expect(
+      await authenticatePromiseSession(request(), PROMISE_ID, { allowCancelled: true }),
+    ).toEqual({ kind: "unauthenticated" });
+    expect(promiseFindUnique).toHaveBeenCalledTimes(1);
   });
 
   it("성공하면 약속·참여자·세션·판정 시각을 돌려준다", async () => {
@@ -160,6 +201,8 @@ describe("authenticatePromiseSession (세션 인증 공통)", () => {
       session: { id: "s-1", token: TOKEN, expiresAt: new Date(NOW.getTime() + 60_000) },
       now: NOW,
     });
+    // 정상 경로는 약속을 한 번만 읽는다 (R-37 재확인은 401 경로에만)
+    expect(promiseFindUnique).toHaveBeenCalledTimes(1);
   });
 
   it("대문자 promiseId 경로여도 쿠키 이름은 DB의 소문자 id", async () => {
