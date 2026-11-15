@@ -358,7 +358,7 @@
 ### 2026-11-15 — 수정 002: 드래그 마지막 칸 누락(WebKit)과 취소와 겹친 조회의 401
 
 - 수정 기록: `context/fixes/002-drag-and-cancel-race.md`
-- 브랜치: `ahn/fix-drag-and-cancel-race` (`origin/main` a393e87에서 생성)
+- 브랜치: `ahn/fix-drag-and-cancel-race` (`origin/main` a393e87에서 생성, PR #2 병합 ed1f4ba — 완료)
 - 변경: 드래그 상태를 즉시 바뀌는 순수 객체 `lib/availability/drag.ts` `createDragTracker`로 옮기고 놓기 리스너를 pointerdown에서 바로 담(`components/availability/my-grid.tsx` — 효과가 다시 달리기 전의 놓기 리스너가 앞 칸을 읽던 문제, trace로 확인). 공통 인증 `lib/member/session-auth.ts`가 세션 무효로 401을 내기 직전에 약속 상태를 다시 읽어 cancelled면 409 `PROMISE_CANCELLED`(R-37, 401 경로에만 쿼리 1번, `/me`·로그아웃 제외). 031의 webkit `test.fail` 삭제. 문서: GUARD_MATRIX 「이후 수정」, DECISION_CONFLICTS R-37
 - 검증: 드래그 RED webkit 5회 중 4회 실패(`Expected: 3, Received: 1`) → GREEN webkit·chromium 각 5회 모두 통과(50ms 테스트 포함 20/20). 401 RED(`expected { kind: 'unauthenticated' } to deeply equal { kind: 'cancelled' }`) → GREEN, `/me`·로그아웃 104개 그대로. Vitest 1676건 ×3 TZ, lint·typecheck·prettier·build 통과. 로컬 `test:e2e` 100 통과·2 건너뜀·실패 0, 스냅샷 동일
 - 배포 확인: b83f322(함수 지역 `sin1`)에서 `@smoke` 9/9 연속 2회(2.1분씩, `/api/health` 128·120ms). 그 전 1회도 9/9(166ms), 사이의 1회는 PC 네트워크 끊김(약 85분 DNS 실패)으로 무효 — 남은 테스트 링크는 다음 실행이 정리, 스냅샷 동일

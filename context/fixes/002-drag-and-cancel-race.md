@@ -2,6 +2,8 @@
 
 브랜치: `ahn/fix-drag-and-cancel-race` (`origin/main` a393e87에서 생성). 첫 커밋 72aa535 `docs: 032 완료 기록`
 
+상태: 완료 — PR #2 병합(ed1f4ba, 2026-11-15). 수용 기준 모두 충족
+
 ## 환경과 증상
 
 ### 1. 드래그 마지막 칸 누락 (WebKit)
