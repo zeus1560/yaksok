@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { hashSessionToken, sessionCookie, sessionMaxAgeSeconds } from "./session";
 
 // 약속별 세션 인증 공통 모듈 (STATE-API-00 「요청 시 상태·마감 판정」 1~3, API_CONVENTIONS 5절)
-// 순서: promiseId 형식 → 약속 존재 → cancelled(세션보다 우선) → 쿠키 해시 조회 → 만료·active → 약속 소속
+// 순서: promiseId 형식 → 약속 존재 → cancelled(세션보다 우선) → 쿠키 해시 조회 → 만료·active(무효면 cancelled 재확인) → 약속 소속
 // 잠금 없이 읽는다. 쓰기 API는 이 결과로 대상을 고른 뒤 잠금 후 상태·권한을 다시 확인한다
 
 export type PromiseSession = {
@@ -66,7 +66,18 @@ export async function authenticatePromiseSession(
   if (promise.status === "cancelled" && !options.allowCancelled) return { kind: "cancelled" };
 
   const found = await lookupCookieSession(request, promise.id, now);
-  if (found.kind === "none") return { kind: "unauthenticated" };
+  if (found.kind === "none") {
+    // 위에서 약속을 읽은 뒤 취소가 커밋되면 취소가 만료시킨 세션 때문에 401이 된다. 401을 내기 직전에 한 번 더 읽어
+    // 「cancelled가 세션보다 우선」을 지킨다 (R-37). 쿼리는 401 경로에만 늘고, allowCancelled(/me, C-12)는 그대로
+    if (!options.allowCancelled) {
+      const latest = await prisma.promise.findUnique({
+        where: { id: promise.id },
+        select: { status: true },
+      });
+      if (latest?.status === "cancelled") return { kind: "cancelled" };
+    }
+    return { kind: "unauthenticated" };
+  }
   if (found.kind === "other_promise") return { kind: "forbidden" };
 
   return { kind: "ok", promise, participant: found.participant, session: found.session, now };
