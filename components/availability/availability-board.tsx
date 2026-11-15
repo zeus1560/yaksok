@@ -417,9 +417,12 @@ export function AvailabilityBoard({
           <p className="mt-1 text-sm text-sub">
             {readOnly
               ? "제출한 시간이에요."
-              : "30분 단위예요. 빈 칸부터 끌면 추가, 고른 칸부터 끌면 해제돼요. 휴대폰은 칸을 눌러 하나씩, 날짜를 누르면 하루 전체를 골라요."}
+              : "30분 단위예요. 빈 칸부터 끌면 추가, 고른 칸부터 끌면 해제돼요. 휴대폰은 칸을 눌러 하나씩 고르거나, 「드래그로 선택」을 켜고 끌어서 골라요. 날짜를 누르면 하루 전체를 골라요."}
           </p>
-          <div className="mt-3 flex flex-wrap gap-3 text-xs text-sub">
+          <div
+            className="mt-3 flex flex-w
+          rap gap-3 text-xs text-sub"
+          >
             <Legend className="bg-blue" label="가능" />
             <Legend className="border border-line bg-paper" label="불가능" />
             <Legend className="bg-muted" label="지난 시간" />
