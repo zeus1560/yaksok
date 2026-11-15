@@ -354,3 +354,11 @@
 - 변경: 1부 — 저장소 이전(`origin`=개인 저장소, `team`=팀 저장소), 허용 Origin·초대 링크 주소의 배포 환경별 결정(순수 함수 `lib/public-url.ts`, 화면도 같은 기준), `/api/health` no-store·DB 실패 503, 미리보기 DB 수동 마이그레이션(`db:deploy:preview`·`db:status:preview`, 개발·e2e DB면 거부), 배포 주소 확인 묶음(`test:e2e:preview`, `@smoke` 9개, 보호 우회 헤더), `docs/architecture/DEPLOY.md`(R-36). 2부 — `vercel.json`(함수 지역 `sin1`, `main` 자동 배포 끔), DEPLOY.md 배포 경험 반영(Production으로 잡힌 첫 배포·한글 브랜치 주소·스키마 PR push 전 마이그레이션·함수 지역 확인), 브랜치 이름 영어 규칙, `MOBILE_CHECKLIST.md`(78개 항목), 시작 때 health 응답 시간·함수 지역 출력, `expectPollReflects` 판정 수정(변경 전에 시작한 폴링도 새 값이면 인정)
 - 검증: 1부 — Vitest 1667건(이번 20건, TDD RED 11/13 실패 → GREEN), `TZ=UTC`·`America/Los_Angeles`, lint·typecheck·prettier·build 통과, 로컬 `test:e2e` 세 프로젝트 99 통과·2 건너뜀·예상 밖 0(알려진 흔들림 1). 2부 — 배포 5c90481(`sin1`)에서 `@smoke` 9/9 2회 연속(2.2분·2.4분, `/api/health` 112~198ms, `iad1` 때는 8/9·453ms), 실제 HTTPS 쿠키 속성·다른 Origin 403·초대 링크 주소·no-store 확인, 미리보기 DB 매 실행 스냅샷 동일, 로컬 회귀 chromium 18/18·webkit 18개 예상대로, 안드로이드 Chrome 휴대폰 확인 정상(2026-11-15). 병합 뒤 `main`으로 새 Production 배포가 생기지 않음(사용자 확인 — AC-10)
 - 남은 제한: 아이폰 Safari 미확인(기기 없음 — 공개 배포 전 팀원 아이폰으로 MOBILE_CHECKLIST 확인), 취소 커밋과 겹친 조회가 409 대신 401(R-37 — 이번 수정 PR `context/fixes/002`에서 처리), 운영 공개·운영 DB·도메인은 팀 결정 대기, CI의 통합 테스트 연결 없음
+
+### 2026-11-15 — 수정 002: 드래그 마지막 칸 누락(WebKit)과 취소와 겹친 조회의 401
+
+- 수정 기록: `context/fixes/002-drag-and-cancel-race.md`
+- 브랜치: `ahn/fix-drag-and-cancel-race` (`origin/main` a393e87에서 생성)
+- 변경: 드래그 상태를 즉시 바뀌는 순수 객체 `lib/availability/drag.ts` `createDragTracker`로 옮기고 놓기 리스너를 pointerdown에서 바로 담(`components/availability/my-grid.tsx` — 효과가 다시 달리기 전의 놓기 리스너가 앞 칸을 읽던 문제, trace로 확인). 공통 인증 `lib/member/session-auth.ts`가 세션 무효로 401을 내기 직전에 약속 상태를 다시 읽어 cancelled면 409 `PROMISE_CANCELLED`(R-37, 401 경로에만 쿼리 1번, `/me`·로그아웃 제외). 031의 webkit `test.fail` 삭제. 문서: GUARD_MATRIX 「이후 수정」, DECISION_CONFLICTS R-37
+- 검증: 드래그 RED webkit 5회 중 4회 실패(`Expected: 3, Received: 1`) → GREEN webkit·chromium 각 5회 모두 통과(50ms 테스트 포함 20/20). 401 RED(`expected { kind: 'unauthenticated' } to deeply equal { kind: 'cancelled' }`) → GREEN, `/me`·로그아웃 104개 그대로. Vitest 1676건 ×3 TZ, lint·typecheck·prettier·build 통과. 로컬 `test:e2e` 100 통과·2 건너뜀·실패 0, 스냅샷 동일
+- 남은 확인: push 뒤 미리보기 배포 `@smoke` 2회
