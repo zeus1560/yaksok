@@ -2,7 +2,7 @@
 
 ## 상태
 
-검토 중 (구현·로컬 검증·미리보기 `@smoke` 2회·안드로이드 실기기 확인 완료. 남은 것: 아이폰 Safari는 공개 배포 전, PR 병합 뒤 완료 기록)
+완료 (PR #3 병합 1d18585. 아이폰 Safari는 공개 배포 전 팀원 확인으로 남김 — 아래 완료 이력)
 
 ## 스펙
 
@@ -317,3 +317,11 @@
 - 변경: 드래그 상태를 즉시 바뀌는 순수 객체 `lib/availability/drag.ts` `createDragTracker`로 옮기고 놓기 리스너를 pointerdown에서 바로 담(`components/availability/my-grid.tsx` — 효과가 다시 달리기 전의 놓기 리스너가 앞 칸을 읽던 문제, trace로 확인). 공통 인증 `lib/member/session-auth.ts`가 세션 무효로 401을 내기 직전에 약속 상태를 다시 읽어 cancelled면 409 `PROMISE_CANCELLED`(R-37, 401 경로에만 쿼리 1번, `/me`·로그아웃 제외). 031의 webkit `test.fail` 삭제. 문서: GUARD_MATRIX 「이후 수정」, DECISION_CONFLICTS R-37
 - 검증: 드래그 RED webkit 5회 중 4회 실패(`Expected: 3, Received: 1`) → GREEN webkit·chromium 각 5회 모두 통과(50ms 테스트 포함 20/20). 401 RED(`expected { kind: 'unauthenticated' } to deeply equal { kind: 'cancelled' }`) → GREEN, `/me`·로그아웃 104개 그대로. Vitest 1676건 ×3 TZ, lint·typecheck·prettier·build 통과. 로컬 `test:e2e` 100 통과·2 건너뜀·실패 0, 스냅샷 동일
 - 배포 확인: b83f322(함수 지역 `sin1`)에서 `@smoke` 9/9 연속 2회(2.1분씩, `/api/health` 128·120ms). 그 전 1회도 9/9(166ms), 사이의 1회는 PC 네트워크 끊김(약 85분 DNS 실패)으로 무효 — 남은 테스트 링크는 다음 실행이 정리, 스냅샷 동일
+
+### 2026-11-15 — 휴대폰 드래그 선택 (033)
+
+- 스펙: `context/features/033-mobile-drag-select.md`
+- 브랜치: `ahn/feat-mobile-drag-select` (`origin/main` ed1f4ba에서 생성, PR #3 병합 1d18585 — 완료)
+- 변경: 터치가 주 입력인 기기(`matchMedia('(pointer: coarse)')`)에서만 그리드 위 「드래그로 선택」 버튼(`aria-pressed`, 켜짐·꺼짐, 처음 켤 때 안내 1회). 켜면 칸 영역만 `touch-action: none`·그리드 파란 테두리, 손가락 끌기를 데스크톱과 같은 규칙(`createDragTracker`·`applyRect`)으로 — 손가락 좌표 → 칸은 순수 함수 `cellAtPoint`, 포인터 종류 판단은 `dragInput`(`lib/availability/drag.ts`). 탭 뒤 click 한 번 건너뛰기, 두 번째 손가락 무시, 선택 모드는 기기에 저장하지 않음. 통합 테스트 `tests/e2e/mobile-drag.spec.ts`(합성 터치·chromium CDP 실제 터치). 문서: DECISION_CONFLICTS R-38 신설·R-19 대체, MOBILE_CHECKLIST 10절, FIGMA_DIFF 23-1. API·DB 변경 없음
+- 검증: TDD RED 2 failed → GREEN 7/7 → REFACTOR 10/10. Vitest 1681건 ×3 TZ, lint·typecheck·prettier·build 통과. 로컬 `test:e2e` 2회차 105 통과·9 건너뜀·실패 0(1회차 webkit 모바일 `host-manage` 1건 180초 초과 — 원인 미확인, 재실행 모두 통과). 배포 0d2e5d4(`sin1`) `@smoke` 9/9 2회. 안드로이드 Chrome 실기기 MOBILE_CHECKLIST 10절 정상(2026-11-15)
+- 남은 제한: 아이폰 Safari 미확인(공개 배포 전 팀원), 실기기에서 나온 불편(날짜 2개만 보임·세로로 김·드래그 중 자동 스크롤 없음)은 034 「휴대폰 그리드 보기 개선」, webkit 모바일 `host-manage` 흔들림은 기록만
