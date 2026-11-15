@@ -36,3 +36,35 @@ export function createDragTracker(onChange: (drag: Drag | null) => void): DragTr
     },
   };
 }
+
+// 033 휴대폰 드래그 선택 (R-38): 포인터를 누른 순간 어떤 드래그를 시작할지
+// 마우스 왼쪽 버튼은 늘 드래그, 손가락은 선택 모드에서만(꺼져 있으면 끌어서 스크롤, 누르면 click으로 한 칸).
+// 펜은 지금처럼 칸 하나 토글
+export type DragInput = "mouse" | "touch" | null;
+
+export function dragInput(
+  event: { pointerType: string; button: number },
+  selectMode: boolean,
+): DragInput {
+  if (event.pointerType === "mouse") return event.button === 0 ? "mouse" : null;
+  if (event.pointerType === "touch" && selectMode) return "touch";
+  return null;
+}
+
+// 손가락 좌표의 칸. 터치는 처음 누른 칸이 포인터를 붙잡아 다른 칸의 pointerenter가 오지 않으므로
+// 누른 칸의 화면 위치·크기를 기준으로 좌표에서 칸을 계산한다(칸은 모두 같은 폭·높이 — grid-frame.tsx).
+// 그리드 밖으로 나가면 가장자리 칸으로 고정한다(마우스는 그리드 밖에서 마지막 칸이 유지되는 것과 같은 결과)
+export type CellBox = { pos: CellPos; left: number; top: number; width: number; height: number };
+
+export function cellAtPoint(
+  box: CellBox,
+  size: { days: number; rows: number },
+  x: number,
+  y: number,
+): CellPos {
+  const clamp = (value: number, max: number) => Math.min(Math.max(value, 0), max - 1);
+  return {
+    day: clamp(box.pos.day + Math.floor((x - box.left) / box.width), size.days),
+    row: clamp(box.pos.row + Math.floor((y - box.top) / box.height), size.rows),
+  };
+}

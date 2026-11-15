@@ -6,6 +6,7 @@ import {
   expect,
   type Browser,
   type BrowserContext,
+  type BrowserContextOptions,
   type Page,
   type Request,
   type Response,
@@ -17,6 +18,10 @@ import { E2E_HOST, IS_PREVIEW, bypassHeaders } from "./e2e-env";
 export { expect };
 
 type Person = { context: BrowserContext; page: Page };
+type DeviceOptions = Pick<
+  BrowserContextOptions,
+  "viewport" | "userAgent" | "deviceScaleFactor" | "isMobile" | "hasTouch"
+>;
 
 export class App {
   private contexts: BrowserContext[] = [];
@@ -29,8 +34,9 @@ export class App {
     private testInfo: TestInfo,
   ) {}
 
-  // 프로젝트(데스크톱·모바일)의 화면 크기·터치 설정을 그대로 쓴다
-  async newContext(): Promise<BrowserContext> {
+  // 프로젝트(데스크톱·모바일)의 화면 크기·터치 설정을 그대로 쓴다. device는 그 위에 덮어쓴다
+  // (예: chromium에서 휴대폰을 흉내 내 CDP로 실제 터치를 보낼 때 — mobile-drag.spec.ts)
+  async newContext(device: DeviceOptions = {}): Promise<BrowserContext> {
     const use = this.testInfo.project.use;
     const context = await this.browser.newContext({
       viewport: use.viewport,
@@ -44,6 +50,7 @@ export class App {
       baseURL: BASE,
       // 미리보기의 Deployment Protection 우회(값이 없으면 빈 객체)
       extraHTTPHeaders: bypassHeaders(),
+      ...device,
     });
     this.contexts.push(context);
     this.trackLinks(context);
@@ -78,8 +85,9 @@ export class App {
     P: Pick<Draft, "inviteToken" | "promiseId">,
     token: string | null,
     label: string,
+    device: DeviceOptions = {},
   ): Promise<Person> {
-    const context = await this.newContext();
+    const context = await this.newContext(device);
     if (token) await addSession(context, P.promiseId, token);
     const page = await context.newPage();
     this.watch(page, label);

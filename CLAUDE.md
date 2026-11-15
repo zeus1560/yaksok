@@ -84,6 +84,7 @@ npm run build             # prisma generate && next build. dev 서버를 끈 뒤
 
 - **Windows 인코딩:** PowerShell `Get-Content`를 옵션 없이 쓰면 한글이 깨진다. `-Encoding utf8`을 붙이거나 Read 도구를 쓴다.
 - **dev 서버:** `npm run build`와 `npm run test:e2e` 전에 dev 서버를 반드시 끈다. 둘 다 같은 `.next`에 운영 빌드를 만들어 dev 서버가 500을 낸다. `test:e2e` 뒤 배포용 빌드가 필요하면 `npm run build`를 다시 돌린다. 작업이 끝나면 3000·3100·3101 포트와 남은 `next` 프로세스를 정리한다.
+- **통합 테스트 결과 보존:** 실패를 확인하려고 통합 테스트를 다시 돌릴 때는 이전 결과 폴더를 지우거나 덮어쓰지 않는다. `--output=test-results/<날짜>-<회차>`처럼 다른 이름으로 남긴다(같은 테스트를 다시 돌리면 같은 폴더에 써서 실패 첨부가 사라진다).
 - **Vitest는 PowerShell에서:** Git Bash(경로가 소문자 `c:`)에서 `npm run test`를 돌리면 Vitest가 모듈을 두 번 읽어 모든 파일이 `Cannot read properties of undefined (reading 'config')`로 실패한다. PowerShell에서 실행한다.
 - **DB 확인 데이터:** 개발 DB로 확인한 뒤에는 확인용 데이터를 삭제한다. 모든 테이블의 스냅샷(행 수·md5)이 시작 상태와 같은지 확인한다. 운영 DB로는 테스트하지 않는다.
 - **Prisma 타입 이름:** 모델 `Promise`는 전역 Promise와 이름이 겹친다. `import type { Promise as PromiseModel } from "@/prisma/generated/client"`처럼 별칭을 쓴다.
