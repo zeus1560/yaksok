@@ -481,7 +481,7 @@ export function AvailabilityBoard({
           <div
             className={`mt-3 flex-wrap gap-3 text-xs text-sub ${readOnly ? "flex" : "hidden lg:flex"}`}
           >
-            <LegendItems partial={narrow} />
+            {narrow ? <CellKey /> : <LegendItems />}
           </div>
           <div className={readOnly ? "mt-3" : "lg:mt-3"}>
             <MyGrid
@@ -553,14 +553,8 @@ export function AvailabilityBoard({
             hidden={!helpOpen}
             className="mb-3 border-b border-line pb-3 lg:hidden"
           >
-            <div className="flex flex-wrap gap-x-3 gap-y-2 text-xs text-sub">
-              <LegendItems partial />
-            </div>
-            <p className="mt-2 text-xs text-sub">
-              칸을 누르면 고르거나 풀고, 날짜를 누르면 하루 전체를 골라요. 「드래그로 선택」을 켜면
-              끌어서 여러 칸을 골라요. 1시간·2시간 보기에서는 묶은 칸 안의 30분 칸을 한꺼번에
-              고르거나 풀어요.
-            </p>
+            <CellKey />
+            <p className="mt-2 text-xs text-sub">날짜를 누르면 하루 전체를 골라요.</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="min-w-0 flex-1 text-sm">
@@ -626,24 +620,37 @@ const STATUS_BADGE: Record<string, { label: string; tone: "blue" | "muted" }> = 
   confirmed: { label: "약속 확정", tone: "blue" },
 };
 
-// 칸 색 범례. partial: 휴대폰 1시간·2시간 보기의 일부 선택(n/m) 표시도 함께
-function LegendItems({ partial }: { partial: boolean }) {
+// 넓은 화면 칸 색 범례(데스크톱 그대로, 가능 칸에 체크만 더함)
+function LegendItems() {
   return (
     <>
       <Legend className="bg-blue text-white" label="가능">
         <Check className="h-2.5 w-2.5" />
       </Legend>
-      {partial && (
-        <Legend
-          className="w-6 bg-blue-soft text-[0.5625rem] font-medium leading-none text-ink shadow-[inset_0_0_0_1.5px_var(--color-blue)]"
-          label="일부 가능(고른 칸/전체 칸)"
-        >
-          n/m
-        </Legend>
-      )}
       <Legend className="border border-line bg-paper" label="불가능" />
       <Legend className="bg-muted text-sub" label="지난 시간" />
     </>
+  );
+}
+
+// 휴대폰 칸 모양 네 가지: 작은 견본 + 짧은 이름 한 줄(실기기 확인 뒤 단순화, 034)
+function CellKey() {
+  return (
+    <div data-cell-key className="flex flex-nowrap items-center gap-3 text-xs text-sub">
+      <Legend className="bg-blue text-white" label="선택">
+        <Check className="h-2.5 w-2.5" />
+      </Legend>
+      <Legend
+        className="w-6 bg-blue-soft text-[0.5625rem] font-medium leading-none text-ink shadow-[inset_0_0_0_1.5px_var(--color-blue)]"
+        label="일부"
+      >
+        n/m
+      </Legend>
+      <Legend className="bg-muted text-[0.625rem] leading-none text-sub" label="지난 시간">
+        —
+      </Legend>
+      <Legend className="border border-line bg-paper" label="선택 안 함" />
+    </div>
   );
 }
 
@@ -657,7 +664,7 @@ function Legend({
   children?: ReactNode;
 }) {
   return (
-    <span className="flex items-center gap-1.5">
+    <span className="flex items-center gap-1.5 whitespace-nowrap">
       <span
         aria-hidden="true"
         className={`flex h-3.5 min-w-3.5 items-center justify-center rounded-xs ${className}`}

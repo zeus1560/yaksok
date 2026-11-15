@@ -230,21 +230,41 @@ export function MyGrid({
     if (!next && hint === "showing") setHint("done");
   }
 
-  const dragButton = touchDevice && !readOnly && (
-    <button
-      type="button"
-      aria-pressed={selectMode}
-      onClick={toggleSelectMode}
-      className={`flex h-icon items-center justify-center gap-1.5 rounded-field border text-sm ${
-        page ? "shrink-0 px-3" : "w-full gap-2"
-      } ${selectMode ? "border-blue bg-blue-soft font-bold text-ink" : "border-line bg-paper text-sub"}`}
-    >
-      드래그로 선택
-      <span aria-hidden="true" className="text-xs font-normal">
-        {selectMode ? "켜짐" : "꺼짐"}
-      </span>
-    </button>
-  );
+  // 휴대폰 도구 줄(page)에서는 손가락 아이콘 + 「드래그」로 줄이고 켜짐·꺼짐은 색(켜짐 = 파랑 채움)과 aria-pressed로만
+  // 구분한다(실기기 확인 — 360px 한 줄). 화면 낭독기 이름은 「드래그로 선택」 그대로. 넓은 화면의 터치 기기는 033 모양 그대로
+  const dragButton =
+    touchDevice &&
+    !readOnly &&
+    (page ? (
+      <button
+        type="button"
+        aria-pressed={selectMode}
+        aria-label="드래그로 선택"
+        onClick={toggleSelectMode}
+        className={`flex h-icon shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-field border px-2.5 text-sm ${
+          selectMode ? "border-blue bg-blue font-bold text-white" : "border-line bg-paper text-sub"
+        }`}
+      >
+        <FingerIcon className="h-4 w-4" />
+        드래그
+      </button>
+    ) : (
+      <button
+        type="button"
+        aria-pressed={selectMode}
+        onClick={toggleSelectMode}
+        className={`flex h-icon w-full items-center justify-center gap-2 rounded-field border text-sm ${
+          selectMode
+            ? "border-blue bg-blue-soft font-bold text-ink"
+            : "border-line bg-paper text-sub"
+        }`}
+      >
+        드래그로 선택
+        <span aria-hidden="true" className="text-xs font-normal">
+          {selectMode ? "켜짐" : "꺼짐"}
+        </span>
+      </button>
+    ));
   const hintText = selecting && hint === "showing" && (
     <p role="status" className="mt-2 text-xs text-ink">
       그리드 위에서는 끌어서 고르고, 스크롤은 날짜·시각 줄이나 그리드 밖에서 해 주세요.
@@ -254,13 +274,13 @@ export function MyGrid({
   return (
     <>
       {page ? (
-        // 휴대폰 도구 줄: 표시 단위 + 드래그로 선택 (034)
+        // 휴대폰 도구 줄: 표시 단위 + 드래그로 선택 (034). 360px에서도 한 줄(줄바꿈 없음)
         <div className="mb-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-2" data-toolbar>
             <div
               role="group"
               aria-label="표시 단위"
-              className="flex h-icon items-stretch rounded-field border border-line bg-paper p-1"
+              className="flex h-icon shrink-0 items-stretch rounded-field border border-line bg-paper p-0.5"
             >
               {UNITS.map((u) => (
                 <button
@@ -268,7 +288,7 @@ export function MyGrid({
                   type="button"
                   aria-pressed={unit === u.unit}
                   onClick={() => onUnitChange?.(u.unit)}
-                  className={`rounded-control px-2.5 text-sm ${
+                  className={`whitespace-nowrap rounded-control px-2 text-sm ${
                     unit === u.unit ? "bg-blue-soft font-bold text-ink" : "text-sub"
                   }`}
                 >
@@ -392,6 +412,28 @@ function GroupMark({ state }: { state: GroupState }) {
     );
   if (state.kind === "past") return <span aria-hidden="true">—</span>;
   return null;
+}
+
+// 손가락 아이콘(휴대폰 「드래그」 버튼)
+function FingerIcon({ className }: { className: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M22 14a8 8 0 0 1-8 8" />
+      <path d="M18 11v-1a2 2 0 0 0-4 0" />
+      <path d="M14 10V9a2 2 0 0 0-4 0v1" />
+      <path d="M10 9.5V4a2 2 0 0 0-4 0v10" />
+      <path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+    </svg>
+  );
 }
 
 // 선택 표시(색만으로 구분하지 않게, 034)

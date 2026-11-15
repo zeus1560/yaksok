@@ -226,21 +226,89 @@ test("휴대폰: 날짜 머리글 하루 토글 → 「되돌리기」 알림(�
   await expect.poll(() => selectedCount(page)).toBe(1);
 });
 
-test("휴대폰: 범례는 제출 바 「?」를 눌렀을 때만", async ({ seed, app }) => {
+test("휴대폰: 범례는 제출 바 「?」를 눌렀을 때만 — 칸 모양 네 가지 한 줄과 하루 선택 한 줄", async ({
+  seed,
+  app,
+}) => {
   mobileOnly();
   const P = await seed.collecting({ members: 0, settings: WEEK });
   const { page } = await app.open(P, P.hostToken, "방장");
   await expectInputScreen(page, P.hostNick);
-  const legend = page.getByText("지난 시간", { exact: true }).filter({ visible: true });
+  const legend = page.locator("[data-cell-key]").filter({ visible: true });
   await expect(legend).toHaveCount(0);
   const help = page.getByRole("button", { name: "칸 색 안내" });
   await expect(help).toHaveAttribute("aria-expanded", "false");
   await help.tap();
   await expect(help).toHaveAttribute("aria-expanded", "true");
   await expect(legend).toHaveCount(1);
-  await expect(page.locator("#grid-help").getByText("일부 가능(고른 칸/전체 칸)")).toBeVisible();
+  const panel = page.locator("#grid-help");
+  const names = await panel
+    .locator("[data-cell-key] > span")
+    .evaluateAll((items) => items.map((el) => el.textContent?.trim()));
+  // 견본 글자(n/m·—) + 이름. 선택 견본의 체크는 SVG라 글자가 없다
+  expect(names).toEqual(["선택", "n/m일부", "—지난 시간", "선택 안 함"]);
+  const tops = await panel
+    .locator("[data-cell-key] > span")
+    .evaluateAll((items) => items.map((el) => Math.round(el.getBoundingClientRect().top)));
+  expect(new Set(tops).size, "견본 네 가지가 한 줄").toBe(1);
+  await expect(panel.locator("p")).toHaveText(["날짜를 누르면 하루 전체를 골라요."]);
   await help.tap();
   await expect(legend).toHaveCount(0);
+});
+
+// 도구 줄(단위 선택 + 드래그 버튼)이 한 줄: 두 요소의 세로 위치가 같고 도구 줄이 그리드 폭을 넘지 않는다
+async function expectToolbarOneLine(page: Page) {
+  const unit = (await page.getByRole("group", { name: "표시 단위" }).boundingBox())!;
+  const drag = (await modeButton(page).boundingBox())!;
+  expect(Math.abs(unit.y - drag.y), "단위 선택과 드래그 버튼이 같은 줄").toBeLessThan(2);
+  const bar = (await page.locator("[data-toolbar]").boundingBox())!;
+  expect(drag.x + drag.width).toBeLessThanOrEqual(bar.x + bar.width + 0.5);
+  await expectNoHScroll(page);
+}
+
+test("휴대폰: 도구 줄 한 줄 — 드래그 버튼은 손가락 아이콘 + 「드래그」, 이름은 「드래그로 선택」, 켜짐은 색·aria-pressed", async ({
+  seed,
+  app,
+}) => {
+  mobileOnly();
+  const P = await seed.collecting({ members: 0, settings: WEEK });
+  const { page } = await app.open(P, P.hostToken, "방장");
+  await expectInputScreen(page, P.hostNick);
+  await expect(modeButton(page)).toHaveText("드래그");
+  await expect(modeButton(page).locator("svg")).toHaveCount(1);
+  await expectToolbarOneLine(page);
+  const off = await modeButton(page).evaluate((el) => getComputedStyle(el).backgroundColor);
+  await modeButton(page).tap();
+  await expect(modeButton(page)).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.getByText(
+      "그리드 위에서는 끌어서 고르고, 스크롤은 날짜·시각 줄이나 그리드 밖에서 해 주세요.",
+    ),
+  ).toBeVisible();
+  const on = await modeButton(page).evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(on, "켜짐은 색으로 구분").not.toBe(off);
+  await expectToolbarOneLine(page);
+});
+
+test("휴대폰 360px(chromium 터치 흉내): 도구 줄 한 줄", async ({ seed, app }) => {
+  test.skip(test.info().project.name !== "chromium-desktop", "360px 휴대폰 흉내는 chromium");
+  const P = await seed.collecting({ members: 0, settings: WEEK });
+  const { page } = await app.open(P, P.hostToken, "방장", {
+    viewport: { width: 360, height: 780 },
+    userAgent: devices["Pixel 7"].userAgent,
+    deviceScaleFactor: 3,
+    isMobile: true,
+    hasTouch: true,
+  });
+  await expectInputScreen(page, P.hostNick);
+  await expect(modeButton(page)).toBeVisible();
+  for (const label of ["2시간", "30분"]) {
+    await unitButton(page, label).tap();
+    await expectToolbarOneLine(page);
+  }
+  await modeButton(page).tap();
+  await expect(modeButton(page)).toHaveAttribute("aria-pressed", "true");
+  await expectToolbarOneLine(page);
 });
 
 test("휴대폰: 드래그 중 화면 아래 끝에서 자동 스크롤, 스크롤된 만큼 칸이 더 선택된다 (합성 터치)", async ({
