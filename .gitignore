@@ -76,3 +76,8 @@ scripts/verify/
 
 # Figma 대조 촬영본 (029) — 로컬 비교용
 /docs/design/compare/
+
+# Serena MCP 로컬 캐시·설정
+.serena/
+# 개인 MCP 서버 설정 (Claude Code)
+.mcp.json
