@@ -2,7 +2,7 @@
 
 ## 상태
 
-검토 중(PR 대기) (구현·로컬 검증, 미리보기 `@smoke` 4413b9f·e18adfb·c440a6e 각 2회 9/9, 안드로이드 실기기 11-1~11-23 모두 정상 — AC-1~9 완료. 남은 것: 아이폰 Safari는 공개 배포 전, PR 병합 뒤 다음 작업 브랜치 첫 커밋으로 완료 기록)
+완료 (PR #4 병합 084f2de. 아이폰 Safari는 공개 배포 전 팀원 확인으로 남김 — 아래 완료 이력)
 
 ## 스펙
 
@@ -343,3 +343,11 @@
 - 변경: 터치가 주 입력인 기기(`matchMedia('(pointer: coarse)')`)에서만 그리드 위 「드래그로 선택」 버튼(`aria-pressed`, 켜짐·꺼짐, 처음 켤 때 안내 1회). 켜면 칸 영역만 `touch-action: none`·그리드 파란 테두리, 손가락 끌기를 데스크톱과 같은 규칙(`createDragTracker`·`applyRect`)으로 — 손가락 좌표 → 칸은 순수 함수 `cellAtPoint`, 포인터 종류 판단은 `dragInput`(`lib/availability/drag.ts`). 탭 뒤 click 한 번 건너뛰기, 두 번째 손가락 무시, 선택 모드는 기기에 저장하지 않음. 통합 테스트 `tests/e2e/mobile-drag.spec.ts`(합성 터치·chromium CDP 실제 터치). 문서: DECISION_CONFLICTS R-38 신설·R-19 대체, MOBILE_CHECKLIST 10절, FIGMA_DIFF 23-1. API·DB 변경 없음
 - 검증: TDD RED 2 failed → GREEN 7/7 → REFACTOR 10/10. Vitest 1681건 ×3 TZ, lint·typecheck·prettier·build 통과. 로컬 `test:e2e` 2회차 105 통과·9 건너뜀·실패 0(1회차 webkit 모바일 `host-manage` 1건 180초 초과 — 원인 미확인, 재실행 모두 통과). 배포 0d2e5d4(`sin1`) `@smoke` 9/9 2회. 안드로이드 Chrome 실기기 MOBILE_CHECKLIST 10절 정상(2026-11-15)
 - 남은 제한: 아이폰 Safari 미확인(공개 배포 전 팀원), 실기기에서 나온 불편(날짜 2개만 보임·세로로 김·드래그 중 자동 스크롤 없음)은 034 「휴대폰 그리드 보기 개선」, webkit 모바일 `host-manage` 흔들림은 기록만
+
+### 2026-11-16 — 휴대폰 그리드 보기 개선 (034)
+
+- 스펙: `context/features/034-mobile-grid-view.md`
+- 브랜치: `ahn/feat-mobile-grid-view` (`origin/main` 1d18585에서 생성, PR #4 병합 084f2de — 완료)
+- 변경: 휴대폰(`lg` 미만)에서 날짜 4일씩 ◀▶ 넘기기(두 탭 공통 구간), 「내 시간」 표시 단위 30분·1시간·2시간(묶은 칸 전부·일부 n/m·없음·지난, 누름·끌기는 30분 칸으로 바꿔 `applyRect`, 단위는 기기 기억), 도구 줄 한 줄·범례는 제출 바 「?」(칸 견본)·날짜 머리글 하루 토글 되돌리기 알림, 드래그 중 화면 끝 자동 스크롤(휴대폰·데스크톱), 좁은 화면 제출 바 짧은 문구. 「모두의 시간」도 같은 표시 단위(묶은 칸 = 내내 가능 수)와 칸 상세 사람 목록(휴대폰 아래 창, R-40). 순수 함수 `lib/availability/view.ts`·`heat.ts`(`groupPeople`·`rangesText`)·`summary.ts`(`formatSelectionShort`). 통합 테스트 `tests/e2e/mobile-grid-view.spec.ts`. 문서: DECISION_CONFLICTS R-39·R-40 신설·R-38 일부 대체, MOBILE_CHECKLIST 11절. API·DB 변경 없음
+- 검증: TDD RED 2 failed → GREEN → REFACTOR 17/17, R-40 RED 2 failed → GREEN → 13/13. Vitest 1708건 ×3 TZ, lint·typecheck·prettier·build 통과. 로컬 `test:e2e` 전체 120 통과·33 건너뜀·실패 0(R-40 뒤), 스냅샷 동일. 미리보기 `@smoke` 4413b9f·e18adfb·c440a6e 각 2회 9/9(`sin1`). 안드로이드 Chrome 실기기 MOBILE_CHECKLIST 11-1~11-23 모두 정상(1~3차, 2026-11-15~16)
+- 남은 제한: 아이폰 Safari 미확인(공개 배포 전 팀원), webkit 모바일 `host-manage` 흔들림(033)은 기록만
