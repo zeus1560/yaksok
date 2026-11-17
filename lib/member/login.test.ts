@@ -5,14 +5,27 @@ const promiseFindUnique = vi.hoisted(() => vi.fn());
 const participantFindUnique = vi.hoisted(() => vi.fn());
 const sessionCreate = vi.hoisted(() => vi.fn());
 const queryRaw = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
+const executeRaw = vi.hoisted(() => vi.fn());
+const failureFindMany = vi.hoisted(() => vi.fn());
+const failureCreate = vi.hoisted(() => vi.fn());
+const failureDeleteMany = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/prisma", () => {
+  const client: Record<string, unknown> = {
     promise: { findUnique: promiseFindUnique },
     participant: { findUnique: participantFindUnique },
     participantSession: { create: sessionCreate },
+    loginFailure: {
+      findMany: failureFindMany,
+      create: failureCreate,
+      deleteMany: failureDeleteMany,
+    },
     $queryRaw: queryRaw,
-  },
-}));
+    $executeRaw: executeRaw,
+  };
+  // 시도 제한 트랜잭션도 같은 가짜 클라이언트로 돈다
+  client.$transaction = (fn: (tx: unknown) => unknown) => fn(client);
+  return { prisma: client };
+});
 
 const verifyPin = vi.hoisted(() => vi.fn());
 const hashPin = vi.hoisted(() => vi.fn());
@@ -119,6 +132,8 @@ function mockPromise(overrides: Partial<LinkPromise> = {}) {
     ...promise(overrides),
     promiseLink: { inviteToken: "k3Zq8vTb1mRak3Zq8vTb1m", createdAt: LINK_CREATED },
   });
+  // 약속 판정 시각, 시도 제한 잠금 + 판정 시각 (같은 시각으로 둔다)
+  queryRaw.mockResolvedValueOnce([{ now: NOW }]);
   queryRaw.mockResolvedValueOnce([{ now: NOW }]);
 }
 
@@ -128,6 +143,9 @@ describe("loginParticipant", () => {
   beforeEach(() => {
     for (const fn of [promiseFindUnique, participantFindUnique, sessionCreate, queryRaw]) {
       fn.mockReset();
+    }
+    for (const fn of [executeRaw, failureFindMany, failureCreate, failureDeleteMany]) {
+      fn.mockReset().mockResolvedValue(fn === failureFindMany ? [] : { count: 0 });
     }
     verifyPin.mockReset();
     hashPin.mockReset().mockResolvedValue("dummy-hash");
@@ -280,5 +298,152 @@ describe("loginParticipant", () => {
     verifyPin.mockResolvedValueOnce(true);
     sessionCreate.mockRejectedValueOnce(new Error("boom"));
     await expect(loginParticipant(PROMISE_ID, INPUT)).rejects.toThrow("boom");
+  });
+
+  it("같은 참여자·같은 IP로 5번 연속 실패한 뒤에는 PIN이 맞아도 too_many_attempts, PIN 비교·세션 없음", async () => {
+    mockPromise();
+    failureFindMany.mockResolvedValueOnce(
+      [4, 3, 2, 1, 0].map((s) => ({
+        ipKey: "203.0.113.7",
+        failedAt: new Date(NOW.getTime() - s * 1000),
+      })),
+    );
+    participantFindUnique.mockResolvedValueOnce(HOST);
+    verifyPin.mockResolvedValueOnce(true);
+
+    const result = await loginParticipant(PROMISE_ID, INPUT, { ipKey: "203.0.113.7" });
+
+    expect(result).toEqual({ kind: "too_many_attempts", retryAfterSeconds: 15 * 60 });
+    expect(verifyPin).not.toHaveBeenCalled();
+    expect(sessionCreate).not.toHaveBeenCalled();
+  });
+
+  it("성공하면 이 참여자·이 IP의 실패 기록을 지워 실패 횟수를 초기화한다", async () => {
+    mockPromise();
+    participantFindUnique.mockResolvedValueOnce(HOST);
+    verifyPin.mockResolvedValueOnce(true);
+
+    await loginParticipant(PROMISE_ID, INPUT, { ipKey: "203.0.113.7" });
+
+    expect(failureDeleteMany).toHaveBeenCalledWith({
+      where: { promiseId: PROMISE_ID, normalizedNickname: "승주", ipKey: "203.0.113.7" },
+    });
+  });
+
+  describe("PIN 시도 제한 (R-41)", () => {
+    const IP = "203.0.113.7";
+    const ago = (sec: number) => new Date(NOW.getTime() - sec * 1000);
+
+    it("틀린 PIN은 판정 시각·IP와 함께 실패를 남기고 49시간 넘은 기록을 조금 지운다", async () => {
+      mockPromise();
+      participantFindUnique.mockResolvedValueOnce(HOST);
+      verifyPin.mockResolvedValueOnce(false);
+      expect(await loginParticipant(PROMISE_ID, INPUT, { ipKey: IP })).toEqual({
+        kind: "invalid_credentials",
+      });
+      expect(failureCreate).toHaveBeenCalledWith({
+        data: { promiseId: PROMISE_ID, normalizedNickname: "승주", ipKey: IP, failedAt: NOW },
+        select: { id: true },
+      });
+      expect(executeRaw).toHaveBeenCalledTimes(1);
+      expect(failureDeleteMany).not.toHaveBeenCalled();
+    });
+
+    it("없는 닉네임도 같은 실패 기록을 남긴다(닉네임 존재가 잠금으로 드러나지 않게)", async () => {
+      mockPromise();
+      participantFindUnique.mockResolvedValueOnce(null);
+      verifyPin.mockResolvedValueOnce(false);
+      await loginParticipant(PROMISE_ID, INPUT, { ipKey: IP });
+      expect(failureCreate).toHaveBeenCalledTimes(1);
+    });
+
+    it("없는 닉네임도 5번 실패한 뒤에는 같은 too_many_attempts", async () => {
+      mockPromise();
+      failureFindMany.mockResolvedValueOnce(
+        [4, 3, 2, 1, 0].map((sec) => ({ ipKey: IP, failedAt: ago(sec) })),
+      );
+      expect(await loginParticipant(PROMISE_ID, INPUT, { ipKey: IP })).toEqual({
+        kind: "too_many_attempts",
+        retryAfterSeconds: 15 * 60,
+      });
+      expect(participantFindUnique).not.toHaveBeenCalled();
+    });
+
+    it("48시간(하루 상한 24시간 창 + 24시간 잠금) 안의 기록만 읽는다", async () => {
+      mockPromise();
+      participantFindUnique.mockResolvedValueOnce(HOST);
+      verifyPin.mockResolvedValueOnce(true);
+      await loginParticipant(PROMISE_ID, INPUT, { ipKey: IP });
+      expect(failureFindMany).toHaveBeenCalledWith({
+        where: {
+          promiseId: PROMISE_ID,
+          normalizedNickname: "승주",
+          failedAt: { gt: new Date(NOW.getTime() - 48 * 60 * MIN) },
+        },
+        select: { ipKey: true, failedAt: true },
+      });
+    });
+
+    it("다른 IP의 5번 실패는 이 IP의 로그인을 막지 않는다", async () => {
+      mockPromise();
+      failureFindMany.mockResolvedValueOnce(
+        [4, 3, 2, 1, 0].map((sec) => ({ ipKey: "198.51.100.9", failedAt: ago(sec) })),
+      );
+      participantFindUnique.mockResolvedValueOnce(HOST);
+      verifyPin.mockResolvedValueOnce(true);
+      expect(await loginParticipant(PROMISE_ID, INPUT, { ipKey: IP })).toMatchObject({
+        kind: "ok",
+      });
+    });
+
+    it("IP와 관계없이 1시간에 21번째 실패가 생기면 새 IP도 too_many_attempts", async () => {
+      mockPromise();
+      failureFindMany.mockResolvedValueOnce(
+        Array.from({ length: 21 }, (_, i) => ({ ipKey: `198.51.100.${i}`, failedAt: ago(60) })),
+      );
+      expect(await loginParticipant(PROMISE_ID, INPUT, { ipKey: IP })).toEqual({
+        kind: "too_many_attempts",
+        retryAfterSeconds: 14 * 60,
+      });
+    });
+
+    it("잠금 키는 DB의 약속 id(소문자)와 정규화 닉네임으로 만든다", async () => {
+      promiseFindUnique.mockResolvedValueOnce({
+        ...promise(),
+        promiseLink: { inviteToken: "k3Zq8vTb1mRak3Zq8vTb1m", createdAt: LINK_CREATED },
+      });
+      queryRaw.mockResolvedValueOnce([{ now: NOW }]);
+      queryRaw.mockResolvedValueOnce([{ now: NOW }]);
+      participantFindUnique.mockResolvedValueOnce(HOST);
+      verifyPin.mockResolvedValueOnce(true);
+      await loginParticipant(PROMISE_ID.toUpperCase(), INPUT, { ipKey: IP });
+      const lockCall = queryRaw.mock.calls[1];
+      expect(lockCall.slice(1)).toEqual([`login:${PROMISE_ID}:승주`]);
+    });
+
+    it("IP 키를 받지 못하면 unknown 한 키로 센다", async () => {
+      mockPromise();
+      participantFindUnique.mockResolvedValueOnce(HOST);
+      verifyPin.mockResolvedValueOnce(false);
+      await loginParticipant(PROMISE_ID, INPUT);
+      expect(failureCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ ipKey: "unknown" }) }),
+      );
+    });
+
+    it("하루 상한: 24시간에 50번 실패한 참여자는 새 IP·맞는 PIN도 too_many_attempts(남은 시간 약 24시간)", async () => {
+      mockPromise();
+      failureFindMany.mockResolvedValueOnce(
+        Array.from({ length: 50 }, (_, i) => ({
+          ipKey: `198.51.100.${i}`,
+          failedAt: new Date(NOW.getTime() - (49 - i) * 28 * MIN),
+        })),
+      );
+      expect(await loginParticipant(PROMISE_ID, INPUT, { ipKey: IP })).toEqual({
+        kind: "too_many_attempts",
+        retryAfterSeconds: 24 * 60 * 60,
+      });
+      expect(verifyPin).not.toHaveBeenCalled();
+    });
   });
 });

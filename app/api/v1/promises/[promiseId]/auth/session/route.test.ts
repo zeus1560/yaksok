@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// IP 기준 레이트 리밋(035)은 기본으로 통과시킨다. 429는 아래 「레이트 리밋」 테스트에서 따로 본다
+const rateLimitResponse = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/limit/rate-limit-store", () => ({ rateLimitResponse }));
+
 const loginParticipant = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/member/login", () => ({ loginParticipant }));
 // 로그아웃 서비스만 바꾸고 allDevices 파싱·promiseId 형식은 실제 함수를 쓴다. DB 클라이언트는 만들지 않는다
@@ -32,6 +36,7 @@ const VALID = { nickname: "  혜승 ", pin: "1357" };
 
 describe("POST /api/v1/promises/[promiseId]/auth/session (MEMBER-API-04)", () => {
   beforeEach(() => {
+    rateLimitResponse.mockReset().mockResolvedValue(null);
     vi.stubEnv("NEXT_PUBLIC_BASE_URL", BASE_URL);
     loginParticipant.mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
@@ -70,13 +75,21 @@ describe("POST /api/v1/promises/[promiseId]/auth/session (MEMBER-API-04)", () =>
       `ys_session_${PROMISE_ID}=secret-session-token; HttpOnly; Secure; SameSite=Lax; ` +
         `Path=/api/v1/promises/${PROMISE_ID}; Max-Age=123456`,
     );
-    expect(loginParticipant).toHaveBeenCalledWith(PROMISE_ID, { nickname: "혜승", pin: "1357" });
+    expect(loginParticipant).toHaveBeenCalledWith(
+      PROMISE_ID,
+      { nickname: "혜승", pin: "1357" },
+      { ipKey: "unknown" },
+    );
   });
 
   it("조합형 닉네임은 NFC 완성형으로 바꿔 조회한다", async () => {
     loginParticipant.mockResolvedValueOnce({ kind: "invalid_credentials" });
     await call({ nickname: "혜승", pin: "1357" });
-    expect(loginParticipant).toHaveBeenCalledWith(PROMISE_ID, { nickname: "혜승", pin: "1357" });
+    expect(loginParticipant).toHaveBeenCalledWith(
+      PROMISE_ID,
+      { nickname: "혜승", pin: "1357" },
+      { ipKey: "unknown" },
+    );
   });
 
   it.each([
@@ -138,7 +151,11 @@ describe("POST /api/v1/promises/[promiseId]/auth/session (MEMBER-API-04)", () =>
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe("INVALID_REQUEST");
     expect(res.headers.get("set-cookie")).toBeNull();
-    expect(loginParticipant).toHaveBeenCalledWith("not-a-uuid", expect.anything());
+    expect(loginParticipant).toHaveBeenCalledWith(
+      "not-a-uuid",
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it("없는 닉네임과 틀린 PIN은 같은 401 본문이다 (서비스가 같은 kind를 돌려준다)", async () => {
@@ -186,12 +203,69 @@ describe("POST /api/v1/promises/[promiseId]/auth/session (MEMBER-API-04)", () =>
     ["410 접근 기간", VALID, { origin: BASE_URL }, { kind: "expired" }, 410],
     ["410 draft", VALID, { origin: BASE_URL }, { kind: "draft_expired" }, 410],
     ["500", VALID, { origin: BASE_URL }, new Error("db"), 500],
+    [
+      "429 PIN 시도 제한",
+      VALID,
+      { origin: BASE_URL },
+      { kind: "too_many_attempts", retryAfterSeconds: 61 },
+      429,
+    ],
   ])("%s 응답도 Cache-Control: no-store", async (_name, body, headers, result, status) => {
     if (result instanceof Error) loginParticipant.mockRejectedValueOnce(result);
     else if (result) loginParticipant.mockResolvedValueOnce(result);
     const res = await call(body, headers);
     expect(res.status).toBe(status);
     expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+
+  describe("시도 제한·레이트 리밋 (035, R-41)", () => {
+    it("too_many_attempts → 429 TOO_MANY_ATTEMPTS, Retry-After와 details.retryAfterSeconds, 쿠키 없음", async () => {
+      loginParticipant.mockResolvedValueOnce({ kind: "too_many_attempts", retryAfterSeconds: 754 });
+      const res = await call(VALID);
+      expect(res.status).toBe(429);
+      expect(res.headers.get("retry-after")).toBe("754");
+      expect(res.headers.get("set-cookie")).toBeNull();
+      const body = await res.json();
+      expect(body).toEqual({
+        code: "TOO_MANY_ATTEMPTS",
+        message: "PIN을 여러 번 틀려 잠시 로그인할 수 없습니다.",
+        details: { retryAfterSeconds: 754 },
+      });
+      // 남은 시도 횟수는 알려 주지 않는다
+      expect(JSON.stringify(body)).not.toMatch(/remaining|attempts":/);
+    });
+
+    it("x-forwarded-for 첫 값을 IP 키로 넘긴다", async () => {
+      loginParticipant.mockResolvedValueOnce({ kind: "invalid_credentials" });
+      await call(VALID, { origin: BASE_URL, "x-forwarded-for": "203.0.113.7, 10.0.0.1" });
+      expect(loginParticipant).toHaveBeenCalledWith(PROMISE_ID, expect.anything(), {
+        ipKey: "203.0.113.7",
+      });
+    });
+
+    it("레이트 리밋에 걸리면 그 429를 그대로 돌려주고 로그인 처리(PIN 비교)를 하지 않는다", async () => {
+      rateLimitResponse.mockResolvedValueOnce(
+        Response.json({ code: "RATE_LIMITED" }, { status: 429, headers: { "Retry-After": "12" } }),
+      );
+      const res = await call(VALID);
+      expect(res.status).toBe(429);
+      expect(res.headers.get("retry-after")).toBe("12");
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(rateLimitResponse).toHaveBeenCalledWith(expect.any(Request), "login");
+      expect(loginParticipant).not.toHaveBeenCalled();
+    });
+
+    it("Origin·입력 형식 오류는 레이트 리밋을 세기 전에 거절한다", async () => {
+      expect((await call(VALID, {})).status).toBe(403);
+      expect((await call({ nickname: "혜승", pin: "1" })).status).toBe(422);
+      expect(rateLimitResponse).not.toHaveBeenCalled();
+    });
+
+    it("레이트 리밋 저장 오류는 500이다", async () => {
+      rateLimitResponse.mockRejectedValueOnce(new Error("db down"));
+      expect((await call(VALID)).status).toBe(500);
+      expect(loginParticipant).not.toHaveBeenCalled();
+    });
   });
 });
 

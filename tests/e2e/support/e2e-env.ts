@@ -149,3 +149,13 @@ export function bypassHeaders(): Record<string, string> {
   const secret = IS_PREVIEW ? loadPreviewEnv().BYPASS_SECRET : null;
   return secret ? { "x-vercel-protection-bypass": secret } : {};
 }
+
+// IP 기준 레이트 리밋·PIN 시도 제한(035, R-41)
+// 로컬 서버는 x-forwarded-for 첫 값을 접속 IP로 본다(Vercel에서는 Vercel이 덮어쓰는 헤더). 통합 테스트는 요청(API 도우미)과
+// 브라우저 컨텍스트마다 시험용 대역(198.18.0.0/15, RFC 2544)의 다른 IP를 보내, 한 PC에서 몰아 보내는 요청이 운영 기준에
+// 걸리지 않게 한다 — 운영 기준을 바꾸지 않는다. 배포 주소(미리보기)에서는 Vercel이 이 값을 버리므로 효과가 없다
+export const TEST_IP_PREFIXES = ["198.18.", "198.19."];
+export function testIp(): string {
+  const r = (n: number) => Math.floor(Math.random() * n);
+  return `198.${18 + r(2)}.${r(256)}.${r(254) + 1}`;
+}

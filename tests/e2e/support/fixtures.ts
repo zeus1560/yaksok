@@ -13,7 +13,7 @@ import {
   type TestInfo,
 } from "@playwright/test";
 import { BASE, Seed, cookieName, type Draft } from "./api";
-import { E2E_HOST, IS_PREVIEW, bypassHeaders } from "./e2e-env";
+import { E2E_HOST, IS_PREVIEW, bypassHeaders, testIp } from "./e2e-env";
 
 export { expect };
 
@@ -36,7 +36,11 @@ export class App {
 
   // 프로젝트(데스크톱·모바일)의 화면 크기·터치 설정을 그대로 쓴다. device는 그 위에 덮어쓴다
   // (예: chromium에서 휴대폰을 흉내 내 CDP로 실제 터치를 보낼 때 — mobile-drag.spec.ts)
-  async newContext(device: DeviceOptions = {}): Promise<BrowserContext> {
+  // ip: 이 컨텍스트가 보낼 시험용 IP(기본은 컨텍스트마다 새 값 — 035 레이트 리밋, e2e-env.ts testIp)
+  async newContext(
+    device: DeviceOptions = {},
+    opts: { ip?: string } = {},
+  ): Promise<BrowserContext> {
     const use = this.testInfo.project.use;
     const context = await this.browser.newContext({
       viewport: use.viewport,
@@ -49,7 +53,7 @@ export class App {
       ignoreHTTPSErrors: !IS_PREVIEW,
       baseURL: BASE,
       // 미리보기의 Deployment Protection 우회(값이 없으면 빈 객체)
-      extraHTTPHeaders: bypassHeaders(),
+      extraHTTPHeaders: { ...bypassHeaders(), "x-forwarded-for": opts.ip ?? testIp() },
       ...device,
     });
     this.contexts.push(context);
@@ -95,8 +99,8 @@ export class App {
     return { context, page };
   }
 
-  async blank(label: string): Promise<Person> {
-    const context = await this.newContext();
+  async blank(label: string, opts: { ip?: string } = {}): Promise<Person> {
+    const context = await this.newContext({}, opts);
     const page = await context.newPage();
     this.watch(page, label);
     return { context, page };

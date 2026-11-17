@@ -2,9 +2,10 @@
 // 테스트 서버(로컬: https 프록시·자체 서명 인증서, 미리보기: 배포 주소)에 Node https로 직접 요청한다
 // 세션 토큰·쿠키 값·보호 우회 비밀값은 출력하지 않는다
 import https from "node:https";
-import { E2E_BASE_URL, IS_PREVIEW, bypassHeaders } from "./e2e-env";
+import { E2E_BASE_URL, IS_PREVIEW, bypassHeaders, testIp } from "./e2e-env";
 import { deleteLinks } from "./db";
 import { recordLink } from "./ledger";
+import { waitForRateLimit } from "./rate-limit-wait";
 
 export const BASE = E2E_BASE_URL;
 export const ORIGIN = E2E_BASE_URL;
@@ -26,12 +27,13 @@ export type ApiResponse = {
   headers: Record<string, string | string[] | undefined>;
 };
 
-export function call(
+function callOnce(
   method: string,
   path: string,
-  opts: { cookie?: string; origin?: string | null; body?: unknown } = {},
+  opts: { cookie?: string; origin?: string | null; body?: unknown; ip?: string } = {},
 ): Promise<ApiResponse> {
-  const headers: Record<string, string> = { ...BYPASS };
+  // 요청마다 다른 시험용 IP(035 레이트 리밋). 같은 IP로 보내야 하는 테스트는 ip를 넘긴다
+  const headers: Record<string, string> = { ...BYPASS, "x-forwarded-for": opts.ip ?? testIp() };
   const origin = opts.origin === undefined ? ORIGIN : opts.origin;
   if (origin) headers.origin = origin;
   if (opts.cookie) headers.cookie = opts.cookie;
@@ -65,6 +67,25 @@ export function call(
     if (payload !== undefined) req.write(payload);
     req.end();
   });
+}
+
+// 미리보기 smoke에서 429 RATE_LIMITED면 Retry-After만큼 기다렸다 다시 보낸다(rate-limit-wait.ts, 로컬은 그대로 돌려준다)
+export async function call(
+  method: string,
+  path: string,
+  opts: { cookie?: string; origin?: string | null; body?: unknown; ip?: string } = {},
+): Promise<ApiResponse> {
+  for (;;) {
+    const res = await callOnce(method, path, opts);
+    const retryAfter = res.headers["retry-after"];
+    const waited = await waitForRateLimit(
+      res.status,
+      res.json?.code,
+      Array.isArray(retryAfter) ? retryAfter[0] : retryAfter,
+      `${method} ${path.replace(/\/[0-9a-f-]{36}|\/[A-Za-z0-9_-]{22}(?=\/|$)/g, "/…")}`,
+    );
+    if (!waited) return res;
+  }
 }
 
 export const cookieName = (promiseId: string) => `ys_session_${promiseId}`;

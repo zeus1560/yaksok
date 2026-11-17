@@ -151,3 +151,32 @@ describe("resolveNicknameTaken (등록 409 뒤 같은 값으로 한 로그인 �
     expect(resolveNicknameTaken(fail(0, null))).toEqual({ kind: "form", message: RETRY_MESSAGE });
   });
 });
+
+describe("429 (035, R-41)", () => {
+  const locked = (details?: unknown): Failure => ({ ...fail(429, "TOO_MANY_ATTEMPTS"), details });
+
+  it("로그인 TOO_MANY_ATTEMPTS → 남은 분을 담은 폼 오류(입력란 오류·화면 전환 없음)", () => {
+    expect(classifyLoginFailure(locked({ retryAfterSeconds: 754 }))).toEqual({
+      kind: "form",
+      message: "PIN을 여러 번 틀려 잠시 막혔어요. 13분 뒤에 다시 시도해 주세요.",
+    });
+    expect(classifyLoginFailure(locked())).toEqual({
+      kind: "form",
+      message: "PIN을 여러 번 틀려 잠시 막혔어요. 잠시 뒤에 다시 시도해 주세요.",
+    });
+  });
+
+  it("등록 409 NICKNAME_TAKEN 뒤의 로그인이 잠겨 있어도 같은 잠금 안내", () => {
+    expect(resolveNicknameTaken(locked({ retryAfterSeconds: 60 }))).toEqual({
+      kind: "form",
+      message: "PIN을 여러 번 틀려 잠시 막혔어요. 1분 뒤에 다시 시도해 주세요.",
+    });
+  });
+
+  it("RATE_LIMITED → 등록·로그인 모두 요청이 너무 많다는 폼 오류", () => {
+    const limited = { ...fail(429, "RATE_LIMITED"), details: { retryAfterSeconds: 30 } };
+    const expected = { kind: "form", message: "요청이 너무 많아요. 잠시 후 다시 시도해 주세요." };
+    expect(classifyLoginFailure(limited)).toEqual(expected);
+    expect(classifyRegisterFailure(limited)).toEqual(expected);
+  });
+});

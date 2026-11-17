@@ -2,13 +2,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import { STATE_DIR } from "./e2e-env";
-import { closeDb, deleteLinks, snapshot } from "./db";
+import { closeDb, deleteLinks, deleteTestLimitRows, snapshot } from "./db";
 import { clearLedger, readLedger } from "./ledger";
+import { rateLimitWaitSummary } from "./rate-limit-wait";
 
 export default async function globalTeardown() {
+  console.log(rateLimitWaitSummary());
   const leftover = readLedger();
   const removed = await deleteLinks(leftover);
   if (removed > 0) console.log(`[e2e] 테스트가 지우지 못한 링크 ${removed}개 정리`);
+  await deleteTestLimitRows();
   const file = path.join(STATE_DIR, "snapshot.json");
   const before = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : null;
   const after = await snapshot();

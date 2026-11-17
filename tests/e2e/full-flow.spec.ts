@@ -12,6 +12,7 @@ import {
 } from "./support/fixtures";
 import { BASE, nick, seoulDate } from "./support/api";
 import { promiseRow } from "./support/db";
+import { clickWithRateLimitRetry } from "./support/rate-limit-wait";
 import {
   CANCELLED_TITLE,
   CANDIDATES_TITLE,
@@ -56,15 +57,25 @@ test("약속 만들기부터 취소까지 한 약속의 전체 흐름 @smoke", a
   let promiseId = "";
   await test.step("방장: 홈 → 새 약속 만들기 → 방장 등록 → 설정 → 완료", async () => {
     await hp.goto("/");
-    await hp.getByRole("button", { name: "새 약속 만들기" }).click();
+    // 미리보기 smoke는 이 PC의 IP 하나로 모여 링크 발급(1분 10회)에 걸릴 수 있다 — 429면 기다렸다 다시 누른다(R-41)
+    await clickWithRateLimitRetry(
+      hp,
+      () => hp.getByRole("button", { name: "새 약속 만들기" }).click(),
+      (url, method) => method === "POST" && url.pathname === "/api/v1/links",
+      "화면 새 약속 만들기",
+    );
     await expect(text(hp, REGISTER_HOST_TITLE)).toBeVisible();
     inviteToken = decodeURIComponent(new URL(hp.url()).pathname.split("/").pop()!);
     expect(seed.links.has(inviteToken), "브라우저가 만든 링크도 정리 대상").toBe(true);
-    const hostRes = hp.waitForResponse(
-      (r) => r.url().endsWith("/host") && r.request().method() === "POST",
+    await hp.locator("#nickname").fill(hostNick);
+    await hp.locator("#pin").fill("1357");
+    const hostRes = await clickWithRateLimitRetry(
+      hp,
+      () => hp.getByRole("button", { name: "방장으로 시작하기", exact: true }).click(),
+      (url, method) => method === "POST" && url.pathname.endsWith("/host"),
+      "화면 방장 등록",
     );
-    await fillAuth(hp, hostNick, "1357", "방장으로 시작하기");
-    promiseId = (await (await hostRes).json()).promiseId;
+    promiseId = (await hostRes.json()).promiseId;
     await expect(text(hp, "새 약속 만들기")).toBeVisible();
     await expect(text(hp, "설정 시간")).toBeVisible();
     // 날짜: 모레 ~ 4일 뒤 (마감 기본값 = 시작 전날 23:59)
