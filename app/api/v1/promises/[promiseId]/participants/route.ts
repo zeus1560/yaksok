@@ -15,6 +15,7 @@ import {
   unauthenticated,
   validationFailed,
 } from "@/lib/api-error";
+import { rateLimitResponse } from "@/lib/limit/rate-limit-store";
 import { validateNickname } from "@/lib/member/nickname";
 import { getParticipantList } from "@/lib/member/participant-list";
 import { registerParticipant } from "@/lib/member/participant-registration";
@@ -119,6 +120,10 @@ async function handle(
 
   const { promiseId } = await ctx.params;
   try {
+    // IP 기준 1분 30회 (035, R-41). 입력 형식 검사 뒤, DB·scrypt를 쓰기 전에 센다
+    const limited = await rateLimitResponse(request, "participants");
+    if (limited) return limited;
+
     const result = await registerParticipant(request, promiseId, {
       nickname: checked.nickname,
       pin,

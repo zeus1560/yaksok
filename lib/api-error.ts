@@ -31,6 +31,8 @@ export type ApiErrorCode =
   | "DEADLINE_SHORTEN_NOT_ALLOWED"
   | "PARTICIPANT_NOT_FOUND"
   | "CANNOT_REMOVE_SELF"
+  | "RATE_LIMITED"
+  | "TOO_MANY_ATTEMPTS"
   | "INTERNAL_ERROR";
 
 export function apiError(
@@ -235,6 +237,31 @@ export function cannotRemoveSelf(): Response {
     409,
     "CANNOT_REMOVE_SELF",
     "방장은 스스로를 내보낼 수 없습니다. 탈퇴를 이용해 주세요.",
+  );
+}
+
+// 429 두 가지 (035, R-41). 남은 시간을 Retry-After 헤더(초)와 details.retryAfterSeconds에 같은 값으로 담는다
+function tooMany(code: "RATE_LIMITED" | "TOO_MANY_ATTEMPTS", message: string, seconds: number) {
+  const response = apiError(429, code, message, { retryAfterSeconds: seconds });
+  response.headers.set("Retry-After", String(seconds));
+  return response;
+}
+
+// IP 기준 요청 수 초과 (링크 발급·방장 등록·참여자 등록·로그인)
+export function rateLimited(retryAfterSeconds: number): Response {
+  return tooMany(
+    "RATE_LIMITED",
+    "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
+    retryAfterSeconds,
+  );
+}
+
+// 로그인 PIN 시도 제한(MEMBER-06-04 잠정). 남은 시도 횟수는 알려 주지 않는다
+export function tooManyAttempts(retryAfterSeconds: number): Response {
+  return tooMany(
+    "TOO_MANY_ATTEMPTS",
+    "PIN을 여러 번 틀려 잠시 로그인할 수 없습니다.",
+    retryAfterSeconds,
   );
 }
 

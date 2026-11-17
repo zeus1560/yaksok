@@ -95,3 +95,34 @@ model ParticipantSession {
   @@index([participantId])
   @@map("participant_sessions")
 }
+
+// ── 보안 보조 테이블 (035, DECISION_CONFLICTS R-41). 업무 데이터가 아니라 짧게 쓰고 버리는 기록이다
+// 기존 테이블과 FK를 두지 않는다: 예전 배포 코드가 참여자·약속을 지울 때 이 테이블 때문에 막히지 않게 하고,
+// 없는 닉네임에도 같은 잠금을 걸어 닉네임 존재가 드러나지 않게 한다. 오래된 행은 요청 때 조금씩 지운다
+
+/// 로그인 PIN 실패 기록 (MEMBER-06-04 잠정). (약속, 정규화 닉네임)을 한 참여자로 본다
+model LoginFailure {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  promiseId          String   @map("promise_id") @db.Uuid
+  normalizedNickname String   @map("normalized_nickname") @db.VarChar
+  /// lib/limit/client-ip.ts의 IP 키 (IPv6는 /64)
+  ipKey              String   @map("ip_key") @db.VarChar
+  failedAt           DateTime @map("failed_at") @db.Timestamptz(3)
+
+  @@index([promiseId, normalizedNickname, failedAt])
+  @@index([failedAt])
+  @@map("login_failures")
+}
+
+/// 인증 없는 API의 IP 기준 요청 기록 (레이트 리밋). 허용된 요청만 남긴다
+model RateLimitHit {
+  id     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// links | host | participants | login
+  bucket String   @db.VarChar
+  ipKey  String   @map("ip_key") @db.VarChar
+  hitAt  DateTime @map("hit_at") @db.Timestamptz(3)
+
+  @@index([bucket, ipKey, hitAt])
+  @@index([hitAt])
+  @@map("rate_limit_hits")
+}

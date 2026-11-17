@@ -1,4 +1,5 @@
 import { internalError, invalidOrigin } from "@/lib/api-error";
+import { rateLimitResponse } from "@/lib/limit/rate-limit-store";
 import { issueInviteLink } from "@/lib/member/invite-link";
 import { noStore } from "@/lib/no-store";
 import { isAllowedOrigin } from "@/lib/origin";
@@ -14,6 +15,10 @@ async function handle(request: Request): Promise<Response> {
   }
 
   try {
+    // IP 기준 1분 10회 (035, R-41)
+    const limited = await rateLimitResponse(request, "links");
+    if (limited) return limited;
+
     const { inviteToken, inviteUrl } = await issueInviteLink("web", request.headers.get("origin"));
     return Response.json({ inviteToken, inviteUrl, nextAction: "register_host" }, { status: 201 });
   } catch (error) {

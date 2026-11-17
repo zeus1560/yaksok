@@ -1,11 +1,13 @@
 // 참여 경로(MEMBER-API-03 등록, MEMBER-API-04 로그인) 실패 분기. 브라우저에서도 import하는 순수 함수다
 // HTTP 상태가 아니라 에러 코드로 분기한다 (CLAUDE.md 4절, 009 start-failure와 같은 방식)
+import { RATE_LIMITED_MESSAGE, loginLockedMessage, retryAfterSecondsOf } from "@/lib/limit/notice";
 
 export type Failure = {
   status: number; // 0이면 네트워크 오류
   code: string | null;
   message: string | null;
   field: string | null;
+  details?: unknown; // 429의 retryAfterSeconds (035)
 };
 
 export type AuthField = "nickname" | "pin";
@@ -64,6 +66,8 @@ function common(failure: Failure): FailureAction {
   }
   if (failure.code === "INVALID_REQUEST")
     return { kind: "form", message: "입력값을 확인해 주세요." };
+  // IP 기준 요청 수 초과(035). 남은 시간은 보이지 않는다
+  if (failure.code === "RATE_LIMITED") return { kind: "form", message: RATE_LIMITED_MESSAGE };
   // INVALID_ORIGIN·INTERNAL_ERROR·네트워크 오류·알 수 없는 코드
   return { kind: "form", message: RETRY_MESSAGE };
 }
@@ -100,6 +104,9 @@ export function classifyLoginFailure(failure: Failure): FailureAction {
     // 닉네임 없음과 PIN 불일치를 구분하지 않는다 (API_CONVENTIONS 7절)
     case "INVALID_CREDENTIALS":
       return { kind: "form", message: INVALID_CREDENTIALS_MESSAGE };
+    // PIN 시도 제한(035, R-41). 남은 시간만 알리고 남은 시도 횟수는 알리지 않는다
+    case "TOO_MANY_ATTEMPTS":
+      return { kind: "form", message: loginLockedMessage(retryAfterSecondsOf(failure.details)) };
     case "PARTICIPANT_CANCELLED":
       return { kind: "blocked", reason: "participant_cancelled" };
     case "ACCESS_PERIOD_EXPIRED":

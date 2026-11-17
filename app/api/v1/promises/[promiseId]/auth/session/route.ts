@@ -9,9 +9,12 @@ import {
   participantCancelled,
   promiseCancelled,
   promiseNotFound,
+  tooManyAttempts,
   unauthenticated,
   validationFailed,
 } from "@/lib/api-error";
+import { clientIpKey } from "@/lib/limit/client-ip";
+import { rateLimitResponse } from "@/lib/limit/rate-limit-store";
 import { loginParticipant } from "@/lib/member/login";
 import { logoutSession, parseAllDevices } from "@/lib/member/logout";
 import { isPromiseIdFormat } from "@/lib/member/session-auth";
@@ -23,7 +26,7 @@ import { isAllowedOrigin } from "@/lib/origin";
 import { toSeoulIsoString } from "@/lib/time/seoul";
 
 // MEMBER-API-04 참여자 재인증. PIN·세션 토큰 원문은 로그와 오류 응답에 남기지 않는다
-// 시도 제한은 구현하지 않는다(2026-10-12 결정). 429를 반환하지 않는다
+// 429 두 가지(035, R-41): IP 기준 요청 수 RATE_LIMITED(1분 30회), PIN 시도 제한 TOO_MANY_ATTEMPTS(약속 상태 판정 뒤, PIN 비교 전)
 export async function POST(
   request: Request,
   ctx: RouteContext<"/api/v1/promises/[promiseId]/auth/session">,
@@ -60,13 +63,22 @@ async function handle(
 
   const { promiseId } = await ctx.params;
   try {
-    const result = await loginParticipant(promiseId, { nickname: checked.nickname, pin });
+    // 입력 형식 검사 뒤, DB·scrypt를 쓰기 전에 센다
+    const limited = await rateLimitResponse(request, "login");
+    if (limited) return limited;
+
+    const result = await loginParticipant(
+      promiseId,
+      { nickname: checked.nickname, pin },
+      { ipKey: clientIpKey(request.headers) },
+    );
     if (result.kind === "invalid_request") return invalidRequest();
     if (result.kind === "not_found") return promiseNotFound();
     if (result.kind === "cancelled") return promiseCancelled();
     if (result.kind === "expired") return accessPeriodExpired();
     if (result.kind === "draft_expired") return draftExpired();
     if (result.kind === "invalid_credentials") return invalidCredentials();
+    if (result.kind === "too_many_attempts") return tooManyAttempts(result.retryAfterSeconds);
     if (result.kind === "participant_cancelled") return participantCancelled();
 
     const response = Response.json({
