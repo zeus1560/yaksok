@@ -2,7 +2,7 @@
 
 ## 상태
 
-검토 중 (구현·로컬 검증·커밋 완료, 미리보기 DB 마이그레이션 적용(사용자, `db:status:preview` up to date), 배포 ee1fba8 `@smoke` 9/9 2회, 안드로이드 실기기 12절 정상 — PR 검토 중)
+완료 (PR #5 병합 1cb3d08. R-41 기준값은 팀 확정 필요, 아이폰 Safari는 공개 배포 전 팀원 확인으로 남김 — 아래 완료 이력)
 
 ## 스펙
 
@@ -342,3 +342,11 @@
 - 변경: 휴대폰(`lg` 미만)에서 날짜 4일씩 ◀▶ 넘기기(두 탭 공통 구간), 「내 시간」 표시 단위 30분·1시간·2시간(묶은 칸 전부·일부 n/m·없음·지난, 누름·끌기는 30분 칸으로 바꿔 `applyRect`, 단위는 기기 기억), 도구 줄 한 줄·범례는 제출 바 「?」(칸 견본)·날짜 머리글 하루 토글 되돌리기 알림, 드래그 중 화면 끝 자동 스크롤(휴대폰·데스크톱), 좁은 화면 제출 바 짧은 문구. 「모두의 시간」도 같은 표시 단위(묶은 칸 = 내내 가능 수)와 칸 상세 사람 목록(휴대폰 아래 창, R-40). 순수 함수 `lib/availability/view.ts`·`heat.ts`(`groupPeople`·`rangesText`)·`summary.ts`(`formatSelectionShort`). 통합 테스트 `tests/e2e/mobile-grid-view.spec.ts`. 문서: DECISION_CONFLICTS R-39·R-40 신설·R-38 일부 대체, MOBILE_CHECKLIST 11절. API·DB 변경 없음
 - 검증: TDD RED 2 failed → GREEN → REFACTOR 17/17, R-40 RED 2 failed → GREEN → 13/13. Vitest 1708건 ×3 TZ, lint·typecheck·prettier·build 통과. 로컬 `test:e2e` 전체 120 통과·33 건너뜀·실패 0(R-40 뒤), 스냅샷 동일. 미리보기 `@smoke` 4413b9f·e18adfb·c440a6e 각 2회 9/9(`sin1`). 안드로이드 Chrome 실기기 MOBILE_CHECKLIST 11-1~11-23 모두 정상(1~3차, 2026-11-15~16)
 - 남은 제한: 아이폰 Safari 미확인(공개 배포 전 팀원), webkit 모바일 `host-manage` 흔들림(033)은 기록만
+
+### 2026-11-24 — PIN 시도 제한과 레이트 리밋 (035)
+
+- 스펙: `context/features/035-login-rate-limit.md`
+- 브랜치: `ahn/feat-login-rate-limit` (`origin/main` 084f2de에서 생성, PR #5 병합 1cb3d08 — 완료)
+- 변경: 로그인 PIN 시도 제한(같은 참여자 + 같은 IP 1시간 5번 연속 실패·참여자 전체 1시간 21번째 → 15분, 참여자 전체 24시간 50번 → 24시간, 429 `TOO_MANY_ATTEMPTS`·`Retry-After`, 잠긴 동안 PIN 비교·집계 없음, 없는 닉네임도 같은 잠금, 성공 시 그 IP 기록만 초기화)과 인증 없는 쓰기 API 4개의 IP 레이트 리밋(링크 발급 1분 10회, 방장 등록·참여자 등록·로그인 1분 30회, 429 `RATE_LIMITED`). 마이그레이션 `20261117050841_login_rate_limit`(보조 테이블 `login_failures`·`rate_limit_hits`와 인덱스만, 추가형). 순수 함수 `lib/limit/`(`resolveLoginLock`·`LOGIN_LOCK_RULES`, `resolveRateLimit`·`RATE_LIMITS`, `clientIpKey`·`normalizeIp`, 화면 문구), `checkPin` advisory lock 트랜잭션, `rate-limit-store.ts`, 화면 안내 2종(에러 코드 분기). 통합 테스트 시험용 IP·`rate-limit.spec.ts`·`login-limit.spec.ts`, 미리보기 smoke 429 대기. 문서: member.md·API_CONVENTIONS·GUARD_MATRIX·DATABASE.md 「보안 보조 테이블」, DECISION_CONFLICTS R-41 신설(잠정), MOBILE_CHECKLIST 12절
+- 검증: TDD RED 3 failed → GREEN 26/26 → REFACTOR 68/68, 하루 상한 RED 1 failed → GREEN → 74/74. Vitest 1777건 ×3 TZ, lint·typecheck·prettier·build 통과. 개발 DB 실제 호출 58/58 3회 연속, 스냅샷 동일. 예전 배포 코드(084f2de)가 새 스키마에서 API·전체 흐름 19 passed. 로컬 통합 54 passed·실패 0(2차), 스냅샷 동일. 미리보기 DB 마이그레이션 적용(사용자) 뒤 배포 ee1fba8(`sin1`) `@smoke` 9/9 2회(429 대기 0회), 미리보기 DB에서 IP 키가 Vercel이 덮어쓴 실제 접속 IP로 모임 확인. 안드로이드 Chrome 실기기 MOBILE_CHECKLIST 12-1~12-7 정상(2026-11-24)
+- 남은 제한: R-41 전체(기준값·하루 상한으로 남이 24시간 막을 수 있는 대가 등) 팀 확정 필요, 아이폰 Safari 미확인(공개 배포 전 팀원), 미리보기 webkit 전체 흐름이 034 때보다 느림(원인 미확인, 429 대기 없음), `login_failures`의 IP 키는 테스트 정리로 직접 확인 못 함
