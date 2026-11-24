@@ -182,12 +182,12 @@ test("휴대폰: 묶은 칸 단위로 끌기(드래그로 선택) — 사각형�
   await expect(modeButton(page)).toHaveAttribute("aria-pressed", "true");
   const from = myGroup(page, slotMs(2, "09:00"));
   const to = myGroup(page, slotMs(3, "11:00"));
-  await syntheticTouchDrag(page, from, to);
+  await syntheticTouchDrag(from, to);
   // 2일 × 2시간 묶음 2개 = 30분 칸 16개
   await expect.poll(() => selectedCount(page)).toBe(16);
   expect(await pressedCells(page)).toBe(4);
   // 전부 선택된 묶은 칸에서 시작하면 해제
-  await syntheticTouchDrag(page, to, to);
+  await syntheticTouchDrag(to, to);
   await expect.poll(() => selectedCount(page)).toBe(12);
 });
 
@@ -571,7 +571,6 @@ test("데스크톱: 마우스 드래그 중 화면 아래 끝에서 자동 스�
 
 // 합성 터치 끌기(mobile-drag.spec.ts와 같은 방식): 누른 칸에서 pointerdown → 창에 pointermove → pointerup
 async function syntheticTouchDrag(
-  page: Page,
   from: ReturnType<Page["locator"]>,
   to: ReturnType<Page["locator"]>,
 ) {

@@ -106,7 +106,6 @@ export const isClearedCookie = (res: ApiResponse, promiseId: string) => {
 const SEOUL = 9 * 3600e3;
 export const seoulDate = (offsetDays: number) =>
   new Date(Date.now() + SEOUL + offsetDays * 86400e3).toISOString().slice(0, 10);
-export const seoulIso = (ms: number) => `${new Date(ms + SEOUL).toISOString().slice(0, 19)}+09:00`;
 export const slotAt = (offsetDays: number, hhmm: string) =>
   `${seoulDate(offsetDays)}T${hhmm}:00+09:00`;
 export const slotMs = (offsetDays: number, hhmm: string) => Date.parse(slotAt(offsetDays, hhmm));
