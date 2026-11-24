@@ -20,27 +20,7 @@ MVP 흐름: 약속 생성 → 참여자 등록(닉네임 + PIN) → 30분 슬롯
 
 ## 2. 전체 구조
 
-| 경로                                                   | 역할                                                                                                    |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `app/api/v1/**/route.ts`                               | API Route Handler. 같은 폴더에 `route.test.ts`가 있다                                                   |
-| `app/page.tsx`                                         | 홈                                                                                                      |
-| `app/p/[inviteToken]/page.tsx`                         | 초대 링크 화면                                                                                          |
-| `components/<기능>/`                                   | 기능별 클라이언트 UI                                                                                    |
-| `components/common/`                                   | 공통 헤더·카드·버튼                                                                                     |
-| `lib/member/`                                          | 링크, 방장·참여자 등록, 로그인, 닉네임·PIN·세션, 세션 인증(`session-auth.ts`)                           |
-| `lib/state/`                                           | 약속 상태 전환과 설정 검증                                                                              |
-| `lib/time/`                                            | 서울 시간 헬퍼(`seoul.ts`), 슬롯 파싱(`slots.ts`), 가능 시간 제출과 현황 조회                           |
-| `lib/create-promise/`                                  | 화면용 순수 로직. 브라우저에서도 import한다                                                             |
-| `lib/api-error.ts`, `lib/origin.ts`, `lib/no-store.ts` | 에러 응답 헬퍼, Origin 검사, `Cache-Control: no-store`                                                  |
-| `lib/public-url.ts`                                    | 배포 환경별 허용 Origin·초대 링크 기준 주소(로컬·운영·Vercel 미리보기). 브라우저에서도 import한다       |
-| `lib/prisma.ts`                                        | Prisma Client 싱글턴. 다른 곳에서는 `import { prisma } from "@/lib/prisma"`만 쓴다                      |
-| `prisma/schema.prisma`, `prisma/migrations/`           | 스키마와 마이그레이션. CHECK 제약과 부분 UNIQUE 인덱스는 마이그레이션 SQL에 있다                        |
-| `prisma/generated/`                                    | 생성된 클라이언트. Git에서 제외되어 있다                                                                |
-| `docs/`                                                | 제품·규칙·ERD·API 명세. 입구는 `docs/README.md`                                                         |
-| `context/`                                             | AI 작업 기록. `current-feature.md`(현재 기능과 완료 이력), `feature-list.md`, `features/NNN-*.md`(스펙) |
-| `.claude/skills/`                                      | `/feature`(load·start·review·test·explain·complete), `/cleanup`, `/research`, `/list-components`        |
-
-구현된 API와 남은 기능은 `context/feature-list.md`를 본다.
+경로별 역할(`app/`·`components/`·`lib/<기능>/`·`prisma/`·`docs/`·`context/`·`.claude/skills/`)은 `context/project-overview.md`의 「코드 구조」를 본다. 구현된 API와 남은 기능은 `context/feature-list.md`를 본다.
 
 ## 3. 실행·빌드·테스트
 
@@ -62,9 +42,8 @@ npm run build             # prisma generate && next build. dev 서버를 끈 뒤
 
 - 스키마를 바꿀 때는 `npm run db:migrate -- --name <변경명>`을 쓴다. `db push`는 쓰지 않는다.
 - CI는 `.github/workflows/ci.yml`에 있다. CI 빌드는 가짜 DB 주소로 돌기 때문에 DB를 읽는 페이지는 동적 렌더링이어야 한다.
-- 배포는 Vercel + Neon이다. 마이그레이션은 빌드에 넣지 않는다. 미리보기 DB는 `npm run db:deploy:preview`(`.env.preview`) — 스키마가 바뀌는 브랜치는 push 전에 먼저 실행한다. 배포된 주소 확인은 `npm run test:e2e:preview`(`@smoke` 묶음, `E2E_BASE_URL`은 배포 고유 주소). 함수 지역(`sin1`)은 `vercel.json`이 기준이고, `main` 자동 배포도 `vercel.json`으로 꺼 두었다(공개 배포 결정 전). 순서는 `docs/architecture/DEPLOY.md`.
-- 통합 테스트는 `tests/e2e/`에 두고 devDependencies의 `@playwright/test`로 돌린다(운영 모드 `next start`, chromium·webkit·webkit 모바일). DB는 `.env.e2e`(Neon e2e 브랜치)만 쓴다. 준비는 `docs/architecture/SETUP.md` 4-5.
-- 한 번만 확인하고 버릴 스크립트는 `scripts/verify/`(Git 제외)에 둔다. 남길 시나리오는 `tests/e2e/`로 옮긴다.
+- 배포(Vercel + Neon, 미리보기 DB 마이그레이션, `@smoke` 확인, 함수 지역)는 `docs/architecture/DEPLOY.md`를 따른다. 스키마가 바뀌는 브랜치는 push 전에 `npm run db:deploy:preview`를 먼저 실행한다.
+- 통합 테스트(`tests/e2e/`, `.env.e2e`)는 `docs/architecture/SETUP.md` 4-5, 확인 스크립트(`scripts/verify/`)와 개발 DB 확인 데이터 정리는 4-6을 따른다.
 
 ## 4. 설계 원칙
 
@@ -84,9 +63,9 @@ npm run build             # prisma generate && next build. dev 서버를 끈 뒤
 
 - **Windows 인코딩:** PowerShell `Get-Content`를 옵션 없이 쓰면 한글이 깨진다. `-Encoding utf8`을 붙이거나 Read 도구를 쓴다.
 - **dev 서버:** `npm run build`와 `npm run test:e2e` 전에 dev 서버를 반드시 끈다. 둘 다 같은 `.next`에 운영 빌드를 만들어 dev 서버가 500을 낸다. `test:e2e` 뒤 배포용 빌드가 필요하면 `npm run build`를 다시 돌린다. 작업이 끝나면 3000·3100·3101 포트와 남은 `next` 프로세스를 정리한다.
-- **통합 테스트 결과 보존:** 실패를 확인하려고 통합 테스트를 다시 돌릴 때는 이전 결과 폴더를 지우거나 덮어쓰지 않는다. `--output=test-results/<날짜>-<회차>`처럼 다른 이름으로 남긴다(같은 테스트를 다시 돌리면 같은 폴더에 써서 실패 첨부가 사라진다).
+- **통합 테스트 결과 보존:** 다시 돌릴 때 이전 결과 폴더를 덮어쓰지 않는다(`SETUP.md` 4-5).
 - **Vitest는 PowerShell에서:** Git Bash(경로가 소문자 `c:`)에서 `npm run test`를 돌리면 Vitest가 모듈을 두 번 읽어 모든 파일이 `Cannot read properties of undefined (reading 'config')`로 실패한다. PowerShell에서 실행한다.
-- **DB 확인 데이터:** 개발 DB로 확인한 뒤에는 확인용 데이터를 삭제한다. 모든 테이블의 스냅샷(행 수·md5)이 시작 상태와 같은지 확인한다. 운영 DB로는 테스트하지 않는다.
+- **DB 확인 데이터:** 확인 뒤 지우고 스냅샷을 비교한다(`SETUP.md` 4-6). 운영 DB로는 테스트하지 않는다.
 - **Prisma 타입 이름:** 모델 `Promise`는 전역 Promise와 이름이 겹친다. `import type { Promise as PromiseModel } from "@/prisma/generated/client"`처럼 별칭을 쓴다.
 - **Git 규칙:**
   - 원격: `origin` = 개인 저장소 `zeus1560/yaksok`(작업 브랜치를 push, Vercel 연결), `team` = 팀 저장소 `yeonseong0224/yaksok`(2026-11-12까지의 이력과 옛 `ahn/` 브랜치). 새 브랜치는 `origin/main`에서 만든다.
@@ -96,3 +75,14 @@ npm run build             # prisma generate && next build. dev 서버를 끈 뒤
   - 커밋에 AI 공동 작성자 표시를 넣지 않는다.
   - 보고와 PR 본문은 한국어로 쓴다.
 - **`AGENTS.md` 상단 Next.js 블록:** `next dev`가 자동으로 다시 만든다. 지우지 않는다.
+
+## 6. 세션 운영 규칙
+
+진행 기록 파일은 `context/current-feature.md`(현재 기능과 완료 이력)와 `context/feature-list.md`(남은 기능)이다.
+
+- 한 세션에서는 한 가지 작업 단위(기능 하나, 버그 하나 등)만 처리한다.
+- 작업 범위가 크면 시작 전에 작은 단위로 나눈 계획을 제시하고, 첫 단위만 진행한다.
+- 코드를 탐색할 때는 필요한 파일만 열고, 레포 전체를 훑지 않는다.
+- 코드를 찾거나 수정할 때는 파일 전체를 읽기보다 Serena의 심볼 단위 도구를 우선 사용한다.
+- 작업 단위가 끝나면 진행 기록 파일을 갱신한 뒤 "이 작업은 끝났습니다. 새 세션에서 이어가세요."라고 알리고, 다음 작업을 이어서 시작하지 않는다.
+- 새 세션은 CLAUDE.md와 진행 기록 파일을 먼저 읽고 이어서 시작한다.

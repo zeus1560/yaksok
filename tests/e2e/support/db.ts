@@ -2,7 +2,7 @@
 // 화면·API로 만들 수 없는 상황(마감 지남, 7일 지난 링크, 잠금 대기 중 세션 변화)만 여기서 만든다
 import { createHash } from "node:crypto";
 import pg from "pg";
-import { loadTargetDb } from "./e2e-env";
+import { TEST_IP_PREFIXES, loadTargetDb } from "./e2e-env";
 
 let pool: pg.Pool | null = null;
 
@@ -31,13 +31,19 @@ async function one<T>(sql: string, params: unknown[] = []): Promise<T | undefine
 
 export const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
-// ── 스냅샷: public 스키마의 모든 테이블 행 수·md5 (실행 전후 비교)
+// 보안 보조 테이블(035, R-41): 요청·로그인 실패 기록. 앱이 요청 때 스스로 지우고(10분·49시간), 미리보기에서는
+// 같은 시간에 다른 사람의 요청도 쌓이므로 실행 전후 비교에서 뺀다. 이 실행이 남긴 행은 정리 함수가 지운다
+export const EPHEMERAL_TABLES = ["login_failures", "rate_limit_hits"];
+
+// ── 스냅샷: public 스키마의 모든 테이블(보안 보조 테이블 제외) 행 수·md5 (실행 전후 비교)
 export async function snapshot(
   client: pg.Pool | pg.Client = db(),
 ): Promise<Record<string, string>> {
   const { rows: tables } = await client.query(
     `SELECT table_name FROM information_schema.tables
-     WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name`,
+     WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+       AND table_name <> ALL($1) ORDER BY table_name`,
+    [EPHEMERAL_TABLES],
   );
   const out: Record<string, string> = {};
   for (const { table_name: t } of tables as { table_name: string }[]) {
@@ -75,9 +81,19 @@ export async function deleteLinks(
     ids,
   ]);
   await client.query(`DELETE FROM participants WHERE promise_id = ANY($1::uuid[])`, [ids]);
+  await client.query(`DELETE FROM login_failures WHERE promise_id = ANY($1::uuid[])`, [ids]);
   await client.query(`DELETE FROM promises WHERE id = ANY($1::uuid[])`, [ids]);
   await client.query(`DELETE FROM promise_links WHERE id = ANY($1::uuid[])`, [linkIds]);
   return linkIds.length;
+}
+
+// 로컬 실행이 시험용 IP로 남긴 요청·로그인 실패 기록을 지운다(미리보기에서는 Vercel이 실제 IP로 바꾸므로 지울 것이 없다)
+export async function deleteTestLimitRows(client: pg.Pool | pg.Client = db()): Promise<void> {
+  for (const table of EPHEMERAL_TABLES) {
+    await client.query(`DELETE FROM ${table} WHERE ip_key LIKE ANY($1)`, [
+      TEST_IP_PREFIXES.map((p) => `${p}%`),
+    ]);
+  }
 }
 
 // ── 시각 조작 (DB 시각 clock_timestamp() 기준)

@@ -1,4 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// IP 기준 레이트 리밋(035)은 기본으로 통과시킨다. 429는 아래 「레이트 리밋」 테스트에서 따로 본다
+const rateLimitResponse = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/limit/rate-limit-store", () => ({ rateLimitResponse }));
 import { Prisma } from "@/prisma/generated/client";
 
 const create = vi.hoisted(() => vi.fn());
@@ -14,6 +18,7 @@ function linkRequest(headers: Record<string, string> = { origin: BASE_URL }, bod
 
 describe("POST /api/v1/links (MEMBER-API-09)", () => {
   beforeEach(() => {
+    rateLimitResponse.mockReset().mockResolvedValue(null);
     vi.stubEnv("NEXT_PUBLIC_BASE_URL", BASE_URL);
     create.mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
@@ -141,5 +146,28 @@ describe("POST /api/v1/links (MEMBER-API-09)", () => {
     const res = await POST(linkRequest(headers));
     expect(res.status).toBe(status);
     expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+
+  describe("레이트 리밋 (035, R-41)", () => {
+    it("IP 기준 요청 수를 넘으면 429를 그대로 돌려주고 create를 부르지 않는다", async () => {
+      rateLimitResponse.mockResolvedValueOnce(
+        Response.json(
+          { code: "RATE_LIMITED", details: { retryAfterSeconds: 30 } },
+          { status: 429, headers: { "Retry-After": "30" } },
+        ),
+      );
+      const res = await POST(linkRequest());
+      expect(res.status).toBe(429);
+      expect(res.headers.get("retry-after")).toBe("30");
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(res.headers.get("set-cookie")).toBeNull();
+      expect(rateLimitResponse).toHaveBeenCalledWith(expect.any(Request), "links");
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it("Origin이 틀리면 레이트 리밋을 세지 않는다", async () => {
+      expect((await POST(linkRequest({}))).status).toBe(403);
+      expect(rateLimitResponse).not.toHaveBeenCalled();
+    });
   });
 });

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { E2E_BASE_URL, IS_PREVIEW, STATE_DIR, bypassHeaders, loadTargetDb } from "./e2e-env";
 import { closeDb, deleteLinks, snapshot } from "./db";
+import { resetRateLimitWaits } from "./rate-limit-wait";
 import { clearLedger, readLedger } from "./ledger";
 
 // /api/health(쿼리 1번)가 이보다 느리면 함수 지역이 DB와 먼 것으로 보고 알린다(같은 지역이면 0.1초 안팎)
@@ -53,6 +54,7 @@ export default async function globalSetup() {
   }
   clearLedger();
   fs.mkdirSync(STATE_DIR, { recursive: true });
+  resetRateLimitWaits();
   fs.writeFileSync(path.join(STATE_DIR, "snapshot.json"), JSON.stringify(await snapshot()));
   await closeDb();
 }

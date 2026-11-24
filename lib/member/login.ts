@@ -1,3 +1,5 @@
+import { UNKNOWN_IP_KEY } from "@/lib/limit/client-ip";
+import { LOGIN_FAILURE_LOOKBACK_MS, resolveLoginLock } from "@/lib/limit/login-lock";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/prisma/generated/client";
 import { accessExpiresAt, DRAFT_EXPIRY_MS, type LinkWithPromise } from "./link-status";
@@ -20,6 +22,7 @@ export type LoginResult =
   | Exclude<LoginAccess, { kind: "ok" }>
   | { kind: "invalid_request" }
   | { kind: "invalid_credentials" }
+  | { kind: "too_many_attempts"; retryAfterSeconds: number }
   | { kind: "participant_cancelled" }
   | {
       kind: "ok";
@@ -72,12 +75,80 @@ function isForeignKeyViolation(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003";
 }
 
+// 오래된 실패 기록은 실패를 남길 때 조금씩 지운다(판정에는 48시간 안의 기록만 쓴다 — 하루 상한의 24시간 창 + 24시간 잠금,
+// 49시간 넘은 행을 한 번에 최대 100개)
+const FAILURE_RETENTION_MS = LOGIN_FAILURE_LOOKBACK_MS + 60 * 60 * 1000;
+const CLEANUP_BATCH = 100;
+
+type PinCheck =
+  | { kind: "invalid_credentials" }
+  | { kind: "too_many_attempts"; retryAfterSeconds: number }
+  | {
+      kind: "verified";
+      participant: { id: string; nickname: string; role: string; status: string };
+    };
+
+// PIN 시도 제한(MEMBER-06-04 잠정, R-41)과 PIN 비교. 같은 (약속, 닉네임)의 시도는 advisory lock으로 줄 세워
+// 동시에 여러 번 보내 잠금 판정을 건너뛰지 못하게 한다. 잠금 판단 → PIN 비교 → 실패 기록·성공 초기화가 한 트랜잭션이다
+async function checkPin(
+  promiseId: string,
+  input: { nickname: string; pin: string },
+  ipKey: string,
+): Promise<PinCheck> {
+  const normalizedNickname = input.nickname;
+  return prisma.$transaction(async (tx) => {
+    const [{ now }] = await tx.$queryRaw<{ now: Date }[]>`
+      SELECT clock_timestamp() AS now
+      FROM (SELECT pg_advisory_xact_lock(hashtextextended(${`login:${promiseId}:${normalizedNickname}`}, 0))) AS l`;
+
+    const failures = await tx.loginFailure.findMany({
+      where: {
+        promiseId,
+        normalizedNickname,
+        failedAt: { gt: new Date(now.getTime() - LOGIN_FAILURE_LOOKBACK_MS) },
+      },
+      select: { ipKey: true, failedAt: true },
+    });
+    const lock = resolveLoginLock(failures, ipKey, now);
+    // 잠긴 동안에는 PIN이 맞아도 비교하지 않는다. 이 요청은 실패로 세지 않는다
+    if (lock.locked)
+      return { kind: "too_many_attempts", retryAfterSeconds: lock.retryAfterSeconds };
+
+    const participant = await tx.participant.findUnique({
+      where: { promiseId_normalizedNickname: { promiseId, normalizedNickname } },
+      select: { id: true, nickname: true, role: true, status: true, passwordHash: true },
+    });
+    const pinMatches = await verifyPin(
+      input.pin,
+      participant?.passwordHash ?? (await dummyPinHash()),
+    );
+    // 인증 실패는 이 한 곳에서만 반환한다. 없는 닉네임도 같은 기록을 남겨 잠금이 똑같이 걸린다
+    if (!participant || !pinMatches) {
+      await tx.loginFailure.create({
+        data: { promiseId, normalizedNickname, ipKey, failedAt: now },
+        select: { id: true },
+      });
+      await tx.$executeRaw`
+        DELETE FROM login_failures WHERE id IN (
+          SELECT id FROM login_failures WHERE failed_at < ${new Date(now.getTime() - FAILURE_RETENTION_MS)}
+          LIMIT ${CLEANUP_BATCH})`;
+      return { kind: "invalid_credentials" };
+    }
+
+    // 성공: 이 IP의 연속 실패를 초기화한다. 다른 IP의 실패(참여자 전체 기준)는 남긴다
+    await tx.loginFailure.deleteMany({ where: { promiseId, normalizedNickname, ipKey } });
+    const { id, nickname, role, status } = participant;
+    return { kind: "verified", participant: { id, nickname, role, status } };
+  });
+}
+
 // MEMBER-API-04 참여자 재인증. nickname은 validateNickname을 통과한 값, pin은 형식 검사를 통과한 값이다
 // 약속을 잠그지 않는다 (읽기 + 세션 생성). 판정 시각은 DB clock_timestamp() (API_CONVENTIONS 4.2)
+// ipKey는 lib/limit/client-ip.ts로 구한 값이다. 순서: 약속 상태 → PIN 시도 제한 429 → PIN 비교 → 참여자 상태 → 세션
 export async function loginParticipant(
   promiseId: string,
   input: { nickname: string; pin: string },
-  options: { sessionToken?: string } = {},
+  options: { sessionToken?: string; ipKey?: string } = {},
 ): Promise<LoginResult> {
   // 약속 기준 API는 형식 오류를 400으로 구분한다 (STATE 명세와 통일, R-12)
   if (!UUID.test(promiseId)) return { kind: "invalid_request" };
@@ -102,16 +173,10 @@ export async function loginParticipant(
   const access = resolveLoginAccess({ ...promiseLink, promise: linkPromise }, now);
   if (access.kind !== "ok") return access;
 
-  const participant = await prisma.participant.findUnique({
-    where: { promiseId_normalizedNickname: { promiseId, normalizedNickname: input.nickname } },
-    select: { id: true, nickname: true, role: true, status: true, passwordHash: true },
-  });
-  const pinMatches = await verifyPin(
-    input.pin,
-    participant?.passwordHash ?? (await dummyPinHash()),
-  );
-  // 인증 실패는 이 한 곳에서만 반환한다. 시도 제한(MEMBER-06-04)을 넣을 때 이 지점에 붙인다
-  if (!participant || !pinMatches) return { kind: "invalid_credentials" };
+  // 잠금 키는 DB의 id(소문자)로 만든다 — 주소의 대문자 UUID로 다른 잠금 줄을 만들지 못하게
+  const attempt = await checkPin(promise.id, input, options.ipKey ?? UNKNOWN_IP_KEY);
+  if (attempt.kind !== "verified") return attempt;
+  const { participant } = attempt;
 
   if (participant.status === "cancelled") return { kind: "participant_cancelled" };
 

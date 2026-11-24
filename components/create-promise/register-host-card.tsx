@@ -8,6 +8,7 @@ import {
   setupStorageKey,
   type SetupRecord,
 } from "@/lib/create-promise/countdown";
+import { RATE_LIMITED_MESSAGE } from "@/lib/limit/notice";
 import { validateNickname } from "@/lib/member/nickname";
 
 // 방장 등록 (MEMBER-API-02). Figma 35:399 첫 참여 카드를 재사용한다 (DECISION_CONFLICTS R-15)
@@ -65,7 +66,10 @@ export function RegisterHostCard(props: {
       return;
     }
     setPending(false);
-    if (result.status === 422 && (result.field === "nickname" || result.field === "pin")) {
+    if (result.code === "RATE_LIMITED") {
+      // 1분 30회(035). 상태 코드보다 먼저 에러 코드로 고른다
+      setFormError(RATE_LIMITED_MESSAGE);
+    } else if (result.status === 422 && (result.field === "nickname" || result.field === "pin")) {
       setErrors({ [result.field]: result.message ?? "입력값을 확인해 주세요." });
     } else if (result.status === 409) {
       props.onConflict();

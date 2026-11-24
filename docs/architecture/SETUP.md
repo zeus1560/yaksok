@@ -188,7 +188,8 @@ npm run dev
 | `prisma/migrations/`       | 마이그레이션 기록. **Git으로 공유**되고 각자 DB에 적용합니다       |
 | `prisma/generated/`        | 자동 생성 코드. Git에 안 올라가고 `prisma generate`로 만듭니다     |
 | `prisma.config.ts`         | Prisma CLI 설정. DB 주소를 환경변수에서 읽습니다                   |
-| `AGENTS.md` / `CLAUDE.md`  | AI 에이전트용 프로젝트 규칙. `CLAUDE.md`는 `@AGENTS.md` 한 줄      |
+| `AGENTS.md`                | AI 에이전트용 기본 규칙. 스택·Prisma·DB·비밀값·도메인 규칙         |
+| `CLAUDE.md`                | `@AGENTS.md`를 불러온 뒤 실행 명령·설계 원칙·주의·세션 운영 규칙   |
 | `.github/workflows/ci.yml` | PR마다 타입·린트·빌드를 검사                                       |
 
 > ⚠️ **`new PrismaClient()`를 직접 호출하지 마세요.** 개발 중 핫리로드마다 새 연결이 쌓여서 `too many connections`로 죽습니다. 항상 이렇게 가져다 쓰세요.
@@ -353,6 +354,13 @@ npx playwright show-report test-results/e2e-report   # 결과 보고서
 - 테스트마다 데이터를 만들고 지웁니다. 실행이 중간에 멈춰 남은 데이터는 다음 실행 시작 때 `tests/e2e/.state/`의 기록으로 지우고, 끝날 때 모든 테이블의 행 수·md5가 시작 상태와 같은지 확인합니다.
 - 작업자 수는 기본 2입니다(`E2E_WORKERS=1`로 줄일 수 있음).
 - 배포된 Vercel 미리보기 주소에 확인 묶음(`@smoke`)만 돌리려면 `npm run test:e2e:preview`(`.env.preview` 필요, 서버를 띄우지 않음) — [`DEPLOY.md`](DEPLOY.md) 6절.
+- **실패를 확인하려고 다시 돌릴 때는 이전 결과 폴더를 지우거나 덮어쓰지 않습니다.** `--output=test-results/<날짜>-<회차>`처럼 다른 이름으로 남깁니다. 같은 테스트를 다시 돌리면 같은 폴더에 써서 실패 첨부(스크린샷·trace)가 사라집니다.
+
+### 4-6. 확인 스크립트와 개발 DB 확인 데이터
+
+- 한 번만 확인하고 버릴 스크립트는 `scripts/verify/`에 둡니다(Git 제외). 계속 남길 시나리오는 `tests/e2e/`로 옮깁니다.
+- 개발 DB로 확인한 뒤에는 확인용 데이터를 삭제하고, 모든 테이블의 스냅샷(행 수·md5)이 시작 상태와 같은지 확인합니다.
+- 운영 DB로는 테스트하지 않습니다.
 
 ---
 

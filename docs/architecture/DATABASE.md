@@ -550,3 +550,17 @@ MVP에서는 취소·탈퇴 데이터를 자동 삭제하지 않는다. `cancell
 Prisma 스키마로 표현할 수 없는 **부분 UNIQUE 인덱스(`uq_one_host_per_promise`)와 4.2절 CHECK 16개는 `erd_v2` 마이그레이션 SQL에 직접 작성**했다. 적용 후 `prisma migrate diff`로 확인한 결과 Prisma는 이 제약들을 지우려 하지 않는다(드리프트 없음). 그래도 새 마이그레이션은 `--create-only`로 먼저 만들고 이 제약을 DROP하는 줄이 없는지 검토한 뒤 적용한다.
 
 `4.3`절의 `participant_sessions(participant_id)` 인덱스는 적용했고, `promises(voting_deadline_at)` 부분 인덱스는 적용하지 않았다.
+
+### 보안 보조 테이블 (2026-11-17, 035 — DECISION_CONFLICTS R-41 잠정)
+
+9절의 「약속·참여자 기준 및 IP 기준 시도 제한」을 위해 업무 테이블 5개와 따로 **보조 테이블 2개**를 추가했다(마이그레이션 `login_rate_limit`). 업무 데이터가 아니라 짧게 쓰고 버리는 기록이며, 위 ERD(5개 테이블)는 바뀌지 않는다.
+
+| 테이블            | 컬럼                                                                                                          | 용도                                                                                   | 보존                                                                           |
+| ----------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `login_failures`  | `id` UUID, `promise_id` UUID, `normalized_nickname` VARCHAR, `ip_key` VARCHAR, `failed_at` Timestamptz(3)     | 로그인(MEMBER-API-04) PIN 실패. `(promise_id, normalized_nickname)`을 한 참여자로 본다 | 판정은 48시간 안만(하루 상한), 실패를 남길 때 49시간 넘은 행을 최대 100개 삭제 |
+| `rate_limit_hits` | `id` UUID, `bucket` VARCHAR(`links`·`host`·`participants`·`login`), `ip_key` VARCHAR, `hit_at` Timestamptz(3) | 인증 없는 API의 IP 기준 요청 수(허용된 요청만)                                         | 판정은 1분 안만, 요청마다 10분 넘은 행을 최대 100개 삭제                       |
+
+- **FK 없음:** 참여자·약속과 FK를 두지 않는다. 예전 배포 코드가 draft 폐기 등으로 참여자·약속을 물리 삭제할 때 이 테이블 때문에 막히지 않게 하고(추가형 변경 — 미리보기 DB를 예전 배포와 함께 쓴다), 없는 닉네임에도 같은 실패 기록을 남겨 잠금으로 닉네임 존재가 드러나지 않게 한다. 지워진 약속의 행은 보존 시간이 지나면 정리된다.
+- **인덱스:** `login_failures(promise_id, normalized_nickname, failed_at)`, `login_failures(failed_at)`, `rate_limit_hits(bucket, ip_key, hit_at)`, `rate_limit_hits(hit_at)`.
+- **동시성:** 판정·기록은 `pg_advisory_xact_lock(hashtextextended(키, 0))`으로 같은 키의 요청을 줄 세운 짧은 트랜잭션에서 한다(약속 행은 잠그지 않는다 — 8장 잠금 순서와 무관).
+- **개인정보:** `ip_key`는 IP(IPv6는 /64 접두어)다. 위 보존 시간 뒤 지워진다.
